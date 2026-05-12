@@ -1,0 +1,23 @@
+.plan/thlibo-spec.md
+  s_5811b7f24eccc0::t_c1ff0998a1f683 397-451
+  s_5811b7f24eccc0::t_e83fa5296f7eef 469-472
+.plan/release-gate.md
+  s_5811b7f24eccc0::t_a7c8207d789dec 41
+  s_5811b7f24eccc0::t_927baa8a2e7c75 60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "6335dc1eaf2fab05517735c74010941f530622af",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
