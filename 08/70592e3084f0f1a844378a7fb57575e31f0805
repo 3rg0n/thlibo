@@ -1,0 +1,23 @@
+internal/daemon/engine_test.go
+  s_5811b7f24eccc0::t_e677768a70dded 1-178
+internal/daemon/engine.go
+  s_5811b7f24eccc0::t_b1b411bfff6070 1-228
+internal/daemon/llamafiletest/main.go
+  s_5811b7f24eccc0::t_40c250d55edfb8 1-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "0870592e3084f0f1a844378a7fb57575e31f0805",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
