@@ -1,0 +1,45 @@
+processors/compress/processor.md
+  s_5811b7f24eccc0::t_0872c4e4a26491 1-27
+processors/cargo-filter/processor.yaml
+  s_5811b7f24eccc0::t_f81eea02136804 1-9
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_a4e5a595d30cbf 15-16,27-30,32-34,36,39-47,50
+  s_5811b7f24eccc0::t_4a0b3485fa6c15 18,25-26,31,35,37-38,48-49,51
+internal/middleware/builtins_test.go
+  s_5811b7f24eccc0::t_995e7265db7845 5-6,8,12-13,57-58,68,87-90,96-98,100,103,106-108,125,138-139,168-193,196
+  s_5811b7f24eccc0::t_0a6ef9529fe3fa 1-4,7,9-11,14-56,59-67,69-86,91-95,99,101-102,104-105,109-124,126-137,140-167,194-195,197-294
+processors/embed.go
+  s_5811b7f24eccc0::t_111b81e21baa36 1-21
+processors/git-filter/processor.yaml
+  s_5811b7f24eccc0::t_0dee017df9e24b 1-9
+processors/npm-filter/processor.yaml
+  s_5811b7f24eccc0::t_650042fd8d7b12 1-9
+processors/npm-filter/run.py
+  s_5811b7f24eccc0::t_a2cd0a2157dfbb 1-94
+processors/cargo-filter/run.py
+  s_5811b7f24eccc0::t_0daa31d42d0868 1-89
+processors/casefolder/processor.md
+  s_5811b7f24eccc0::t_dfae18e906f3d8 1-33
+processors/git-filter/run.py
+  s_5811b7f24eccc0::t_31077900f5139e 67,70-78,80,82-86
+  s_5811b7f24eccc0::t_c8ad25e1ef6fbf 1-38,41-66,68-69,79,81,87-113
+  s_5811b7f24eccc0::t_89367251b8b007 39-40
+processors/README.md
+  s_5811b7f24eccc0::t_b765e7f2424a86 3-6,8-11,13-21,24-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "eadd0baf9d58e31d546b41a92f7f5377fceaec90",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
