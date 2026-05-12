@@ -1,0 +1,35 @@
+.plan/thlibo-spec.md
+  s_5811b7f24eccc0::t_1f4624ff414bfb 247,261-264,268,270-274,277
+internal/daemon/lock.go
+  s_5811b7f24eccc0::t_d4cb1029bd39c0 1-93
+internal/ipc/protocol_test.go
+  s_5811b7f24eccc0::t_92cb712f891350 1-181
+go.mod
+  s_5811b7f24eccc0::t_ee4661aa3a1d5b 5
+  s_5811b7f24eccc0::t_735bdf260bb16f 4
+internal/daemon/lock_test.go
+  s_5811b7f24eccc0::t_35a9a1a6f168f3 1-106
+internal/ipc/protocol.go
+  s_5811b7f24eccc0::t_d90e19e0d16ba7 1-180
+internal/daemon/lock_unix.go
+  s_5811b7f24eccc0::t_58a60959838844 1-25
+internal/daemon/lock_windows.go
+  s_5811b7f24eccc0::t_80eabaffd3db71 17-23,26,40
+  s_5811b7f24eccc0::t_e2f32870688248 1-16,24-25,27-39,41-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "45b0cc5cf7907e1a8e1d03dafd3fe525700c4cc9",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
