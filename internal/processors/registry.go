@@ -193,3 +193,24 @@ func (r *Registry) MatchFastPath(input string) *Descriptor {
 	}
 	return nil
 }
+
+// MatchCommand returns the first descriptor whose Commands list
+// contains argv0. Used by `thlibo rewrite` to decide whether a shell
+// command should be wrapped. Iteration order is stable (alphabetical)
+// so a deterministic winner is picked if multiple processors declare
+// the same command (first one loaded wins; user processors beat
+// built-ins because they override by name).
+func (r *Registry) MatchCommand(argv0 string) *Descriptor {
+	if argv0 == "" {
+		return nil
+	}
+	for _, n := range r.order {
+		d := r.byName[n]
+		for _, c := range d.Commands {
+			if c == argv0 {
+				return d
+			}
+		}
+	}
+	return nil
+}

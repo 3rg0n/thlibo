@@ -25,11 +25,12 @@ const (
 // descriptor. Fields map 1:1 to the spec; anything not in the spec is
 // rejected at parse time so typos don't silently go unused.
 type Descriptor struct {
-	Name        string `yaml:"name"        json:"name"`
-	Type        Kind   `yaml:"type"        json:"type"`
-	Entry       string `yaml:"entry"       json:"entry,omitempty"` // script only
-	Match       string `yaml:"match"       json:"match,omitempty"`
-	Description string `yaml:"description" json:"description,omitempty"`
+	Name        string   `yaml:"name"        json:"name"`
+	Type        Kind     `yaml:"type"        json:"type"`
+	Entry       string   `yaml:"entry"       json:"entry,omitempty"` // script only
+	Match       string   `yaml:"match"       json:"match,omitempty"`
+	Commands    []string `yaml:"commands"    json:"commands,omitempty"` // argv[0] values this processor wraps (rewrite-time)
+	Description string   `yaml:"description" json:"description,omitempty"`
 
 	// Prompt processor knobs (frontmatter fields). All optional;
 	// daemon defaults apply when zero.
