@@ -1,0 +1,46 @@
+# Build output
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test / coverage / profiling
+*.test
+*.out
+coverage.*
+/coverage/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Model artifacts — large, not source
+*.gguf
+*.safetensors
+/models/
+~/.thlibo/models/
+
+# Secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.yaml
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Test sandboxes
+.thlibo-test/
+/tmp/
