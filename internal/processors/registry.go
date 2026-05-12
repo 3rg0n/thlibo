@@ -182,16 +182,31 @@ func (r *Registry) Names() []string {
 	return out
 }
 
-// MatchFastPath returns the first descriptor whose Match regex hits
-// input, or nil. Iteration order is stable (alphabetical).
+// MatchFastPath returns the best descriptor whose Match regex hits
+// input, or nil. "Best" means: script processors win over prompt
+// processors on equal match, because script processors are
+// deterministic and their match regexes are typically anchored
+// (e.g. "^On branch"), while prompt processors match broader
+// substrings (e.g. "(?i)traceback|fatal"). Dispatching to the
+// deterministic one avoids false positives where a prompt
+// processor's match accidentally fires on an unrelated input.
+//
+// Tiebreak within the same type is stable alphabetical.
 func (r *Registry) MatchFastPath(input string) *Descriptor {
+	var firstPrompt *Descriptor
 	for _, n := range r.order {
 		d := r.byName[n]
-		if d.MatchesFastPath(input) {
+		if !d.MatchesFastPath(input) {
+			continue
+		}
+		if d.Type == KindScript {
 			return d
 		}
+		if firstPrompt == nil {
+			firstPrompt = d
+		}
 	}
-	return nil
+	return firstPrompt
 }
 
 // MatchCommand returns the first descriptor whose Commands list

@@ -18,6 +18,7 @@ import (
 	"os"
 
 	"github.com/3rg0n/thlibo/cmd/thlibo/execcmd"
+	"github.com/3rg0n/thlibo/cmd/thlibo/installcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/rewritecmd"
 )
 
@@ -32,8 +33,7 @@ func main() {
 	case "exec":
 		os.Exit(execcmd.Run(os.Args[2:]))
 	case "install":
-		fmt.Fprintln(os.Stderr, "thlibo install: not yet implemented (Phase 6)")
-		os.Exit(1)
+		os.Exit(installcmd.Run(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
