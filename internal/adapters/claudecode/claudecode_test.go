@@ -1,0 +1,253 @@
+package claudecode
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+// D1: the embedded hook script includes the expected structural
+// elements. If someone edits hook.sh in a breaking way, this fails.
+func TestEmbeddedHookShape(t *testing.T) {
+	s := string(HookScript())
+	must := []string{
+		"#!/usr/bin/env bash",
+		"thlibo-hook-version:",
+		"tool_input.command",
+		"thlibo rewrite",
+		"hookSpecificOutput",
+		"updatedInput",
+		`"permissionDecision"`,
+		`"permissionDecisionReason"`,
+	}
+	for _, m := range must {
+		if !strings.Contains(s, m) {
+			t.Errorf("hook script missing %q", m)
+		}
+	}
+	// Guard against the hook being copy-pasted without updating
+	// the rewrite command name.
+	if strings.Contains(s, "rtk rewrite") {
+		t.Error("hook script still references rtk; should use thlibo")
+	}
+}
+
+// WriteHookScript creates the file with the expected contents and
+// (on Unix) an executable mode.
+func TestWriteHookScript(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "sub", "thlibo-rewrite.sh")
+	if err := WriteHookScript(dest); err != nil {
+		t.Fatalf("WriteHookScript: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read written hook: %v", err)
+	}
+	if !reflect.DeepEqual(got, HookScript()) {
+		t.Errorf("written contents differ from embedded hook script")
+	}
+}
+
+// D1 / E4: merging into a non-existent settings file creates it with
+// the right nested structure.
+func TestMergeSettingsFreshFile(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	hp := filepath.Join(dir, "thlibo-rewrite.sh")
+
+	if err := MergeSettings(sp, hp); err != nil {
+		t.Fatalf("MergeSettings: %v", err)
+	}
+
+	var got map[string]any
+	raw, _ := os.ReadFile(sp)
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("parse written settings: %v\n%s", err, raw)
+	}
+
+	hooks, _ := got["hooks"].(map[string]any)
+	pre, _ := hooks["PreToolUse"].([]any)
+	if len(pre) != 1 {
+		t.Fatalf("PreToolUse groups = %d, want 1: %s", len(pre), raw)
+	}
+	group := pre[0].(map[string]any)
+	if group["matcher"] != "Bash" {
+		t.Errorf("matcher = %v, want Bash", group["matcher"])
+	}
+	entries := group["hooks"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(entries))
+	}
+	entry := entries[0].(map[string]any)
+	if entry["type"] != "command" {
+		t.Errorf("type = %v, want command", entry["type"])
+	}
+	if entry["command"] != hp {
+		t.Errorf("command = %v, want %v", entry["command"], hp)
+	}
+}
+
+// E4: existing settings with unrelated hooks and top-level keys
+// survive unchanged. Our entry gets appended into the right spot.
+func TestMergeSettingsPreservesOtherKeys(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	hp := filepath.Join(dir, "thlibo-rewrite.sh")
+
+	existing := map[string]any{
+		"model": "claude-sonnet-4-6",
+		"permissions": map[string]any{
+			"defaultMode": "acceptEdits",
+		},
+		"hooks": map[string]any{
+			"Notification": []any{
+				map[string]any{
+					"matcher": "",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": "notify-send"},
+					},
+				},
+			},
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "Edit|Write",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": "prettier --write"},
+					},
+				},
+			},
+		},
+	}
+	raw, _ := json.MarshalIndent(existing, "", "  ")
+	if err := os.WriteFile(sp, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MergeSettings(sp, hp); err != nil {
+		t.Fatalf("MergeSettings: %v", err)
+	}
+
+	var got map[string]any
+	rawOut, _ := os.ReadFile(sp)
+	_ = json.Unmarshal(rawOut, &got)
+
+	// Top-level keys survive.
+	if got["model"] != "claude-sonnet-4-6" {
+		t.Errorf("model setting lost: %v", got["model"])
+	}
+	perms := got["permissions"].(map[string]any)
+	if perms["defaultMode"] != "acceptEdits" {
+		t.Errorf("permissions.defaultMode lost: %v", perms["defaultMode"])
+	}
+
+	// Notification hook survives.
+	hooks := got["hooks"].(map[string]any)
+	if _, ok := hooks["Notification"].([]any); !ok {
+		t.Error("Notification hook removed by merge")
+	}
+
+	// PreToolUse now has 2 matcher groups: Edit|Write (existing)
+	// and Bash (ours).
+	pre, _ := hooks["PreToolUse"].([]any)
+	if len(pre) != 2 {
+		t.Fatalf("PreToolUse groups = %d, want 2 (existing + new):\n%s",
+			len(pre), rawOut)
+	}
+	var sawEditWrite, sawBash bool
+	for _, g := range pre {
+		obj := g.(map[string]any)
+		switch obj["matcher"] {
+		case "Edit|Write":
+			sawEditWrite = true
+		case "Bash":
+			sawBash = true
+		}
+	}
+	if !sawEditWrite {
+		t.Error("Edit|Write matcher group lost")
+	}
+	if !sawBash {
+		t.Error("Bash matcher group not added")
+	}
+}
+
+// E4: idempotency. Running MergeSettings twice doesn't create a
+// second thlibo entry.
+func TestMergeSettingsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	hp := filepath.Join(dir, "thlibo-rewrite.sh")
+
+	for i := 0; i < 3; i++ {
+		if err := MergeSettings(sp, hp); err != nil {
+			t.Fatalf("MergeSettings pass %d: %v", i, err)
+		}
+	}
+
+	var got map[string]any
+	raw, _ := os.ReadFile(sp)
+	_ = json.Unmarshal(raw, &got)
+	hooks := got["hooks"].(map[string]any)
+	pre := hooks["PreToolUse"].([]any)
+	if len(pre) != 1 {
+		t.Fatalf("expected 1 matcher group after 3 installs, got %d", len(pre))
+	}
+	entries := pre[0].(map[string]any)["hooks"].([]any)
+	if len(entries) != 1 {
+		t.Errorf("expected 1 hook entry after 3 installs, got %d", len(entries))
+	}
+}
+
+// E4: a path change (user moved the script) updates the existing
+// entry instead of adding a new one. Recognised by the hookMarker.
+func TestMergeSettingsUpdatesOnPathChange(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	firstHook := filepath.Join(dir, "old", "thlibo-rewrite.sh")
+	secondHook := filepath.Join(dir, "new", "thlibo-rewrite.sh")
+
+	if err := MergeSettings(sp, firstHook); err != nil {
+		t.Fatal(err)
+	}
+	if err := MergeSettings(sp, secondHook); err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	raw, _ := os.ReadFile(sp)
+	_ = json.Unmarshal(raw, &got)
+	hooks := got["hooks"].(map[string]any)
+	pre := hooks["PreToolUse"].([]any)
+	group := pre[0].(map[string]any)
+	entries := group["hooks"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry after path change, got %d", len(entries))
+	}
+	entry := entries[0].(map[string]any)
+	if entry["command"] != secondHook {
+		t.Errorf("entry.command = %v, want updated path %v", entry["command"], secondHook)
+	}
+}
+
+// MergeSettings rejects invalid JSON instead of silently overwriting.
+func TestMergeSettingsRejectsInvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(sp, []byte("{not json at all"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := MergeSettings(sp, "/x/thlibo-rewrite.sh")
+	if err == nil {
+		t.Fatal("expected error on invalid JSON input")
+	}
+	// The original corrupt file should remain untouched — we never
+	// want to clobber a user's settings on a parse failure.
+	raw, _ := os.ReadFile(sp)
+	if string(raw) != "{not json at all" {
+		t.Errorf("settings file was modified despite parse error: %q", raw)
+	}
+}
