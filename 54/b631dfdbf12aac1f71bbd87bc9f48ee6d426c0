@@ -1,0 +1,46 @@
+internal/processors/dispatch.go
+  s_5811b7f24eccc0::t_da19b2ec05cbf0 57
+  s_5811b7f24eccc0::t_d1c2b959029965 1-56,58-124
+internal/router/client_unix.go
+  s_5811b7f24eccc0::t_98d77ec6124008 1-13
+internal/router/router_test.go
+  s_5811b7f24eccc0::t_870e7d06f4e682 1-67,71-130
+  s_5811b7f24eccc0::t_e9370cca5f1ed4 68-70
+internal/router/client.go
+  s_5811b7f24eccc0::t_21634e8a714464 1-107
+internal/router/client_windows.go
+  s_5811b7f24eccc0::t_7f4680b0cf1204 1-26
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_f2b38ce460ed47 1-167
+internal/processors/descriptor.go
+  s_5811b7f24eccc0::t_de4b6679261e14 227-230,235-236
+  s_5811b7f24eccc0::t_b8348717f5d725 58-62,64-66
+internal/middleware/middleware_test.go
+  s_5811b7f24eccc0::t_5a9fb15589b4ff 63
+  s_5811b7f24eccc0::t_cd9cc01edd6442 232
+  s_5811b7f24eccc0::t_a234d116a8e229 164
+  s_5811b7f24eccc0::t_ce84866bf09380 1-62,64-101,103-106,108-112,114-163,165-231,233-249
+  s_5811b7f24eccc0::t_12ac4c79913a70 102,107,113
+internal/processors/registry.go
+  s_5811b7f24eccc0::t_c972a5c7f9363f 10,12
+  s_5811b7f24eccc0::t_2d2879317d7132 25-35,43-47,49-57,59-60,62-66,68-69,71-72,74-88,99-100,102,109,117-120,125
+internal/router/router.go
+  s_5811b7f24eccc0::t_6076787fbdbd39 1-4,6-188
+  s_5811b7f24eccc0::t_f0f077caeff9b8 189-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "54b631dfdbf12aac1f71bbd87bc9f48ee6d426c0",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
