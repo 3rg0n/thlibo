@@ -1,0 +1,23 @@
+internal/processors/thinking.go
+  s_5811b7f24eccc0::t_70ce3645b43542 1-45
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_993d0e4f67b220 138-141,169-172
+internal/processors/thinking_test.go
+  s_5811b7f24eccc0::t_492a711c9d58fd 1-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "86bebde06be7dcd8a3f23ce00a14b957f2dbca64",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
