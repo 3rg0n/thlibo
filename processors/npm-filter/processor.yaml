@@ -1,0 +1,9 @@
+name: npm-filter
+type: script
+entry: run.py
+match: "^(npm (warn|error|notice)|added \\d+ packages|removed \\d+ packages|# npm audit report|\\s+[a-z\\-0-9@/]+(@[0-9.]+)?\\s*$|npm ERR!)"
+description: >
+  Compresses npm list, install, and audit output. Keeps totals
+  (added/removed/audited counts), first line of each vulnerability
+  block, and ERR!/WARN lines. Drops dependency trees, deduplicates
+  "npm notice", and trims "found 0 vulnerabilities" decoration.

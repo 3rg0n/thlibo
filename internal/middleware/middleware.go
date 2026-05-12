@@ -12,11 +12,43 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
+
+	builtins "github.com/3rg0n/thlibo/processors"
 
 	"github.com/3rg0n/thlibo/internal/ipc"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/router"
 )
+
+// BuildRegistry constructs the middleware's processor registry using
+// the built-in processors embedded at compile time and optionally an
+// on-disk user directory. The embedded FS has its processor folders
+// at the root, matching what BuildFromSources expects. Returns the
+// registry plus any non-fatal warnings (quarantined descriptors).
+// See gate rows C4, C5.
+func BuildRegistry(userDir string) (*processors.Registry, []error, error) {
+	sources := []processors.Source{
+		{FS: builtins.FS, Origin: processors.OriginBuiltin},
+	}
+	if userDir != "" {
+		abs, err := filepath.Abs(userDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		// Only include the user source if the directory exists;
+		// otherwise Scan would log a read-root warning.
+		if _, err := os.Stat(abs); err == nil {
+			sources = append(sources, processors.Source{
+				FS:       os.DirFS(abs),
+				DiskRoot: abs,
+				Origin:   processors.OriginUser,
+			})
+		}
+	}
+	return processors.BuildFromSources(sources...)
+}
 
 // MinBytesForRouting is the spec's short-circuit threshold: tool
 // outputs below this size pass through without any scanning or

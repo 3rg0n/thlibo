@@ -1,14 +1,25 @@
 # Built-in processors
 
-These ship embedded in the `thlibo` binary via `go:embed`. Populated in Phase 4.
+These ship embedded in the `thlibo` binary via `go:embed` (see
+`embed.go` in this directory) and are also copied to
+`~/.thlibo/processors/` at install time (`thlibo install`, Phase 6).
+That means:
 
-Expected subdirectories per spec:
+- Fresh binary with no install: built-ins are still available because
+  the registry uses the embedded FS as its builtin source (gate C4).
+- After install: the same files exist on disk, so users can edit
+  them in place. Edits shadow the embedded versions (gate C5).
 
-- `compress/` — prompt processor (`processor.md`)
-- `casefolder/` — prompt processor (`processor.md`)
-- `git-filter/` — script processor (`processor.yaml` + `run.py`)
-- `npm-filter/` — script processor (`processor.yaml` + `run.py`)
-- `cargo-filter/` — script processor (`processor.yaml` + `run.py`)
+Current contents:
+
+| Name | Type | Entry |
+|---|---|---|
+| `compress` | prompt | `processor.md` |
+| `casefolder` | prompt | `processor.md` (thinking-enabled) |
+| `git-filter` | script | `processor.yaml` + `run.py` |
+| `npm-filter` | script | `processor.yaml` + `run.py` |
+| `cargo-filter` | script | `processor.yaml` + `run.py` |
 
 A user processor in `~/.thlibo/processors/<name>/` with the same name
-overrides the built-in.
+overrides the built-in, regardless of whether the install-time copy
+still exists on disk.
