@@ -1,0 +1,35 @@
+internal/ipc/endpoint_unix.go
+  s_5811b7f24eccc0::t_b7ebe58d713a12 1-65
+internal/ipc/endpoint_test.go
+  s_5811b7f24eccc0::t_04ff688aaf4d24 1-133
+internal/ipc/endpoint.go
+  s_5811b7f24eccc0::t_2743658ef1de82 1-108
+internal/ipc/endpoint_windows.go
+  s_5811b7f24eccc0::t_d8e3b588324d32 44,46,49-56,58,63
+  s_5811b7f24eccc0::t_665e513c77e4c1 72
+  s_5811b7f24eccc0::t_9714890502fcae 1-43,45,47-48,57,59-62,64-71,73
+internal/ipc/endpoint_test_windows.go
+  s_5811b7f24eccc0::t_27492e5f3e7734 1-27
+internal/ipc/endpoint_test_unix.go
+  s_5811b7f24eccc0::t_4866e9b0afed7d 1-18
+internal/ipc/endpoint_windows_test.go
+  s_5811b7f24eccc0::t_3e6cf9b71a7746 1-31
+go.mod
+  s_5811b7f24eccc0::t_39ca3d0d12265d 6-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "cb5f06ae20087ac25efb82520a225182c8d50604",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
