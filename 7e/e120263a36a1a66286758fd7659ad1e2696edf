@@ -1,0 +1,25 @@
+internal/adapters/claudecode/claudecode.go
+  s_5811b7f24eccc0::t_295405e357c50e 41-45,50-54,56,60-61
+  s_5811b7f24eccc0::t_44e998065e6908 1-20,22-40,46-49,55,62-208
+  s_5811b7f24eccc0::t_fabe1c3ba56226 57-59
+internal/adapters/claudecode/claudecode_test.go
+  s_5811b7f24eccc0::t_5d477dc483f491 1-253
+internal/adapters/claudecode/hook.sh
+  s_5811b7f24eccc0::t_468633fe9f6399 1-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "7ee120263a36a1a66286758fd7659ad1e2696edf",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
