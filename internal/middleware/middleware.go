@@ -135,7 +135,10 @@ type PromptRunner struct {
 	Client *router.DaemonClient
 }
 
-// Run sends a prompt processor invocation to the daemon.
+// Run sends a prompt processor invocation to the daemon and returns
+// the model's answer with thought blocks stripped (see spec
+// §"Thought-stripping"). Gemma 4 always emits a thought block - even
+// empty when thinking is disabled - so stripping runs unconditionally.
 func (p *PromptRunner) Run(ctx context.Context, d *processors.Descriptor, input string) (string, error) {
 	if p.Client == nil {
 		return "", errors.New("middleware: no daemon client")
@@ -163,5 +166,8 @@ func (p *PromptRunner) Run(ctx context.Context, d *processors.Descriptor, input 
 	req.Stream = &s
 
 	out, _, err := p.Client.Post(ctx, req)
-	return out, err
+	if err != nil {
+		return "", err
+	}
+	return processors.Strip(out), nil
 }
