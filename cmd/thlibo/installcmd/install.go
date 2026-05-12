@@ -53,6 +53,8 @@ func Run(argv []string) int {
 	fs.BoolVar(&skipHook, "skip-hook", false, "skip installing the Claude Code hook")
 	fs.BoolVar(&skipAutostart, "skip-autostart", false, "skip registering the daemon for autostart")
 	fs.StringVar(&daemonPath, "daemon-path", "", "thlibod path for autostart (default: alongside this binary)")
+	var enginePath string
+	fs.StringVar(&enginePath, "engine-path", "", "llamafile/engine path passed to thlibod -engine (default: next to thlibod)")
 	if err := fs.Parse(argv); err != nil {
 		return 2
 	}
@@ -144,9 +146,14 @@ func Run(argv []string) int {
 		if name == "" {
 			name = "cisco.thlibo.daemon"
 		}
+		var args []string
+		if enginePath != "" {
+			args = append(args, "-engine", enginePath)
+		}
 		spec := install.AutostartSpec{
 			Name:       name,
 			DaemonPath: daemonPath,
+			Args:       args,
 		}
 		if err := autostart.Install(spec); err != nil {
 			fmt.Fprintln(os.Stderr, "install: autostart:", err)
