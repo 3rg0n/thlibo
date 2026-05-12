@@ -28,10 +28,13 @@ type Lock struct {
 // The caller must call Release (typically via defer) to drop the lock and
 // clean up the file contents.
 func AcquireLock(path string) (*Lock, error) {
-	if err := os.MkdirAll(dirOf(path), 0o755); err != nil {
+	if err := os.MkdirAll(dirOf(path), 0o750); err != nil {
 		return nil, fmt.Errorf("daemon: create lock dir: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	// path is a daemon config value (e.g. /run/thlibo/thlibod.lock), not
+	// user-supplied input. Mode 0600: only the daemon's own uid reads the
+	// PID; other users don't need to see it.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("daemon: open lock file: %w", err)
 	}
