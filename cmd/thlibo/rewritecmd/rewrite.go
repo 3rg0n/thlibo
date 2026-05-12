@@ -67,10 +67,57 @@ func Run(argv []string) int {
 		return ExitPassthrough
 	}
 
-	// Wrap the command. Quoting: the hook passes us the original
-	// command as one shell string; we prepend `thlibo exec --` and
-	// emit the whole thing. The quoting responsibility is whoever
-	// reassembles it (jq / the hook script), not us.
-	fmt.Println("thlibo exec -- " + cmd)
+	// Wrap the command. We emit the absolute path to our own
+	// executable rather than a bare `thlibo` so the rewritten
+	// command runs successfully in Claude Code's Bash tool, which
+	// does NOT inherit the parent shell's PATH modifications at
+	// tool-execution time. Confirmed by a live `claude -p` smoke
+	// test on Windows.
+	//
+	// Path normalisation: on Windows the os.Executable() returns a
+	// backslash path. Bash -c will eat backslashes as escapes if
+	// we don't quote-or-convert, so we convert to forward slashes.
+	// (Same fix as the claudecode adapter applies to the hook path.)
+	self := selfPath()
+	fmt.Println(self + " exec -- " + cmd)
 	return ExitRewrite
+}
+
+// selfPath returns the path to the currently-running thlibo binary
+// in a form the hook's bash can exec. Errors fall back to the bare
+// name `thlibo` so the old behaviour still works if PATH is set.
+func selfPath() string {
+	p, err := os.Executable()
+	if err != nil {
+		return "thlibo"
+	}
+	// Bash-friendly: forward slashes, quoted if the path contains a
+	// space. Windows program-files installs typically have spaces.
+	p = forwardSlashes(p)
+	if needsShellQuoting(p) {
+		return `"` + p + `"`
+	}
+	return p
+}
+
+func forwardSlashes(p string) string {
+	out := make([]byte, len(p))
+	for i := 0; i < len(p); i++ {
+		if p[i] == '\\' {
+			out[i] = '/'
+		} else {
+			out[i] = p[i]
+		}
+	}
+	return string(out)
+}
+
+func needsShellQuoting(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || c == '\t' || c == '"' || c == '\'' || c == '$' || c == '`' {
+			return true
+		}
+	}
+	return false
 }

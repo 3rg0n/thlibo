@@ -1,0 +1,107 @@
+//go:build linux
+
+package install
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+type linuxInstaller struct {
+	unitDir string
+}
+
+func newLinuxInstaller() (Installer, error) {
+	// XDG_CONFIG_HOME defaults to ~/.config.
+	cfg := os.Getenv("XDG_CONFIG_HOME")
+	if cfg == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		cfg = filepath.Join(home, ".config")
+	}
+	return &linuxInstaller{unitDir: filepath.Join(cfg, "systemd", "user")}, nil
+}
+
+func (l *linuxInstaller) Mechanism() string { return "systemd user unit" }
+
+func (l *linuxInstaller) Install(spec AutostartSpec) error {
+	if err := os.MkdirAll(l.unitDir, 0o750); err != nil {
+		return err
+	}
+	unit := l.unitBody(spec)
+	path := filepath.Join(l.unitDir, spec.Name+".service")
+	if err := os.WriteFile(path, []byte(unit), 0o600); err != nil {
+		return err
+	}
+	// Reload + enable + start. `daemon-reload` picks up the new file;
+	// `enable --now` both sets it to autostart and starts it now.
+	// All commands best-effort: if systemd isn't running (e.g. a
+	// bare container), we leave the unit file in place so a
+	// future session with `systemctl --user` works.
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "--user", "enable", "--now", spec.Name+".service").Run()
+	return nil
+}
+
+func (l *linuxInstaller) Uninstall(name string) error {
+	_ = exec.Command("systemctl", "--user", "disable", "--now", name+".service").Run()
+	path := filepath.Join(l.unitDir, name+".service")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	return nil
+}
+
+func (l *linuxInstaller) Status(name string) (bool, error) {
+	path := filepath.Join(l.unitDir, name+".service")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (l *linuxInstaller) unitBody(spec AutostartSpec) string {
+	args := make([]string, 0, len(spec.Args)+1)
+	args = append(args, systemdEscape(spec.DaemonPath))
+	for _, a := range spec.Args {
+		args = append(args, systemdEscape(a))
+	}
+	execStart := strings.Join(args, " ")
+
+	wd := ""
+	if spec.WorkingDir != "" {
+		wd = "WorkingDirectory=" + spec.WorkingDir + "\n"
+	}
+	return fmt.Sprintf(`[Unit]
+Description=thlibo inference daemon
+
+[Service]
+Type=simple
+ExecStart=%s
+%sRestart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+`, execStart, wd)
+}
+
+// systemdEscape wraps an argument containing spaces in quotes.
+// systemd's ExecStart parses whitespace-separated tokens; anything
+// more involved needs a string with no literal spaces, which none
+// of our default args have.
+func systemdEscape(s string) string {
+	if strings.ContainsAny(s, " \t") {
+		return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+	}
+	return s
+}

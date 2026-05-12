@@ -42,9 +42,11 @@ func TestRewriteWrapsKnownCommand(t *testing.T) {
 	if code != ExitRewrite {
 		t.Errorf("exit code = %d, want %d", code, ExitRewrite)
 	}
-	want := "thlibo exec -- git status --short\n"
-	if got != want {
-		t.Errorf("stdout = %q, want %q", got, want)
+	// Output shape: <abs-path-to-thlibo> exec -- <original-command>\n
+	// We key on the tail since the absolute path differs per run.
+	wantSuffix := " exec -- git status --short\n"
+	if !strings.HasSuffix(got, wantSuffix) {
+		t.Errorf("stdout = %q, want suffix %q", got, wantSuffix)
 	}
 }
 
@@ -54,7 +56,7 @@ func TestRewriteWrapsNpm(t *testing.T) {
 	if code != ExitRewrite {
 		t.Errorf("exit = %d, want %d", code, ExitRewrite)
 	}
-	if !strings.HasPrefix(out, "thlibo exec -- npm install") {
+	if !strings.Contains(out, " exec -- npm install") {
 		t.Errorf("stdout = %q", out)
 	}
 }
@@ -65,7 +67,7 @@ func TestRewriteWrapsCargo(t *testing.T) {
 	if code != ExitRewrite {
 		t.Errorf("exit = %d, want %d", code, ExitRewrite)
 	}
-	if !strings.HasPrefix(out, "thlibo exec -- cargo test") {
+	if !strings.Contains(out, " exec -- cargo test") {
 		t.Errorf("stdout = %q", out)
 	}
 }
@@ -129,7 +131,7 @@ func TestRewriteResolvesAbsolutePath(t *testing.T) {
 	if code != ExitRewrite {
 		t.Errorf("exit = %d, want %d", code, ExitRewrite)
 	}
-	if !strings.HasPrefix(out, "thlibo exec -- /usr/bin/git status") {
+	if !strings.Contains(out, " exec -- /usr/bin/git status") {
 		t.Errorf("stdout = %q (want the original command preserved verbatim)", out)
 	}
 }

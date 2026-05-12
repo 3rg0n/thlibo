@@ -32,6 +32,9 @@ import (
 //	--hook-dir         Override ~/.thlibo/hooks.
 //	--settings         Override ~/.claude/settings.json.
 //	--skip-hook        Mirror processors only; don't touch settings.
+//	--skip-autostart   Mirror + hook only; don't register autostart.
+//	--daemon-path X    Path to thlibod for autostart (default: <this
+//	                   binary's dir>/thlibod[.exe]).
 func Run(argv []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	var (
@@ -40,12 +43,16 @@ func Run(argv []string) int {
 		hookDir       string
 		settingsPath  string
 		skipHook      bool
+		skipAutostart bool
+		daemonPath    string
 	)
 	fs.BoolVar(&dryRun, "dry-run", false, "report planned actions without applying them")
 	fs.StringVar(&processorsDir, "processors-dir", "", "override processors dir (default: ~/.thlibo/processors)")
 	fs.StringVar(&hookDir, "hook-dir", "", "override hook dir (default: ~/.thlibo/hooks)")
 	fs.StringVar(&settingsPath, "settings", "", "override Claude Code settings path (default: ~/.claude/settings.json)")
 	fs.BoolVar(&skipHook, "skip-hook", false, "skip installing the Claude Code hook")
+	fs.BoolVar(&skipAutostart, "skip-autostart", false, "skip registering the daemon for autostart")
+	fs.StringVar(&daemonPath, "daemon-path", "", "thlibod path for autostart (default: alongside this binary)")
 	if err := fs.Parse(argv); err != nil {
 		return 2
 	}
@@ -71,6 +78,24 @@ func Run(argv []string) int {
 
 	hookPath := filepath.Join(hookDir, "thlibo-rewrite.sh")
 
+	if daemonPath == "" {
+		daemonPath = defaultDaemonPath()
+	}
+
+	// Autostart installer is optional: on unsupported OSes we print
+	// a manual-start hint instead of failing the whole install.
+	var autostart install.Installer
+	if !skipAutostart {
+		a, err := install.NewInstaller()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "install: autostart unsupported:", err)
+			fmt.Fprintln(os.Stderr, "install: continuing without autostart; run thlibod manually.")
+			skipAutostart = true
+		} else {
+			autostart = a
+		}
+	}
+
 	fmt.Println("thlibo install plan:")
 	fmt.Println("  processors dir:", processorsDir)
 	fmt.Println("  hook script:   ", hookPath)
@@ -78,6 +103,11 @@ func Run(argv []string) int {
 		fmt.Println("  settings file: ", settingsPath)
 	} else {
 		fmt.Println("  settings file:  (skipped)")
+	}
+	if !skipAutostart && autostart != nil {
+		fmt.Printf("  autostart:      %s (daemon: %s)\n", autostart.Mechanism(), daemonPath)
+	} else {
+		fmt.Println("  autostart:      (skipped)")
 	}
 	if dryRun {
 		fmt.Println("  (dry-run: no changes applied)")
@@ -106,6 +136,50 @@ func Run(argv []string) int {
 	}
 	fmt.Println("  merged Claude Code settings.json")
 
+	if !skipAutostart && autostart != nil {
+		// Allow an override so CI and the .test/ sandbox can register
+		// an autostart entry under an isolated name without touching
+		// the user's real autostart list.
+		name := os.Getenv("THLIBO_AUTOSTART_NAME")
+		if name == "" {
+			name = "cisco.thlibo.daemon"
+		}
+		spec := install.AutostartSpec{
+			Name:       name,
+			DaemonPath: daemonPath,
+		}
+		if err := autostart.Install(spec); err != nil {
+			fmt.Fprintln(os.Stderr, "install: autostart:", err)
+			return 7
+		}
+		fmt.Println("  registered autostart via", autostart.Mechanism())
+	}
+
 	fmt.Println("thlibo install complete.")
 	return 0
 }
+
+// defaultDaemonPath picks the thlibod binary next to the running
+// thlibo executable. This matches what the release bundle lays
+// out: thlibo + thlibod side by side in <install-dir>/bin.
+func defaultDaemonPath() string {
+	self, err := os.Executable()
+	if err != nil {
+		return "thlibod"
+	}
+	dir := filepath.Dir(self)
+	name := "thlibod"
+	if runtimeIsWindows() {
+		name += ".exe"
+	}
+	return filepath.Join(dir, name)
+}
+
+// runtimeIsWindows wraps runtime.GOOS so the installcmd test file
+// can override it (future cross-platform test harness). Currently
+// just a thin wrapper; no tests need the seam yet.
+func runtimeIsWindows() bool {
+	return osPathSep == '\\'
+}
+
+const osPathSep = os.PathSeparator
