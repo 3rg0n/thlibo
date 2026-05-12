@@ -1,0 +1,29 @@
+cmd/thlibod/main.go
+  s_5811b7f24eccc0::t_b2d33f1f649cc2 173-177
+  s_5811b7f24eccc0::t_c60eb04e72c907 1-12,16-17,19,21-37,40-52,54-172,178-272
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_682a8cae558141 1-111
+internal/install/mirror.go
+  s_5811b7f24eccc0::t_0cc1dec5bc1633 1-86
+internal/processors/registry.go
+  s_5811b7f24eccc0::t_048adb7a656dc5 185-194,196,199-202,205-207,209
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_bd524b0c39ad43 21
+  s_5811b7f24eccc0::t_08a777c6cde365 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "63f598aaf55f8830f4b3687822d97827f721720a",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
