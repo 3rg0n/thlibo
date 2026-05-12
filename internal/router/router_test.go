@@ -29,9 +29,8 @@ func buildRegistry(t *testing.T) *processors.Registry {
 	return r
 }
 
-// B5: routing prompt lists every registered processor in deterministic
-// order, includes the (truncated) input, and never references anything
-// outside the registry.
+// B5: routing messages include a Gemma tool declaration and list every
+// registered processor in deterministic order.
 func TestBuildRoutingMessages(t *testing.T) {
 	reg := buildRegistry(t)
 	msgs := buildRoutingMessages(reg, "some input here")
@@ -39,12 +38,18 @@ func TestBuildRoutingMessages(t *testing.T) {
 		t.Fatalf("messages = %d, want 2 (system+user)", len(msgs))
 	}
 	sys := msgs[0].Content
+	if !strings.Contains(sys, `<|tool>declaration:route`) {
+		t.Errorf("system prompt missing Gemma tool declaration: %q", sys[:minInt(200, len(sys))])
+	}
+	if !strings.Contains(sys, `<tool|>`) {
+		t.Error("system prompt missing tool-declaration close token")
+	}
 	for _, want := range []string{"casefolder", "compress", "git-filter"} {
 		if !strings.Contains(sys, want) {
-			t.Errorf("system prompt missing %q", want)
+			t.Errorf("system prompt missing processor name %q", want)
 		}
 	}
-	// Ordering: alphabetical. casefolder before compress before git-filter.
+	// Ordering: alphabetical.
 	if strings.Index(sys, "casefolder") > strings.Index(sys, "compress") {
 		t.Error("processors not listed alphabetically")
 	}
@@ -53,43 +58,58 @@ func TestBuildRoutingMessages(t *testing.T) {
 	}
 }
 
-// B5: grammar enumerates every processor name. An empty registry
-// produces a grammar forcing empty chain (passthrough).
+// B5: grammar targets Gemma's tool-call output format and enumerates
+// every processor name. Empty registry produces a grammar with no
+// name alternatives (empty chain only).
 func TestBuildGrammar(t *testing.T) {
 	reg := buildRegistry(t)
 	g := buildGrammar(reg.Names())
-	for _, want := range []string{`"casefolder"`, `"compress"`, `"git-filter"`, "chain"} {
+	for _, want := range []string{
+		`<|tool_call>call:route`,
+		`processors:[`,
+		`<tool_call|>`,
+		`"casefolder"`,
+		`"compress"`,
+		`"git-filter"`,
+	} {
 		if !strings.Contains(g, want) {
-			t.Errorf("grammar missing %q in %q", want, g)
+			t.Errorf("grammar missing %q in:\n%s", want, g)
 		}
 	}
 
 	empty := buildGrammar(nil)
-	// Grammar is a GBNF string literal, so the JSON-braced chain
-	// appears as an embedded escaped form.
-	if !strings.Contains(empty, `\"chain\":[]`) {
-		t.Errorf("empty grammar = %q", empty)
+	if !strings.Contains(empty, `<|tool_call>call:route{processors:[`) {
+		t.Errorf("empty-registry grammar missing tool-call scaffolding: %q", empty)
+	}
+	// Empty grammar must not declare any name alternatives.
+	if strings.Contains(empty, `name ::=`) {
+		t.Errorf("empty grammar unexpectedly has a name rule: %q", empty)
 	}
 }
 
-// B5/B6: happy paths and the passthrough decision.
+// B5/B6: happy paths and the passthrough decision against Gemma's
+// native tool-call output.
 func TestParseRoutingResponse(t *testing.T) {
 	reg := buildRegistry(t)
 
+	single := `<|tool_call>call:route{processors:[<|"|>git-filter<|"|>]}<tool_call|>`
+	chain := `<|tool_call>call:route{processors:[<|"|>git-filter<|"|>,<|"|>compress<|"|>]}<tool_call|>`
+	empty := `<|tool_call>call:route{processors:[]}<tool_call|>`
+
 	cases := []struct {
-		name     string
-		raw      string
-		wantPass bool
+		name      string
+		raw       string
+		wantPass  bool
 		wantChain []string
 	}{
-		{"single", `{"chain":["git-filter"]}`, false, []string{"git-filter"}},
-		{"chain", `{"chain":["git-filter","compress"]}`, false, []string{"git-filter", "compress"}},
-		{"empty chain = passthrough", `{"chain":[]}`, true, nil},
-		{"fenced code block", "```json\n{\"chain\":[\"git-filter\"]}\n```", false, []string{"git-filter"}},
-		{"with preamble", `sure: {"chain":["compress"]}`, false, []string{"compress"}},
-		{"B8c malformed", `not json`, true, nil},
-		{"B8c unknown name", `{"chain":["nonexistent"]}`, true, nil},
-		{"B8c partial unknown", `{"chain":["git-filter","nonexistent"]}`, true, nil},
+		{"single processor", single, false, []string{"git-filter"}},
+		{"chain", chain, false, []string{"git-filter", "compress"}},
+		{"empty = passthrough", empty, true, nil},
+		{"B8c garbage", `just some text`, true, nil},
+		{"B8c no tool call", `{"chain":["git-filter"]}`, true, nil},
+		{"B8c unknown name", `<|tool_call>call:route{processors:[<|"|>nonexistent<|"|>]}<tool_call|>`, true, nil},
+		{"B8c partial unknown = drop", `<|tool_call>call:route{processors:[<|"|>git-filter<|"|>,<|"|>nonexistent<|"|>]}<tool_call|>`, true, nil},
+		{"leading whitespace tolerated", "\n\n" + single, false, []string{"git-filter"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -127,4 +147,11 @@ func equalSlice(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

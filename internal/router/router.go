@@ -1,14 +1,17 @@
 // Package router asks the daemon which processor should handle a tool
-// output. The routing call uses a GBNF grammar so the model's response
-// is guaranteed to be valid JSON matching a known schema, analogous to
-// how the Anthropic API enforces tool_use input_schema.
+// output. The routing call uses Gemma 4's native tool-call format
+// (see https://ai.google.dev/gemma/docs/capabilities/text/function-calling-gemma4)
+// constrained by a GBNF grammar, so the model's response is guaranteed
+// to conform to the trained-for token pattern:
+//
+//	<|tool_call>call:route{processors:[<|"|>name<|"|>,...]}<tool_call|>
 package router
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/3rg0n/thlibo/internal/ipc"
@@ -64,16 +67,23 @@ func Ask(ctx context.Context, client *DaemonClient, reg *processors.Registry, in
 }
 
 // buildRoutingMessages constructs the system + user messages the
-// daemon sees. The system prompt spells out the JSON schema and gives
-// a small number of few-shot examples so even without the grammar the
-// output would be close to valid (belt-and-braces with the grammar).
+// daemon sees. The system content embeds a Gemma 4 tool declaration
+// in the model's native format. The chat template in the GGUF will
+// wrap this into `<|turn>system\n<|tool>declaration:...<tool|><turn|>`
+// at tokenize time.
+//
+// We inject the declaration as plain text rather than relying on a
+// separate `tools` parameter because the daemon protocol carries a
+// messages array, and llamafile's /completion endpoint renders the
+// chat template directly. The tool-call output is still grammar-
+// enforced, so a misrendered declaration would just produce a valid
+// empty chain (passthrough) rather than garbage.
 func buildRoutingMessages(reg *processors.Registry, input string) []ipc.Message {
 	var sysb strings.Builder
-	sysb.WriteString("You are a processor router. Given tool output, return JSON\n")
-	sysb.WriteString("describing which processors should run. Return only JSON, no prose.\n\n")
-	sysb.WriteString("Schema:\n")
-	sysb.WriteString(`  {"chain": ["processor-name", ...]}` + "\n")
-	sysb.WriteString(`  An empty chain ({"chain": []}) means no processor should run.` + "\n\n")
+	sysb.WriteString(toolDeclaration(reg))
+	sysb.WriteString("\n\nYou are a processor router. Given tool output, emit exactly one\n")
+	sysb.WriteString("tool call to `route` with the ordered processor chain. Emit an\n")
+	sysb.WriteString("empty processors array to pass the input through unchanged.\n\n")
 	sysb.WriteString("Available processors:\n")
 	for _, n := range reg.Names() {
 		d := reg.Get(n)
@@ -83,13 +93,6 @@ func buildRoutingMessages(reg *processors.Registry, input string) []ipc.Message 
 		}
 		fmt.Fprintf(&sysb, "  - %s: %s\n", n, singleLine(desc))
 	}
-	sysb.WriteString("\nExamples:\n")
-	sysb.WriteString(`  Input: "On branch main\nnothing to commit"` + "\n")
-	sysb.WriteString(`  Output: {"chain":["git-filter"]}` + "\n\n")
-	sysb.WriteString(`  Input: "compile error at src/main.rs:12: mismatched types"` + "\n")
-	sysb.WriteString(`  Output: {"chain":["casefolder"]}` + "\n\n")
-	sysb.WriteString(`  Input: "hello world"` + "\n")
-	sysb.WriteString(`  Output: {"chain":[]}` + "\n")
 
 	return []ipc.Message{
 		{Role: ipc.RoleSystem, Content: sysb.String()},
@@ -97,70 +100,83 @@ func buildRoutingMessages(reg *processors.Registry, input string) []ipc.Message 
 	}
 }
 
-// buildGrammar produces a GBNF that constrains the model's output to
-// exactly {"chain":[<zero-or-more-processor-names>]}. llama.cpp
-// enforces this token-by-token; no other tokens are legal.
+// toolDeclaration builds Gemma's tool-declaration block for the `route`
+// tool. Format is the one documented in the function-calling
+// capability doc; the chat template will wrap it with `<|tool>` tags.
+func toolDeclaration(reg *processors.Registry) string {
+	// The declaration is embedded as Gemma's declaration:name{...}
+	// syntax. Quoting uses Gemma's `<|"|>` string delimiters.
+	return `<|tool>declaration:route{description:<|"|>Route tool output through the processor chain. Pass an empty processors array to leave the input unchanged.<|"|>,parameters:{properties:{processors:{description:<|"|>Ordered list of processor names to run, piped stdout->stdin.<|"|>,type:<|"|>ARRAY<|"|>,items:{type:<|"|>STRING<|"|>} } },required:[<|"|>processors<|"|>],type:<|"|>OBJECT<|"|>} }<tool|>`
+}
+
+// buildGrammar produces a GBNF that forces Gemma's native tool-call
+// output for `route`. The model is restricted to exactly one tool
+// call whose `processors` argument is an array of registry names (or
+// empty). The emitted tokens match the spec §Router tool-call format.
 //
-// Grammar shape:
+// Grammar shape (GBNF):
 //
-//	root       ::= "{\"chain\":[" names? "]}"
-//	names      ::= name ("," name)*
-//	name       ::= "\"" ("compress" | "casefolder" | ...) "\""
+//	root       ::= "<|tool_call>call:route{processors:[" chain "]}<tool_call|>"
+//	chain      ::= "" | name ("," name)*
+//	name       ::= "<|\"|>" ("compress" | "casefolder" | ...) "<|\"|>"
 //
-// Processor names are matched against the registry; only registry
-// entries appear in the grammar, so the model physically cannot emit
-// an unknown name.
+// With the empty-registry case, chain is forced to "".
 func buildGrammar(names []string) string {
-	if len(names) == 0 {
-		// No processors -> grammar forces empty chain, which drives
-		// passthrough. Matches spec's "none" decision.
-		return `root ::= "{\"chain\":[]}"`
-	}
 	var b strings.Builder
-	b.WriteString(`root ::= "{\"chain\":[" chain "]}"` + "\n")
-	b.WriteString(`chain ::= name ("," name)* | ""` + "\n")
-	b.WriteString(`name ::= "\"" (`)
+	b.WriteString(`root ::= "<|tool_call>call:route{processors:[" chain "]}<tool_call|>"` + "\n")
+	if len(names) == 0 {
+		b.WriteString(`chain ::= ""`)
+		return b.String()
+	}
+	b.WriteString(`chain ::= "" | name ("," name)*` + "\n")
+	b.WriteString(`name ::= "<|\"|>" (`)
 	for i, n := range names {
 		if i > 0 {
 			b.WriteString(" | ")
 		}
 		fmt.Fprintf(&b, "%q", n)
 	}
-	b.WriteString(`) "\""`)
+	b.WriteString(`) "<|\"|>"`)
 	return b.String()
 }
 
-// parseRoutingResponse is defensive: even with the grammar constraint
-// we strip whitespace and fenced-code markers before decoding, because
-// the model's first tokens before the grammar kicks in could, in
-// edge cases, be spaces or something benign. Any decode failure or
-// unknown name produces a passthrough decision (B8c).
+// toolCallRE matches Gemma's native tool-call pattern for our `route`
+// tool. We do not require a leading-bytes match because llamafile's
+// response may include surrounding whitespace from the chat template.
+var toolCallRE = regexp.MustCompile(
+	`<\|tool_call>call:route\{processors:\[(.*?)\]\}<tool_call\|>`,
+)
+
+// argValueRE extracts one string argument from Gemma's `<|"|>...<|"|>`
+// delimited form. The capability doc's own extract_tool_calls uses a
+// similar pattern; we're less permissive here since we only expect
+// processor-name strings.
+var argValueRE = regexp.MustCompile(`<\|"\|>([^<]*)<\|"\|>`)
+
+// parseRoutingResponse extracts the processor chain from Gemma's
+// native tool-call output. Any parse failure or unknown name produces
+// a passthrough decision (B8c) - partial chains are worse than no
+// run because they produce unexpected output shape.
 func parseRoutingResponse(raw string, reg *processors.Registry) Decision {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-	raw = strings.TrimSpace(raw)
-
-	// Locate the first brace, in case there's a leading preamble.
-	if i := strings.Index(raw, "{"); i > 0 {
-		raw = raw[i:]
+	m := toolCallRE.FindStringSubmatch(raw)
+	if m == nil {
+		return Decision{} // B8c: no tool call -> passthrough
 	}
 
-	var payload struct {
-		Chain []string `json:"chain"`
-	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return Decision{} // B8c: malformed -> passthrough
+	inner := strings.TrimSpace(m[1])
+	if inner == "" {
+		return Decision{} // Empty chain -> explicit passthrough
 	}
 
-	valid := make([]string, 0, len(payload.Chain))
-	for _, name := range payload.Chain {
-		name = strings.TrimSpace(name)
+	matches := argValueRE.FindAllStringSubmatch(inner, -1)
+	if matches == nil {
+		return Decision{}
+	}
+
+	valid := make([]string, 0, len(matches))
+	for _, mm := range matches {
+		name := strings.TrimSpace(mm[1])
 		if name == "" || reg.Get(name) == nil {
-			// Unknown name -> drop the whole chain (B8c). A partial
-			// run is worse than passthrough because it produces
-			// unexpected output shape.
 			return Decision{}
 		}
 		valid = append(valid, name)
