@@ -244,6 +244,7 @@ Newline-delimited JSON over Unix socket.
 **Request:**
 ```json
 {
+  "id":                 "req-7f3a",
   "messages": [
     {"role": "system", "content": "..."},
     {"role": "user",   "content": "..."}
@@ -257,17 +258,23 @@ Newline-delimited JSON over Unix socket.
 }
 ```
 
+`id` is a client-generated string, echoed on every response frame for that
+request. Enables cancellation, queue accounting, and multi-client debugging.
+If omitted, daemon assigns an opaque ID and includes it on the first frame.
+
 Defaults if omitted: `temperature=1.0`, `top_p=0.95`, `top_k=64` (Gemma 4
 recommended). `image_token_budget` for multimodal only: `70|140|280|560|1120`.
 
-**Response:**
+**Response:** (every frame carries the request `id`)
 ```json
-{"type": "status", "status": "loading_model"}
-{"type": "status", "status": "ready"}
-{"type": "token",  "content": "..."}
-{"type": "done",   "usage": {"prompt_tokens": 412, "completion_tokens": 38}}
-{"type": "error",  "message": "queue full"}
+{"id": "req-7f3a", "type": "status", "status": "loading_model"}
+{"id": "req-7f3a", "type": "status", "status": "ready"}
+{"id": "req-7f3a", "type": "token",  "content": "..."}
+{"id": "req-7f3a", "type": "done",   "usage": {"prompt_tokens": 412, "completion_tokens": 38}}
+{"id": "req-7f3a", "type": "error",  "message": "queue full"}
 ```
+
+Admin socket `status` frames use `id: "admin"`.
 
 IPC endpoint not created until `{"status":"ready"}`.
 
