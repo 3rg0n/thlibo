@@ -1,0 +1,52 @@
+processors/README.md
+  s_5811b7f24eccc0::t_224709d3c9ab1e 1-14
+internal/processors/script.go
+  s_5811b7f24eccc0::t_998857236b2c9d 1-5
+go.mod
+  s_5811b7f24eccc0::t_623503891a2a8a 1-2
+  s_5811b7f24eccc0::t_4e3b2e0ce0a74e 3
+.gitignore
+  s_5811b7f24eccc0::t_2420866cdb2fbd 1-46
+internal/ipc/ipc.go
+  s_5811b7f24eccc0::t_ac43b9c611d954 1-4
+internal/queue/queue.go
+  s_5811b7f24eccc0::t_f585f92aa7208a 1-4
+internal/adapters/codex/codex.go
+  s_5811b7f24eccc0::t_6a4a522b08b671 1-2
+internal/router/router.go
+  s_5811b7f24eccc0::t_7cf8ce2e16a2c2 1-4
+internal/processors/prompt.go
+  s_5811b7f24eccc0::t_4649d0bb35c503 1-5
+CHANGELOG.md
+  s_5811b7f24eccc0::t_638973a96f0f26 1-17
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_26fb7d72f5965e 1-15
+internal/install/install.go
+  s_5811b7f24eccc0::t_c0299e577811dc 1-6
+internal/daemon/daemon.go
+  s_5811b7f24eccc0::t_aba2ad56800913 1-4
+internal/adapters/claudecode/claudecode.go
+  s_5811b7f24eccc0::t_5921a3eb17500e 1-4
+cmd/thlibod/main.go
+  s_5811b7f24eccc0::t_9fd107804e2f62 1-14
+internal/adapters/proxy/proxy.go
+  s_5811b7f24eccc0::t_125156365fa32f 1-5
+internal/processors/registry.go
+  s_5811b7f24eccc0::t_583f2c8fd25d09 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "baf39941ac3a7b921d9f4e73681a0a00db7d3274",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
