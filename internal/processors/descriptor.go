@@ -55,9 +55,15 @@ type Descriptor struct {
 
 // Origin records where a descriptor was loaded from. "User" descriptors
 // under ~/.thlibo/processors override built-ins with the same name.
+//
+// DiskDir is the absolute filesystem directory containing the
+// processor, when such a directory exists. It is empty for built-ins
+// loaded from an embed.FS. Script processors require DiskDir because
+// the entry subprocess needs a real chdir target.
 type Origin struct {
-	Source OriginSource // User or Builtin
-	Path   string       // file path (absolute or embed-fs path)
+	Source  OriginSource
+	Path    string // logical path within the source (e.g. "git-filter/processor.yaml")
+	DiskDir string // absolute path to the processor folder on disk, or ""
 }
 
 type OriginSource int
@@ -218,10 +224,16 @@ func isValidName(s string) bool { return nameRE.MatchString(s) }
 //	.exe, .bin  -> direct exec
 //
 // Unknown extensions return an error so a typo doesn't silently run
-// the wrong interpreter.
+// the wrong interpreter. Script processors that lack a DiskDir (e.g.
+// a script shipped as an embed.FS entry without being mirrored to
+// disk) cannot execute; the dispatcher catches the empty DiskDir and
+// falls back.
 func (d *Descriptor) EntryCommand(dir string) (string, []string, error) {
 	if d.Type != KindScript {
 		return "", nil, fmt.Errorf("processor %s: not a script processor", d.Name)
+	}
+	if dir == "" {
+		return "", nil, fmt.Errorf("processor %s: script processor requires on-disk directory", d.Name)
 	}
 	path := filepath.Join(dir, d.Entry)
 	ext := strings.ToLower(filepath.Ext(d.Entry))

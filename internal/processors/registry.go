@@ -7,7 +7,9 @@ package processors
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -20,6 +22,17 @@ type Registry struct {
 	order  []string // stable iteration (alphabetical) for deterministic router prompts
 }
 
+// Source bundles a filesystem to scan with an optional on-disk root
+// so script processors can resolve their entry files. diskRoot may be
+// "" for embed.FS-only sources (e.g. compiled-in built-ins not yet
+// mirrored to disk); script processors from such sources will error
+// at dispatch time, which the middleware treats as a fallback signal.
+type Source struct {
+	FS       fs.FS
+	DiskRoot string       // absolute path, or "" if FS is not backed by disk
+	Origin   OriginSource // Builtin or User
+}
+
 // Build scans user + builtin sources, merges them (user overrides
 // builtin with the same name), and returns the registry plus any
 // non-fatal warnings (B8g: quarantined processors whose descriptors
@@ -27,20 +40,52 @@ type Registry struct {
 // the offending processor is skipped so one broken folder doesn't
 // deny the whole middleware.
 func Build(builtin fs.FS, user fs.FS) (*Registry, []error, error) {
+	return BuildFromSources(
+		Source{FS: builtin, Origin: OriginBuiltin},
+		Source{FS: user, Origin: OriginUser},
+	)
+}
+
+// BuildFromDisk is a convenience constructor for the common case of
+// loading builtins and user processors from known on-disk roots. An
+// empty path is treated as "not present".
+func BuildFromDisk(builtinDir, userDir string) (*Registry, []error, error) {
+	b := Source{Origin: OriginBuiltin}
+	if builtinDir != "" {
+		abs, err := filepath.Abs(builtinDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		b.FS = os.DirFS(abs)
+		b.DiskRoot = abs
+	}
+	u := Source{Origin: OriginUser}
+	if userDir != "" {
+		abs, err := filepath.Abs(userDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		u.FS = os.DirFS(abs)
+		u.DiskRoot = abs
+	}
+	return BuildFromSources(b, u)
+}
+
+// BuildFromSources is the full-control entry point; callers supply
+// each source's FS, disk root, and origin. Used by Build,
+// BuildFromDisk, and by adapters that want to mix embed.FS builtins
+// with on-disk user processors.
+func BuildFromSources(sources ...Source) (*Registry, []error, error) {
 	r := &Registry{byName: make(map[string]*Descriptor)}
 	var warnings []error
-
-	if builtin != nil {
-		if errs := r.scan(builtin, OriginBuiltin); errs != nil {
+	for _, s := range sources {
+		if s.FS == nil {
+			continue
+		}
+		if errs := r.scan(s); errs != nil {
 			warnings = append(warnings, errs...)
 		}
 	}
-	if user != nil {
-		if errs := r.scan(user, OriginUser); errs != nil {
-			warnings = append(warnings, errs...)
-		}
-	}
-
 	for name := range r.byName {
 		r.order = append(r.order, name)
 	}
@@ -51,17 +96,17 @@ func Build(builtin fs.FS, user fs.FS) (*Registry, []error, error) {
 // scan walks one source. Each top-level directory is a processor
 // candidate; parse errors are collected and returned but do not abort
 // the scan.
-func (r *Registry) scan(fsys fs.FS, origin OriginSource) []error {
-	entries, err := fs.ReadDir(fsys, ".")
+func (r *Registry) scan(s Source) []error {
+	entries, err := fs.ReadDir(s.FS, ".")
 	if err != nil {
-		return []error{fmt.Errorf("processors: read %s root: %w", origin, err)}
+		return []error{fmt.Errorf("processors: read %s root: %w", s.Origin, err)}
 	}
 	var warnings []error
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		d, err := loadOne(fsys, e.Name(), origin)
+		d, err := loadOne(s.FS, e.Name(), s.Origin)
 		if err != nil {
 			warnings = append(warnings, err)
 			continue
@@ -69,11 +114,15 @@ func (r *Registry) scan(fsys fs.FS, origin OriginSource) []error {
 		if d == nil {
 			continue // no descriptor file; silently skip
 		}
+		// Record the on-disk directory for script processor dispatch.
+		if s.DiskRoot != "" {
+			d.Origin.DiskDir = filepath.Join(s.DiskRoot, e.Name())
+		}
 		// User wins: overwrite any existing entry unconditionally when
 		// origin is User. When origin is Builtin, only add if not
 		// already present (shouldn't happen in practice since scan is
 		// called builtin-first).
-		if origin == OriginUser {
+		if s.Origin == OriginUser {
 			r.byName[d.Name] = d
 		} else if _, ok := r.byName[d.Name]; !ok {
 			r.byName[d.Name] = d
