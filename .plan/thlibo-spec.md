@@ -35,33 +35,64 @@ machine boots
 
       ─────────────────────────────────────────────────────
 
-Claude Code / Codex / other AI client
+Claude Code (or Codex / Cursor / similar)
       │
-      │  PostToolUse hook (or equivalent)
+      │  Bash tool invocation: `git status`
+      │
+      │  PreToolUse hook fires BEFORE execution
       ▼
-  thlibo  (middleware)
+  thlibo-rewrite.sh  (hook script)
       │
-      ├─ output < 2000 chars? ──────────────────► pass through
+      ├─ thlibo rewrite "git status"
+      │     ├─ argv[0] = "git"
+      │     ├─ registry.MatchCommand("git") hits git-filter processor
+      │     └─ emit: "thlibo exec -- git status", exit 0
       │
-      ├─ scan ~/.thlibo/processors/ on startup
-      │   build processor registry from descriptors
+      ├─ hook emits {"hookSpecificOutput": {
+      │     "hookEventName": "PreToolUse",
+      │     "permissionDecision": "allow",
+      │     "updatedInput": {"command": "thlibo exec -- git status"}
+      │   }}
       │
-      ├─ fast-path: does any processor.yaml/md
-      │   match: regex hit this output?
-      │      └─ yes ──► dispatch directly, skip routing call
+      ▼
+Claude Code runs `thlibo exec -- git status`
       │
-      ├─ routing call to daemon (small prompt, no stream)
-      │   "I have this output. Available processors: [list
-      │    with descriptions]. Which should I run, or none?"
-      │         │
-      │         ├─ "git-filter" ──► run run.py, done
-      │         ├─ "compress"   ──► call daemon with prompt, done
-      │         ├─ "casefolder" ──► call daemon with prompt, done
-      │         ├─ "git-filter,compress" ──► chain them, done
-      │         └─ "none"       ──► pass through
+      ▼
+  thlibo exec  (subprocess wrapper)
       │
-      └─ final output → AI client
+      ├─ exec `git status`, capture stdout/stderr/exit code
+      │
+      ├─ pipe stdout through middleware.Process():
+      │   ├─ len < 2000? ──► passthrough
+      │   ├─ fast-path regex hit? ──► dispatch processor
+      │   ├─ else: routing call to thlibod daemon
+      │   │         ├─ git-filter    ──► run.py, done
+      │   │         ├─ compress      ──► daemon prompt, strip thoughts
+      │   │         ├─ casefolder    ──► daemon prompt, strip thoughts
+      │   │         ├─ chain (a,b)   ──► pipe a.stdout → b.stdin
+      │   │         └─ none          ──► passthrough
+      │   └─ return compressed string
+      │
+      └─ emit compressed stdout, preserve stderr, preserve exit code
+         │
+         ▼
+Claude Code captures as tool_output, model reads compressed version
 ```
+
+**Key architectural note.** Claude Code's PostToolUse hook cannot
+rewrite tool output — confirmed against the hooks reference docs. The
+RTK project solves this by using PreToolUse with `updatedInput` to
+rewrite the *command* itself, so the subprocess stdout is already
+compressed before Claude Code captures it. Thlibo adopts the same
+mechanism. The daemon + middleware + processors are unchanged; only
+the entry point is the PreToolUse hook instead of PostToolUse.
+
+**Coverage caveat.** The PreToolUse-rewrite mechanism only affects
+the Bash tool. `Read`, `Grep`, `Glob`, and MCP tools bypass this path.
+All five of the spec's token-savings examples (§"Token savings
+estimate") are Bash-produced output, so v0.1 covers the documented
+cases. Proxy-mode-over-ANTHROPIC_BASE_URL for full coverage is a v0.2
+candidate, not part of v0.1.
 
 ---
 
@@ -334,11 +365,39 @@ Falls back to original output on any error path.
 
 ### Client adapters
 
-| Client | Hook mechanism |
-|---|---|
-| Claude Code | PostToolUse in `~/.claude/settings.json` |
-| Codex | Equivalent hook config |
-| Proxy mode | `ANTHROPIC_BASE_URL=http://localhost:47321` — intercepts Read/Glob/Grep |
+All adapters use the same mechanism pioneered by RTK: a PreToolUse
+hook that rewrites a command to invoke `thlibo exec -- <cmd>` when
+the registry has a wrapper for `argv[0]`. The subprocess stdout is
+already compressed by the time the AI client captures it.
+
+| Client | Hook mechanism | v0.1 status |
+|---|---|---|
+| Claude Code | `PreToolUse` hook + `updatedInput` in `~/.claude/settings.json` | ✅ D1 |
+| Codex | Equivalent PreToolUse-style hook (protocol shape varies) | ✅ D2 (IT only; real-agent smoke test if Codex is installed) |
+| Cursor / Windsurf / Cline | Out of scope for v0.1; same mechanism should port | — |
+
+### `thlibo rewrite <command>` subcommand
+
+Inspects a shell command, looks up `argv[0]` in the registry, and
+returns either the rewritten command or an exit code signalling
+passthrough. Exit code protocol matches RTK's convention so hooks
+can be near-identical across products:
+
+| Exit | Meaning | Hook behaviour |
+|---|---|---|
+| 0 | Rewrite found; stdout has new command | Emit `updatedInput`, set `permissionDecision: "allow"` |
+| 1 | No wrapper for `argv[0]` | Pass through unchanged |
+| 2 | Deny rule matched (reserved; v0.2) | Defer to Claude Code's native deny |
+| 3 | Ask rule matched (reserved; v0.2) | Emit `updatedInput`, omit permissionDecision so user is prompted |
+
+### `thlibo exec -- <command>` subcommand
+
+Runs `<command>` as a subprocess, captures stdout/stderr/exit code,
+pipes stdout through `middleware.Process()`, emits the compressed
+stdout verbatim alongside the original stderr, and preserves the
+child's exit code. Failure anywhere in the compression pipeline
+falls back to the original stdout (same fallback contract as
+§B8a–B8h).
 
 ### Main flow
 
@@ -516,7 +575,7 @@ sudo thlibo install
 # creates /run/thlibo/ with correct permissions
 # writes launchd plist (macOS) or systemd unit (Linux)
 # starts thlibod, waits for ready
-# writes PostToolUse hook to ~/.claude/settings.json
+# writes PreToolUse hook (Bash matcher) to ~/.claude/settings.json
 # creates ~/.thlibo/processors/ with built-in processors
 ```
 
@@ -579,9 +638,10 @@ sudo thlibo install
 - [ ] Prompt processor dispatch — build request from md body + frontmatter vars
 - [ ] Processor chaining
 - [ ] Fallback to original on every error path
-- [ ] Claude Code adapter (PostToolUse hook)
-- [ ] Codex adapter
-- [ ] Proxy mode (loopback HTTP for Read/Glob/Grep intercept)
+- [ ] `thlibo rewrite <cmd>` — registry lookup keyed on argv[0], RTK-style exit-code protocol
+- [ ] `thlibo exec -- <cmd>` — subprocess wrapper, stdout piped through middleware, stderr + exit code preserved
+- [ ] Claude Code adapter (PreToolUse hook + `updatedInput` rewrite)
+- [ ] Codex adapter (equivalent PreToolUse-style hook)
 - [ ] `thlibo install` — group, service, socket dir, hook config, processors dir
 - [ ] `thlibo pull` — GGUF download with progress
 
@@ -604,9 +664,8 @@ thlibo/
 │   ├── router/               # routing call logic, prompt builder
 │   ├── queue/                # concurrency control, cancellation
 │   ├── adapters/
-│   │   ├── claudecode/       # PostToolUse hook adapter
-│   │   ├── codex/            # Codex hook adapter
-│   │   └── proxy/            # HTTP proxy for built-in tool intercept
+│   │   ├── claudecode/       # PreToolUse hook template + settings.json merge
+│   │   └── codex/            # Codex hook adapter (v0.1 placeholder)
 │   └── install/              # group creation, service registration, dirs
 └── processors/               # built-in processors (embedded at build time)
     ├── compress/

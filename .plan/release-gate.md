@@ -66,9 +66,9 @@
 
 | # | Requirement | Spec | Verification | Pass condition |
 |---|---|---|---|---|
-| D1 | Claude Code `PostToolUse` hook adapter: reads stdin, writes stdout, exit 0. | §Client adapters | E2E | With hook installed, run a real Claude Code session that triggers a large tool output; assert Claude receives compressed result and no hook-error banner appears. |
-| D2 | Codex adapter works via its equivalent hook mechanism. | §Client adapters | IT + Manual | IT: faked Codex hook protocol (stdin envelope shape recorded from a real Codex session) round-trips through adapter. Manual once-per-release: if Codex is installed on the release machine, record a smoke-test screen capture in release notes; if not, note "Codex E2E deferred — not available on release machine" and file a follow-up. |
-| D3 | Proxy mode binds `127.0.0.1:47321`, intercepts Read/Glob/Grep, passes everything else. | §Client adapters | IT | With `ANTHROPIC_BASE_URL=http://localhost:47321`, a Read tool call goes through the compressor; a non-intercepted method is forwarded verbatim. |
+| D1 | Claude Code `PreToolUse` hook adapter: hook script receives Bash tool input on stdin, calls `thlibo rewrite`, emits `updatedInput` JSON per Claude Code docs. Subprocess stdout is compressed by the time Claude Code captures it. | §Client adapters | UT + IT + E2E | UT: hook-script and `thlibo rewrite` logic tested with fixtures. IT: end-to-end through `thlibo exec` against a real `git status` fixture. E2E: with hook installed in `~/.claude/settings.json`, a Claude Code session triggering a Bash call produces a compressed tool_output and no hook-error banner. |
+| D2 | Codex adapter uses its equivalent PreToolUse-style hook mechanism. | §Client adapters | IT + Manual | IT: faked Codex hook protocol (stdin envelope shape recorded from a real Codex session) round-trips through adapter. Manual once-per-release: if Codex is installed on the release machine, record a smoke-test in release notes; if not, note "Codex E2E deferred — not available on release machine" and file a follow-up. |
+| ~~D3~~ | ~~Proxy mode binds `127.0.0.1:47321`, intercepts Read/Glob/Grep, passes everything else.~~ | ~~§Client adapters~~ | **Deferred to v0.2.** | The PreToolUse-rewrite mechanism covers Bash-tool output (matches every row in the spec's token-savings table). `Read`/`Grep`/`Glob` compression via `ANTHROPIC_BASE_URL` proxy is a post-v0.1 candidate once real-world coverage gaps are known. |
 
 ## E. Installer (`thlibo install`, `thlibo pull`)
 
