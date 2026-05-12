@@ -1,0 +1,25 @@
+internal/daemon/lifecycle.go
+  s_5811b7f24eccc0::t_f75efb7a478b6c 1-298
+internal/daemon/lifecycle_test.go
+  s_5811b7f24eccc0::t_ebc7fdad0a3b02 1-82,84-109,111-153,155-173,175-176,178-190,192-194,197-200,202-205,207-220,222-250,257-258
+  s_5811b7f24eccc0::t_e9a697a54b126d 195-196,201,206
+  s_5811b7f24eccc0::t_a1545ad7c5c1d9 83,110,174,177,191,221
+  s_5811b7f24eccc0::t_6a1d013fd8ad82 251-256
+  s_5811b7f24eccc0::t_bee15ce57248f3 154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "d8e387e570be9bb235b1dbd389941ce009ae8f06",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
