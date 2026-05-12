@@ -1,0 +1,21 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_a54bd0faedec77 23-27
+internal/adapters/codex/codex.go
+  s_5811b7f24eccc0::t_492c0506bc465c 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "b4b6825a94a4f4afb0074e9462a0452059c46ac7",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
