@@ -1,0 +1,19 @@
+internal/middleware/fallback_test.go
+  s_5811b7f24eccc0::t_cbff47b913e5bd 1-230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "eff627c806b00e8ffc2515f70a1cbfc3985ab0a2",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
