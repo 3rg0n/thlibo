@@ -394,6 +394,61 @@ The daemon has no `thinking` toggle. Caller owns the prompt.
 | casefolder (reduced) | `<|think|>Think briefly.` | ~650ms |
 | routing call | _(none)_ | ~100ms |
 
+### Thought-stripping (mandatory)
+
+Per the [Gemma 4 model card][g4card], Gemma E2B/E4B emits a
+`<|channel>thought\n…<channel|>` block before every answer — **even when
+thinking is disabled**. With thinking off, the block is empty; with
+thinking on, it contains the model's reasoning. Either way, it must be
+stripped from the response before the result reaches the AI client.
+
+The middleware applies `processors.Strip()` to every prompt-processor
+response. Script processors are unaffected (they don't see model
+output). Failure to strip = the AI client receives model internals as
+tool output, which defeats compression and leaks reasoning into the
+context window.
+
+[g4card]: https://ai.google.dev/gemma/docs/core/model_card_4
+
+## Router tool-call format
+
+Gemma 4 has native function-calling tokens (see the [function calling
+capability doc][g4fc]). The router uses that native format rather than
+freeform JSON.
+
+The request passes a single tool declaration:
+
+```
+name:       route
+parameters: { processors: array<string> }  // ordered chain
+```
+
+Gemma responds with exactly:
+
+```
+<|tool_call>call:route{processors:<|"|>git-filter<|"|>}<tool_call|>
+```
+
+…or for a chain:
+
+```
+<|tool_call>call:route{processors:[<|"|>git-filter<|"|>,<|"|>compress<|"|>]}<tool_call|>
+```
+
+…or for passthrough:
+
+```
+<|tool_call>call:route{processors:[]}<tool_call|>
+```
+
+The GBNF grammar pinned to the daemon request enforces this shape
+token-by-token: the model physically cannot emit a processor name
+outside the registry, and cannot emit malformed syntax. The middleware
+parses the response with a regex matching the documented token
+structure (`<\|tool_call>call:route\{processors:\[(.*?)\]\}<tool_call\|>`).
+
+[g4fc]: https://ai.google.dev/gemma/docs/capabilities/text/function-calling-gemma4
+
 ---
 
 ## Gemma 4 E4B reference
@@ -411,7 +466,10 @@ The daemon has no `thinking` toggle. Caller owns the prompt.
 
 Image content must appear before text in multimodal prompts.
 GGUF chat template handles all special token formatting.
-Single-turn requests only in thlibo — multi-turn thought stripping not needed.
+Single-turn requests only in thlibo — multi-turn history management not
+needed. **Single-turn thought stripping IS still required** (see
+§"Thought-stripping" above): every response has at least an empty
+thought block.
 
 ---
 
