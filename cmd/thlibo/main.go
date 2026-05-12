@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/3rg0n/thlibo/cmd/thlibo/execcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/rewritecmd"
 )
 
@@ -29,8 +30,7 @@ func main() {
 	case "rewrite":
 		os.Exit(rewritecmd.Run(os.Args[2:]))
 	case "exec":
-		fmt.Fprintln(os.Stderr, "thlibo exec: not yet implemented (next commit)")
-		os.Exit(1)
+		os.Exit(execcmd.Run(os.Args[2:]))
 	case "install":
 		fmt.Fprintln(os.Stderr, "thlibo install: not yet implemented (Phase 6)")
 		os.Exit(1)
