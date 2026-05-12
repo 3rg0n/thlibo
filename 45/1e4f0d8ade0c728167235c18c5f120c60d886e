@@ -1,0 +1,29 @@
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_155b0a2205321b 20
+  s_5811b7f24eccc0::t_902c7c9e9876de 33
+cmd/thlibo/execcmd/pipeline.go
+  s_5811b7f24eccc0::t_e3573d2fdf7f07 1-23
+cmd/thlibo/execcmd/exec.go
+  s_5811b7f24eccc0::t_22e190abe2ff9c 1-173
+cmd/thlibo/execcmd/exec_test.go
+  s_5811b7f24eccc0::t_fb722f9698963e 5
+  s_5811b7f24eccc0::t_ef6d5422fc8b59 95-170
+  s_5811b7f24eccc0::t_5466d4bc144417 245
+  s_5811b7f24eccc0::t_8cda79e62aee7a 1-4,6-94,171-244,246-247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "451e4f0d8ade0c728167235c18c5f120c60d886e",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
