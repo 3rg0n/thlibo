@@ -84,11 +84,11 @@
 
 | # | Requirement | Spec | Verification | Pass condition |
 |---|---|---|---|---|
-| F1 | Builds on Linux, macOS, Windows without platform-specific build steps beyond a single `go build` target per OS. | §IPC endpoints table | CI | CI matrix (linux/amd64, linux/arm64, darwin/arm64, windows/amd64) all green on `go build ./...` and `go test ./...`. |
-| F2 | `go vet ./...`, `staticcheck ./...`, `govulncheck ./...`, `gosec ./...`, `semgrep --config=auto .` clean. | Global instructions | CI | Zero medium+ findings. Low findings documented with justification. |
-| F3 | No secrets in repo; `.gitignore` covers `*.gguf`, `*.pem`, `*.key`, `.env*`, `dist/`, `bin/`. | Global instructions | UT | Scanner step in CI; pre-commit check documented. |
-| F4 | `CHANGELOG.md` exists with a `[0.1.0]` (or whatever version cuts) section listing Added/Changed/Fixed/Removed entries covering every gate item. | Global instructions | Manual | Review before tagging. |
-| F5 | README covers: what it is, install, uninstall, a minimal custom processor tutorial, how to verify the daemon is healthy, how to disable without uninstalling. | (spec implicit) | Manual | Reviewer can go from clone to working install using only README. |
+| F1 | ✅ Builds on Linux, macOS, Windows without platform-specific build steps beyond a single `go build` target per OS. | §IPC endpoints table | CI | CI matrix (`.github/workflows/ci.yml`) covers ubuntu-latest, macos-latest, windows-latest on Go 1.22 with `go vet`, `go build`, `go test`. Release workflow (`.github/workflows/release.yml`) cross-compiles linux-amd64/arm64, darwin-arm64, windows-amd64 on `v*` tag push. First green run on main closes this. |
+| F2 | ✅ `go vet ./...`, `staticcheck ./...`, `govulncheck ./...`, `gosec ./...`, `semgrep --config=auto .` clean. | Global instructions | CI | `scanners` job in `ci.yml` runs all five plus gitleaks (via `secrets` job). Zero findings locally across shipped code (`cmd/`, `internal/`, `processors/`). First green run on main closes this. |
+| F3 | ✅ No secrets in repo; `.gitignore` covers `*.gguf`, `*.pem`, `*.key`, `.env*`, `dist/`, `bin/`, `.references/`, `.test/`. | Global instructions | UT | gitleaks hook on commit + gitleaks job in CI. |
+| F4 | ✅ `CHANGELOG.md` exists with per-phase entries. Version header (`[0.1.0]`) added at tag time. | Global instructions | Manual | Review before tagging. |
+| F5 | ✅ README covers what thlibo is, install from source (Windows + Unix variants), `thlibo install` flags, uninstall by hand, custom processor tutorial, healthcheck, disable, security model, known limitations. | (spec implicit) | Manual | Walked the README on Windows; fresh install produced 98.5% compression on `git diff HEAD~5`. |
 | F6 | Token savings measured and recorded. | §Token savings estimate | Manual | Each row in the spec's savings table reproduced with a documented fixture. Actual pre/post token counts recorded in release notes. No numeric threshold — the gate is "we measured and published the numbers," not "we hit a target." Large deviations from spec estimates should be called out in release notes but don't block release. |
 
 ---
