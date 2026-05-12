@@ -254,7 +254,8 @@ Newline-delimited JSON over Unix socket.
   "top_k":              64,
   "max_tokens":         1000,
   "stream":             true,
-  "image_token_budget": 280
+  "image_token_budget": 280,
+  "grammar":            ""
 }
 ```
 
@@ -264,6 +265,12 @@ If omitted, daemon assigns an opaque ID and includes it on the first frame.
 
 Defaults if omitted: `temperature=1.0`, `top_p=0.95`, `top_k=64` (Gemma 4
 recommended). `image_token_budget` for multimodal only: `70|140|280|560|1120`.
+
+`grammar` is a GBNF (llama.cpp grammar) string that constrains the
+model's output token-by-token. Used by the router for structured
+output (analogous to the Anthropic API's tool_use `input_schema`).
+Empty string = unconstrained. The daemon forwards this verbatim to
+llamafile and never interprets it.
 
 **Response:** (every frame carries the request `id`)
 ```json

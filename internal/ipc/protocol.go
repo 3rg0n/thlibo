@@ -46,6 +46,10 @@ type Request struct {
 	MaxTokens        *int      `json:"max_tokens,omitempty"`
 	Stream           *bool     `json:"stream,omitempty"`
 	ImageTokenBudget *int      `json:"image_token_budget,omitempty"`
+	// Grammar is a GBNF (llama.cpp grammar) that constrains output
+	// token-by-token. Used for structured output (e.g. routing calls).
+	// Empty = unconstrained. Forwarded verbatim to llamafile.
+	Grammar string `json:"grammar,omitempty"`
 }
 
 type ResponseType string
@@ -86,7 +90,8 @@ type Resolved struct {
 	TopK             int
 	MaxTokens        int
 	Stream           bool
-	ImageTokenBudget int // 0 means "not multimodal"
+	ImageTokenBudget int    // 0 means "not multimodal"
+	Grammar          string // empty = unconstrained
 }
 
 // Resolve applies Gemma 4 defaults and validates the request. The returned
@@ -133,6 +138,7 @@ func (r *Request) Resolve() (Resolved, error) {
 		}
 		out.ImageTokenBudget = *r.ImageTokenBudget
 	}
+	out.Grammar = r.Grammar
 	return out, nil
 }
 
