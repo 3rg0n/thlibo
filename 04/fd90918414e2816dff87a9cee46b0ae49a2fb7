@@ -1,0 +1,24 @@
+internal/router/router_test.go
+  s_5811b7f24eccc0::t_bf389cc689fa61 32-33,41-46,49,52,61-63,67-74,76,81-86,90-91,95-98,100-102,105-112,151-156
+internal/router/router.go
+  s_5811b7f24eccc0::t_d380afffa1f55a 70-80,83-86,103-109
+  s_5811b7f24eccc0::t_be0d36f1bf56bb 143-159,161-163,166-168,170-173,176-178
+  s_5811b7f24eccc0::t_5619c2d8930c03 2-7,14
+  s_5811b7f24eccc0::t_915550f563d8df 112-115,117,119-121,123,125-126,128-129,131-132,139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "04fd90918414e2816dff87a9cee46b0ae49a2fb7",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
