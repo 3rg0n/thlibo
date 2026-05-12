@@ -173,6 +173,11 @@ func (e *SubprocessEngine) Generate(ctx context.Context, prompt GeneratePrompt, 
 		return fmt.Errorf("engine: write prompt: %w", err)
 	}
 
+	// Reader goroutine drains stdout until <<END>> or error; sends each
+	// token into the channel unless ctx is already cancelled. Generate
+	// does NOT return until this goroutine exits - otherwise a caller
+	// closing `tokens` on Generate's return would race with a pending
+	// send.
 	readDone := make(chan error, 1)
 	go func() {
 		for {
@@ -186,8 +191,20 @@ func (e *SubprocessEngine) Generate(ctx context.Context, prompt GeneratePrompt, 
 				select {
 				case tokens <- trimmed:
 				case <-ctx.Done():
-					readDone <- ctx.Err()
-					return
+					// Drain the remaining child output silently until
+					// <<END>> so the stub/llamafile can finish cleanly
+					// and be ready for the next request.
+					for {
+						l2, err2 := e.stdout.ReadString('\n')
+						if l2 != "" && strings.TrimRight(l2, "\r\n") == "<<END>>" {
+							readDone <- ctx.Err()
+							return
+						}
+						if err2 != nil {
+							readDone <- err2
+							return
+						}
+					}
 				}
 			}
 			if err != nil {
@@ -197,20 +214,10 @@ func (e *SubprocessEngine) Generate(ctx context.Context, prompt GeneratePrompt, 
 		}
 	}()
 
-	select {
-	case err := <-readDone:
-		return err
-	case <-ctx.Done():
-		// Force child exit to stop token flow. Caller will restart
-		// the engine if it wants to keep serving; v0.1 behaviour is
-		// "cancelled request = engine is healthy, drop the tokens".
-		// For v0.1 the simpler semantics is: we just return and the
-		// reader goroutine will drain and exit on its own when the
-		// child emits <<END>>. This is safe because cancellation
-		// only happens when the client disconnects; the tokens
-		// channel is closed by the caller.
-		return ctx.Err()
-	}
+	// Block until the reader goroutine finishes (either <<END>>, error,
+	// or ctx cancellation with drain). This guarantees it is safe for
+	// the caller to close the tokens channel immediately on return.
+	return <-readDone
 }
 
 // Stop closes stdin (signalling the child to exit) and waits up to

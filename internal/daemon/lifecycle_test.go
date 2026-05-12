@@ -206,14 +206,12 @@ func TestSocketsClosedAfterStop(t *testing.T) {
 	t.Error("inference socket still accepting 500ms after Stop")
 }
 
-// A13 reinforcement at lifecycle level: the inference socket accepts
-// only requests carrying a messages array (not admin-style frames).
-// Phase 1 stubs out actual inference dispatch; this test just verifies
-// the stub emits an error frame tagged with the request's id rather
-// than closing silently.
-func TestInferenceStubEchoesRequestID(t *testing.T) {
+// End-to-end inference: the inference socket accepts a JSON request,
+// streams token frames, and terminates with a done frame. Every frame
+// carries the request id (A5/A13).
+func TestInferenceEndToEnd(t *testing.T) {
 	f := newFixture(t)
-	cfg := f.makeConfig(t)
+	cfg := f.makeConfig(t, "-tokens=Hello,-world")
 	d, err := Start(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -226,25 +224,59 @@ func TestInferenceStubEchoesRequestID(t *testing.T) {
 	}
 	defer conn.Close()
 
-	req := `{"id":"req-test","messages":[{"role":"user","content":"hi"}]}` + "\n"
+	req := `{"id":"req-e2e","messages":[{"role":"user","content":"hi"}]}` + "\n"
 	if _, err := conn.Write([]byte(req)); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	line, err := bufio.NewReader(conn).ReadBytes('\n')
-	if err != nil {
-		t.Fatalf("read: %v", err)
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	br := bufio.NewReader(conn)
+	frames := readFrames(t, br)
+
+	if len(frames) < 2 {
+		t.Fatalf("expected at least 2 frames (token+done), got %d: %+v", len(frames), frames)
 	}
-	var resp ipc.Response
-	if err := json.Unmarshal(line, &resp); err != nil {
-		t.Fatalf("decode: %v", err)
+	for i, f := range frames {
+		if f.ID != "req-e2e" {
+			t.Errorf("frame %d id = %q, want req-e2e", i, f.ID)
+		}
 	}
-	if resp.ID != "req-test" {
-		t.Errorf("echoed id = %q, want req-test", resp.ID)
+	// Last frame must be done; all preceding frames must be tokens.
+	last := frames[len(frames)-1]
+	if last.Type != ipc.ResponseDone {
+		t.Errorf("final frame type = %q, want done", last.Type)
 	}
-	if resp.Type != ipc.ResponseError {
-		t.Errorf("response type = %q, want error (Phase 1 stub)", resp.Type)
+	for i, f := range frames[:len(frames)-1] {
+		if f.Type != ipc.ResponseToken {
+			t.Errorf("frame %d type = %q, want token", i, f.Type)
+		}
+	}
+}
+
+// readFrames reads newline-delimited JSON frames from br until a done
+// or error frame is seen (both terminal).
+func readFrames(t *testing.T, br *bufio.Reader) []ipc.Response {
+	t.Helper()
+	var out []ipc.Response
+	for {
+		line, err := br.ReadBytes('\n')
+		if len(line) == 0 {
+			if err != nil {
+				return out
+			}
+			continue
+		}
+		var r ipc.Response
+		if err := json.Unmarshal(line, &r); err != nil {
+			t.Fatalf("decode frame: %v (%q)", err, line)
+		}
+		out = append(out, r)
+		if r.Type == ipc.ResponseDone || r.Type == ipc.ResponseError {
+			return out
+		}
+		if err != nil {
+			return out
+		}
 	}
 }
 
