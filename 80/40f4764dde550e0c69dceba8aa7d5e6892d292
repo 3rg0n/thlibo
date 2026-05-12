@@ -1,0 +1,35 @@
+go.mod
+  s_5811b7f24eccc0::t_2a467328ee8ef5 8-9
+internal/processors/descriptor.go
+  s_5811b7f24eccc0::t_13bd6e13121bc2 1-246
+.gitignore
+  s_5811b7f24eccc0::t_49be471df96779 47-49
+internal/processors/descriptor_test.go
+  s_5811b7f24eccc0::t_c40eb9df60e65c 1-197
+internal/processors/registry.go
+  s_5811b7f24eccc0::t_7706ec60bacd35 1-4,6-146
+internal/processors/registry_test.go
+  s_5811b7f24eccc0::t_64d29f1213188b 1-177
+.plan/thlibo-spec.md
+  s_5811b7f24eccc0::t_b1d0eff6e66d31 269-274
+internal/ipc/protocol.go
+  s_5811b7f24eccc0::t_b9103d702b7a89 141
+  s_5811b7f24eccc0::t_81968a99276bd1 49-52
+  s_5811b7f24eccc0::t_25289edad49ca5 93-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "8040f4764dde550e0c69dceba8aa7d5e6892d292",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
