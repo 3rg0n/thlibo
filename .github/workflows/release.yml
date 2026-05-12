@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# One release run at a time per tag; don't try to be clever.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # Required to upload release assets.
+
+jobs:
+  build:
+    name: build (${{ matrix.goos }}-${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ""
+          - goos: linux
+            goarch: arm64
+            ext: ""
+          - goos: darwin
+            goarch: arm64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Build binaries
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin
+          go build -trimpath -ldflags="-s -w" \
+            -o dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibo${{ matrix.ext }} \
+            ./cmd/thlibo
+          go build -trimpath -ldflags="-s -w" \
+            -o dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibod${{ matrix.ext }} \
+            ./cmd/thlibod
+
+      - name: Copy docs into bundle
+        run: |
+          DIR=dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}
+          cp README.md CHANGELOG.md "$DIR/"
+          # LICENSE will be added when the repo picks one; for now,
+          # a placeholder so users see a file in the expected slot.
+          if [ -f LICENSE ]; then cp LICENSE "$DIR/"; fi
+
+      - name: Archive (tar.gz for Unix)
+        if: matrix.goos != 'windows'
+        run: |
+          cd dist
+          tar -czf thlibo-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz thlibo-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Archive (zip for Windows)
+        if: matrix.goos == 'windows'
+        run: |
+          cd dist
+          zip -r thlibo-${{ matrix.goos }}-${{ matrix.goarch }}.zip thlibo-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thlibo-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}.*
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          sha256sum thlibo-*.tar.gz thlibo-*.zip > SHA256SUMS 2>/dev/null || true
+          cat SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/thlibo-*.tar.gz
+            dist/thlibo-*.zip
+            dist/SHA256SUMS
+          generate_release_notes: true
+          draft: true  # Human reviews before going public.
