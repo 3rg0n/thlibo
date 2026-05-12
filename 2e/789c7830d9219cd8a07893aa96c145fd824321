@@ -1,0 +1,40 @@
+internal/install/autostart_linux.go
+  s_5811b7f24eccc0::t_02c63b9441d3a0 1-107
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_d8231c6d3030d6 81-98,107-110
+  s_5811b7f24eccc0::t_bff6f68d8fd877 140-146,148
+  s_5811b7f24eccc0::t_480c8fdf2136e6 35-37,46-47,54-55
+  s_5811b7f24eccc0::t_5075a8ea227c84 139,147,149-157,161-185
+internal/install/autostart_windows.go
+  s_5811b7f24eccc0::t_05e1b0c8bf6bcb 1-116
+internal/install/autostart.go
+  s_5811b7f24eccc0::t_695ef8ff3a7b3a 1-79
+internal/install/autostart_stub_linux.go
+  s_5811b7f24eccc0::t_02e10c5a088f89 1-8
+cmd/thlibo/rewritecmd/rewrite_test.go
+  s_5811b7f24eccc0::t_7db89699e7d5df 59
+  s_5811b7f24eccc0::t_55276e55e4c7cf 70
+  s_5811b7f24eccc0::t_a60d90e88d43f2 134
+internal/install/autostart_darwin.go
+  s_5811b7f24eccc0::t_69155997cbdabb 1-139
+internal/install/autostart_stub_windows.go
+  s_5811b7f24eccc0::t_0b1e680e161435 1-11
+cmd/thlibo/rewritecmd/rewrite.go
+  s_5811b7f24eccc0::t_1d622369159f6b 70-82,85-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "2e789c7830d9219cd8a07893aa96c145fd824321",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
