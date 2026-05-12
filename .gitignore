@@ -43,6 +43,7 @@ Thumbs.db
 
 # Test sandboxes
 .thlibo-test/
+/.test/
 /tmp/
 
 # Local reference material (docs you've stashed for me to read)

@@ -86,8 +86,11 @@ func TestMergeSettingsFreshFile(t *testing.T) {
 	if entry["type"] != "command" {
 		t.Errorf("type = %v, want command", entry["type"])
 	}
-	if entry["command"] != hp {
-		t.Errorf("command = %v, want %v", entry["command"], hp)
+	// Paths are stored with forward slashes so bash -c can execute
+	// them on Windows; compare after normalising the expected path.
+	wantCmd := strings.ReplaceAll(hp, `\`, "/")
+	if entry["command"] != wantCmd {
+		t.Errorf("command = %v, want %v", entry["command"], wantCmd)
 	}
 }
 
@@ -228,8 +231,85 @@ func TestMergeSettingsUpdatesOnPathChange(t *testing.T) {
 		t.Fatalf("expected 1 entry after path change, got %d", len(entries))
 	}
 	entry := entries[0].(map[string]any)
-	if entry["command"] != secondHook {
-		t.Errorf("entry.command = %v, want updated path %v", entry["command"], secondHook)
+	wantCmd := strings.ReplaceAll(secondHook, `\`, "/")
+	if entry["command"] != wantCmd {
+		t.Errorf("entry.command = %v, want updated path %v", entry["command"], wantCmd)
+	}
+}
+
+// Windows paths with backslashes must be normalised to forward
+// slashes before being written to settings.json, because Claude
+// Code spawns hooks via `bash -c "<command>"` and bash eats
+// backslashes. Caught by a real `claude -p` smoke test before
+// anyone else would have hit it in the wild.
+func TestMergeSettingsNormalisesBackslashPath(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	// Simulate a Windows-style path going in.
+	winPath := `C:\dev\Github\thlibo\.test\hooks\thlibo-rewrite.sh`
+	if err := MergeSettings(sp, winPath); err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	raw, _ := os.ReadFile(sp)
+	_ = json.Unmarshal(raw, &got)
+	hooks := got["hooks"].(map[string]any)
+	pre := hooks["PreToolUse"].([]any)
+	entry := pre[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	cmd, _ := entry["command"].(string)
+	if strings.Contains(cmd, `\`) {
+		t.Errorf("command still has backslashes: %q", cmd)
+	}
+	wantSuffix := ".test/hooks/thlibo-rewrite.sh"
+	if !strings.HasSuffix(cmd, wantSuffix) {
+		t.Errorf("command = %q, want suffix %q", cmd, wantSuffix)
+	}
+}
+
+// A legacy entry written with backslashes by an older version must
+// get upgraded in place, not duplicated, on the next install pass.
+func TestMergeSettingsUpgradesLegacyBackslashEntry(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	// Pre-seed with a legacy-style entry.
+	legacy := map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "Bash",
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": `C:\old\path\thlibo-rewrite.sh`,
+						},
+					},
+				},
+			},
+		},
+	}
+	raw, _ := json.MarshalIndent(legacy, "", "  ")
+	_ = os.WriteFile(sp, raw, 0o600)
+
+	newPath := `C:\new\path\thlibo-rewrite.sh`
+	if err := MergeSettings(sp, newPath); err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	rawOut, _ := os.ReadFile(sp)
+	_ = json.Unmarshal(rawOut, &got)
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+	entries := pre[0].(map[string]any)["hooks"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("want 1 entry after upgrade, got %d", len(entries))
+	}
+	cmd := entries[0].(map[string]any)["command"].(string)
+	if strings.Contains(cmd, `\`) {
+		t.Errorf("upgraded command still has backslashes: %q", cmd)
+	}
+	if !strings.HasSuffix(cmd, "/new/path/thlibo-rewrite.sh") {
+		t.Errorf("upgraded command = %q", cmd)
 	}
 }
 

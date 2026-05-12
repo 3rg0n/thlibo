@@ -122,7 +122,14 @@ func MergeSettings(settingsPath, hookPath string) error {
 // appends our command entry. If an entry for our hook already
 // exists (recognised by the hookMarker suffix) it's updated in
 // place instead of duplicated.
+//
+// Windows note: the command string is normalised to forward slashes
+// so that when Claude Code's Bash tool spawns bash -c "<cmd>", bash
+// doesn't interpret backslashes as shell escapes. Git Bash / MSYS
+// handle `C:/path/to/file` correctly.
 func addBashPreToolUseHook(root map[string]any, hookPath string) {
+	hookPath = normalisePath(hookPath)
+
 	hooks := asObject(root, "hooks")
 	preArr := asArray(hooks, "PreToolUse")
 
@@ -157,7 +164,10 @@ func addBashPreToolUseHook(root map[string]any, hookPath string) {
 			continue
 		}
 		cmd, _ := obj["command"].(string)
-		if strings.Contains(cmd, hookMarker) {
+		// Normalise the stored command too so a legacy \-path entry
+		// written by an older thlibo version gets upgraded in place
+		// rather than left alongside a new /-path entry.
+		if strings.Contains(normalisePath(cmd), hookMarker) {
 			groupHooks[i] = map[string]any{"type": "command", "command": hookPath}
 			group["hooks"] = groupHooks
 			return
@@ -205,4 +215,17 @@ func (a *arr) items() []any {
 func (a *arr) append(x any) {
 	v, _ := a.owner[a.key].([]any)
 	a.owner[a.key] = append(v, x)
+}
+
+// normalisePath converts a Windows-style path to forward slashes.
+// On non-Windows, it's a no-op. We don't rewrite the drive letter;
+// Git Bash accepts both `C:/...` and `/c/...`, and Claude Code's
+// Bash tool resolves `C:/...` correctly.
+func normalisePath(p string) string {
+	// Simple, allocation-free for the common case where no change
+	// is needed.
+	if !strings.ContainsRune(p, '\\') {
+		return p
+	}
+	return strings.ReplaceAll(p, "\\", "/")
 }
