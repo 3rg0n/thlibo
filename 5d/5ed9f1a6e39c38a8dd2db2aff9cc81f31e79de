@@ -1,0 +1,19 @@
+internal/ipc/endpoint_test_unix.go
+  s_5811b7f24eccc0::t_d0e762d70fb4a4 6,8,11,14-21,24-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "5d5ed9f1a6e39c38a8dd2db2aff9cc81f31e79de",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
