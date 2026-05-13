@@ -1,0 +1,21 @@
+.plan/release-gate.md
+  s_5811b7f24eccc0::t_390a749dd73ee9 77-81
+CHANGELOG.md
+  s_5811b7f24eccc0::t_22981342f4a49b 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "cb5fcc71ec55c49111fd9bd44cb7ae6c546ecb79",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
