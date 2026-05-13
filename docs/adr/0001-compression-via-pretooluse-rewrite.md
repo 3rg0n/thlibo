@@ -28,12 +28,13 @@ context. Three candidate mechanisms were evaluated:
    signs us up for long-term compatibility with every new Anthropic
    content block type. Significant ongoing maintenance cost.
 
-4. **PreToolUse + `updatedInput` rewrite** — RTK's mechanism.
-   PreToolUse fires before execution and accepts a JSON response
-   that *rewrites* the tool's arguments. We point the rewritten
-   command at `thlibo exec -- <original>`. The subprocess runs the
-   real command, pipes stdout through our middleware, and emits
-   compressed bytes. Claude Code captures that as the tool_output.
+4. **PreToolUse + `updatedInput` rewrite** — documented in Claude
+   Code's hooks reference. PreToolUse fires before execution and
+   accepts a JSON response that *rewrites* the tool's arguments.
+   We point the rewritten command at `thlibo exec -- <original>`.
+   The subprocess runs the real command, pipes stdout through our
+   middleware, and emits compressed bytes. Claude Code captures
+   that as the tool_output.
 
 ## Decision
 
@@ -70,5 +71,5 @@ users who need coverage of non-Bash tools.
 
 - [Claude Code hooks reference](https://code.claude.com/docs/en/hooks)
 - [Codex hooks reference](https://developers.openai.com/codex/hooks)
-- [RTK's hook script](https://github.com/rtk-ai/rtk/blob/develop/hooks/claude/rtk-rewrite.sh) (inspiration)
+- Bash hook script reference: `internal/adapters/claudecode/hook.sh`
 - Spec section: `.plan/thlibo-spec.md` §Client adapters

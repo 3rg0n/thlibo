@@ -80,8 +80,9 @@ Claude Code + Codex CLI.
 
 #### CLI
 
-- `thlibo rewrite <cmd>` — registry lookup keyed on argv[0], RTK-
-  compatible exit-code protocol (0/1/2/3). Emits an absolute-path
+- `thlibo rewrite <cmd>` — registry lookup keyed on argv[0],
+  exit-code protocol (0=rewrite / 1=passthrough / 2=deny reserved /
+  3=ask reserved). Emits an absolute-path
   `thlibo exec --` prefix so the rewritten command runs under
   Claude Code's Bash tool without PATH inheritance.
 - `thlibo exec -- <cmd>` — subprocess wrapper. Runs the command,

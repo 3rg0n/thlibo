@@ -30,8 +30,13 @@ func TestEmbeddedHookShape(t *testing.T) {
 	}
 	// Guard against the hook being copy-pasted without updating
 	// the rewrite command name.
-	if strings.Contains(s, "rtk rewrite") {
-		t.Error("hook script still references rtk; should use thlibo")
+	// Guard against the hook accidentally calling a different
+	// rewrite binary (history: early drafts referenced another
+	// project's CLI; regression check catches re-introductions).
+	for _, forbidden := range []string{"rtk rewrite", "rewrite.sh rewrite"} {
+		if strings.Contains(s, forbidden) {
+			t.Errorf("hook script contains forbidden reference %q; must call `thlibo rewrite`", forbidden)
+		}
 	}
 }
 

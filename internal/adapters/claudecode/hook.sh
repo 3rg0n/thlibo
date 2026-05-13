@@ -6,7 +6,7 @@
 # asks `thlibo rewrite` whether to wrap it, and emits the Claude
 # Code hookSpecificOutput JSON if rewriting.
 #
-# Exit-code protocol from thlibo rewrite (matches RTK convention):
+# Exit-code protocol from thlibo rewrite:
 #   0 + stdout   rewrite applied, stdout = new command -> emit updatedInput
 #   1            no wrapper for argv[0]                -> exit 0 (passthrough)
 #   2            deny rule (v0.2)                      -> exit 0 (let Claude Code handle)

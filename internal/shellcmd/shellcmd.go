@@ -4,8 +4,9 @@
 // the caller decides whether the string is simple enough to rewrite.
 //
 // This is the narrowest sufficient parser for `thlibo rewrite`.
-// RTK's full shell parser handles compound commands at the cost of
-// ~2000 LOC; we defer that to v0.2.
+// Full shell parsing (pipes, && chains, subshells) is deferred to
+// v0.2 — not worth the ~2000 LOC of parser for a single-command
+// wrap.
 package shellcmd
 
 import (

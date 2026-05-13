@@ -11,6 +11,11 @@ preserving every load-bearing detail and dropping the noise.
 Saves 60-99% of tokens on common dev commands without the AI
 knowing the difference.
 
+Uses the same PreToolUse+updatedInput pattern described in Claude
+Code's hooks documentation: rewrite the Bash command before it runs
+so the subprocess stdout is already compressed when the tool result
+is captured. Same token savings, no proxy, no API-wire tampering.
+
 ```
  git diff HEAD~5        68821 bytes      ──thlibo──►    929 bytes     (98.6%)
  npm list 200 deps      ~6200 bytes      ──thlibo──►   ~600 bytes     (90%)
@@ -18,8 +23,10 @@ knowing the difference.
  log file 500 lines    ~20000 bytes      ──thlibo──►  ~1500 bytes     (92%)
 ```
 
-Works with Claude Code today. Extends to other AI coding agents
-through the same PreToolUse+rewrite mechanism RTK pioneered.
+Works with Claude Code today. Codex support ships in v0.1 too —
+Codex uses PostToolUse `decision: block` with a `reason` field to
+replace the tool result, same observable effect via a different
+mechanism. The compression engine is identical.
 
 ---
 
@@ -83,8 +90,10 @@ from source.
 - `jq` (for the Claude Code hook script)
 - `git` (obviously)
 
-On Windows, Git Bash or WSL is required — the PreToolUse hook is a
-bash script.
+On Windows, you need `bash` on PATH so Claude Code can execute the
+PreToolUse hook script. **Git Bash is sufficient** and ships with
+Git for Windows — if you've already got `git` working, you're fine.
+WSL is also an option but not required.
 
 ### From source
 

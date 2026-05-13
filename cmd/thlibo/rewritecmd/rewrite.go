@@ -1,7 +1,6 @@
 // Package rewritecmd implements `thlibo rewrite`.
 //
-// Exit-code protocol (matches RTK's convention so hook scripts are
-// portable between the two products):
+// Exit-code protocol:
 //
 //	0 + stdout  Rewrite found. stdout = new command.
 //	1           No wrapper for argv[0]. Pass through unchanged.

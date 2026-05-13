@@ -81,7 +81,8 @@ Claude Code captures as tool_output, model reads compressed version
 
 **Key architectural note.** Claude Code's PostToolUse hook cannot
 rewrite tool output — confirmed against the hooks reference docs. The
-RTK project solves this by using PreToolUse with `updatedInput` to
+The workaround, documented in Claude Code's hooks reference: use
+PreToolUse with `updatedInput` to
 rewrite the *command* itself, so the subprocess stdout is already
 compressed before Claude Code captures it. Thlibo adopts the same
 mechanism. The daemon + middleware + processors are unchanged; only
@@ -365,7 +366,7 @@ Falls back to original output on any error path.
 
 ### Client adapters
 
-All adapters use the same mechanism pioneered by RTK: a PreToolUse
+All adapters use the same mechanism: a PreToolUse
 hook that rewrites a command to invoke `thlibo exec -- <cmd>` when
 the registry has a wrapper for `argv[0]`. The subprocess stdout is
 already compressed by the time the AI client captures it.
@@ -380,7 +381,7 @@ already compressed by the time the AI client captures it.
 
 Inspects a shell command, looks up `argv[0]` in the registry, and
 returns either the rewritten command or an exit code signalling
-passthrough. Exit code protocol matches RTK's convention so hooks
+passthrough. Exit code protocol so hooks
 can be near-identical across products:
 
 | Exit | Meaning | Hook behaviour |
@@ -638,7 +639,7 @@ sudo thlibo install
 - [ ] Prompt processor dispatch — build request from md body + frontmatter vars
 - [ ] Processor chaining
 - [ ] Fallback to original on every error path
-- [ ] `thlibo rewrite <cmd>` — registry lookup keyed on argv[0], RTK-style exit-code protocol
+- [ ] `thlibo rewrite <cmd>` — registry lookup keyed on argv[0], exit-code protocol (0/1/2/3)
 - [ ] `thlibo exec -- <cmd>` — subprocess wrapper, stdout piped through middleware, stderr + exit code preserved
 - [ ] Claude Code adapter (PreToolUse hook + `updatedInput` rewrite)
 - [ ] Codex adapter (equivalent PreToolUse-style hook)

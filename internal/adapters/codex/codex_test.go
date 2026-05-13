@@ -27,8 +27,10 @@ func TestEmbeddedHookShape(t *testing.T) {
 			t.Errorf("Codex hook missing %q", m)
 		}
 	}
-	if strings.Contains(s, "rtk rewrite") {
-		t.Error("Codex hook still references rtk")
+	for _, forbidden := range []string{"rtk rewrite", "rewrite.sh rewrite"} {
+		if strings.Contains(s, forbidden) {
+			t.Errorf("Codex hook contains forbidden reference %q; must call `thlibo compress`", forbidden)
+		}
 	}
 	// Guard against an old draft of this hook that used PreToolUse:
 	// Codex's PreToolUse doesn't support updatedInput, so that hook
