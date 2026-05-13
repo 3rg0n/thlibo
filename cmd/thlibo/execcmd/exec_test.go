@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	builtins "github.com/3rg0n/thlibo/processors"
 
 	"github.com/3rg0n/thlibo/internal/middleware"
 	"github.com/3rg0n/thlibo/internal/processors"
@@ -99,16 +103,18 @@ func TestRunSpawnFailure(t *testing.T) {
 // input to it, `thlibo exec -- cat <git-status-fixture>` produces
 // compressed stdout shorter than the input.
 func TestRunCompressesWhenPipelineRoutes(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not on PATH; script processors need it")
+	}
 	if runtime.GOOS == "windows" {
-		// The built-in git-filter is a Python script; we invoke it
-		// on Unix via `cat <fixture>`. Covered by Linux CI.
-		t.Skip("Unix-only fixture; Linux CI covers the integration")
+		// The fixture below writes multi-line content that we feed
+		// through `cat` on Unix. Windows has no `cat` by default.
+		t.Skip("Unix-only fixture via `cat`; Linux + macOS CI covers this integration")
 	}
 	fixture := largeGitStatus()
 	// Write the fixture to a temp file and cat it. Safer than trying
 	// to embed multi-line diff content inside an sh -c arg — shell
-	// metacharacters (`$`, `!`, backticks, unbalanced quotes) in the
-	// fixture have bitten past attempts.
+	// metacharacters in the fixture have bitten past attempts.
 	fpath := filepath.Join(t.TempDir(), "fixture.txt")
 	if err := os.WriteFile(fpath, []byte(fixture), 0o600); err != nil {
 		t.Fatal(err)
@@ -117,10 +123,15 @@ func TestRunCompressesWhenPipelineRoutes(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	code := run(argv, nil, &stdout, &stderr, func() (*middleware.Pipeline, error) {
-		// Use real BuildRegistry so git-filter is loaded from the
-		// embedded FS; use a fake router that always routes to
-		// git-filter so we don't need a live daemon.
-		reg, _, err := middleware.BuildRegistry("")
+		// Script processors need a real on-disk directory to chdir +
+		// exec into. Mirror the embedded FS to disk (same as
+		// `thlibo install` does) so the dispatcher can actually run
+		// the Python script. Using middleware.BuildRegistry("")
+		// directly gives back empty DiskDir, which makes the
+		// dispatcher error and the middleware fall back to
+		// passthrough — pipeline "works" but does nothing useful.
+		diskRoot := mirrorBuiltinsForExecTest(t)
+		reg, _, err := processors.BuildFromDisk(diskRoot, "")
 		if err != nil {
 			return nil, err
 		}
@@ -166,6 +177,43 @@ func largeGitStatus() string {
 		b.WriteString("\tpath/to/some/untracked/file/number_" + itoa(i) + ".txt\n")
 	}
 	return b.String()
+}
+
+// mirrorBuiltinsForExecTest copies the embedded processors FS onto
+// disk so the script dispatcher has a real chdir target. Mirrors
+// what `thlibo install` does at real install time. Scoped to
+// t.TempDir() so parallel tests don't collide.
+func mirrorBuiltinsForExecTest(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	err := fs.WalkDir(builtins.FS, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(root, p)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := fs.ReadFile(builtins.FS, p)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		mode := os.FileMode(0o644)
+		if strings.HasSuffix(target, ".py") || strings.HasSuffix(target, ".sh") {
+			mode = 0o755
+		}
+		if err := os.WriteFile(target, data, mode); err != nil {
+			return err
+		}
+		return os.Chmod(target, mode)
+	})
+	if err != nil {
+		t.Fatalf("mirror builtins: %v", err)
+	}
+	return root
 }
 
 // --- test helpers ---------------------------------------------------
