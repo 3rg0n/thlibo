@@ -1,0 +1,26 @@
+internal/install/model.go
+  s_5811b7f24eccc0::t_137a86660c4592 64-70,72-73
+  s_5811b7f24eccc0::t_4d73c82095dd1f 39-46,49,54
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_260b2c2860c982 66-87
+cmd/thlibo/pullcmd/pull.go
+  s_5811b7f24eccc0::t_f3509a36472bd8 47-49
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_2fc1ea62796726 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "d9c944c570efa25055e6bd15e5d6c8169c9d48fe",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
