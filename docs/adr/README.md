@@ -8,6 +8,7 @@ implementation choices aren't.
 | [0001](0001-compression-via-pretooluse-rewrite.md) | Compression via PreToolUse rewrite, not proxy or PATH shim | Accepted |
 | [0002](0002-one-warm-model-single-daemon.md) | One warm model, single daemon | Accepted |
 | [0003](0003-per-user-autostart-not-system-service.md) | Per-user autostart, not a system service | Accepted |
+| [0004](0004-no-windows-shim.md) | No Windows shim binary — plain PATH installation | Accepted |
 
 ## Writing a new ADR
 

@@ -80,20 +80,53 @@ nothing leaves localhost.
 
 ## Install
 
-v0.1 is pre-release. There is no binary distribution yet — you build
-from source.
+### One-liner (Unix)
 
-### Prerequisites
+```bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | bash
+```
 
-- Go 1.22+
-- Python 3.8+ (for script processors)
-- `jq` (for the Claude Code hook script)
-- `git` (obviously)
+Pin to a specific version:
 
-On Windows, you need `bash` on PATH so Claude Code can execute the
-PreToolUse hook script. **Git Bash is sufficient** and ships with
-Git for Windows — if you've already got `git` working, you're fine.
-WSL is also an option but not required.
+```bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.1.0 bash
+```
+
+### One-liner (Windows PowerShell)
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+```
+
+Or pinned:
+
+```powershell
+$env:THLIBO_VERSION='v0.1.0'; iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+```
+
+Both installers:
+1. Download the platform-matching release tarball/zip from GitHub.
+2. Verify SHA-256 against `SHA256SUMS` published in the same release.
+3. Extract `thlibo` and `thlibod` into `~/.local/bin` (Unix) or
+   `%LOCALAPPDATA%\thlibo\bin` (Windows).
+4. On Windows, add the install dir to the User PATH (no admin).
+
+Neither runs `thlibo install` automatically — that step writes to
+your Claude Code settings and registers an autostart entry, so it's
+yours to run when you've read what it does.
+
+### Prerequisites for running
+
+- Python 3.8+ — the built-in script processors (git-filter,
+  npm-filter, cargo-filter) are Python.
+- `jq` — the Claude Code hook shell script needs it. Install via
+  your package manager or `winget install jqlang.jq` on Windows.
+- `git` — for pulling git diffs, you probably have it already.
+
+On Windows you also need `bash` on PATH so Claude Code can execute
+the PreToolUse hook script. **Git Bash (bundled with Git for
+Windows) is sufficient** — if `git` works in your shell, you're
+fine. WSL is also an option.
 
 ### From source
 

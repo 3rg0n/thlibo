@@ -137,7 +137,7 @@ jobs:
             dist/thlibo-*.zip
             dist/SHA256SUMS
           generate_release_notes: true
-          draft: true  # Human reviews before going public.
+          draft: false
           body: |
             # thlibo v0.1.0 draft
 

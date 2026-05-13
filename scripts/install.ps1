@@ -1,0 +1,129 @@
+# thlibo one-line installer — Windows.
+#
+# Usage (PowerShell 5.1+ or PowerShell 7+):
+#   iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+#
+# Or pinned to a specific version:
+#   $env:THLIBO_VERSION='v0.1.0'; iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+#
+# What it does:
+#   1. Downloads thlibo-windows-amd64.zip from the GitHub release.
+#   2. Verifies SHA-256 against SHA256SUMS in the same release.
+#   3. Extracts thlibo.exe + thlibod.exe into %LOCALAPPDATA%\thlibo\bin.
+#   4. Adds that directory to the User PATH (via the Registry) so a
+#      fresh shell finds the binary. No admin required.
+#   5. Tells you what to do next.
+#
+# What it does NOT do (on purpose):
+#   - Run `thlibo install`. That writes to ~/.claude/settings.json and
+#     registers an autostart entry; you should run it manually.
+#   - Download the 5 GB Gemma model.
+#   - Touch the Machine PATH or any admin-only registry. This is a
+#     per-user install.
+#
+# Why no shim binary: we install one tool to one directory and add
+# that directory to PATH. Chocolatey-style ShimGen shims solve a
+# multi-package orchestration problem we don't have. See
+# docs/adr/0004-no-windows-shim.md for the rationale.
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$Version   = if ($env:THLIBO_VERSION) { $env:THLIBO_VERSION } else { 'latest' }
+$InstallDir = if ($env:THLIBO_INSTALL_DIR) { $env:THLIBO_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'thlibo\bin' }
+$ReleasesApi = 'https://api.github.com/repos/3rg0n/thlibo/releases'
+
+function Say($msg) { Write-Host "[thlibo install] $msg" }
+function Die($msg, $code = 1) {
+    Write-Error "[thlibo install] ERROR: $msg"
+    exit $code
+}
+
+# TLS 1.2+ for older Windows PowerShell — .NET 4.8 defaults to
+# SecurityProtocol=Ssl3|Tls, and GitHub requires 1.2 minimum.
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch {}
+
+# --- resolve the release tag ----------------------------------------
+
+function Resolve-Tag {
+    if ($script:Version -ne 'latest') { return $script:Version }
+    # /latest is a public endpoint, no auth needed.
+    $latest = Invoke-RestMethod -UseBasicParsing -Uri "$script:ReleasesApi/latest"
+    if (-not $latest.tag_name) { Die 'could not resolve latest thlibo tag' 3 }
+    return $latest.tag_name
+}
+
+# --- main -----------------------------------------------------------
+
+try {
+    $tag = Resolve-Tag
+    $asset = 'thlibo-windows-amd64.zip'
+    $assetUrl = "https://github.com/3rg0n/thlibo/releases/download/$tag/$asset"
+    $sumsUrl  = "https://github.com/3rg0n/thlibo/releases/download/$tag/SHA256SUMS"
+
+    Say "version:  $tag"
+    Say "install:  $InstallDir"
+
+    $tmp = Join-Path $env:TEMP ("thlibo-install-" + [Guid]::NewGuid())
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    try {
+        $zipPath = Join-Path $tmp $asset
+        $sumsPath = Join-Path $tmp 'SHA256SUMS'
+
+        Say "downloading $asset..."
+        Invoke-WebRequest -UseBasicParsing -Uri $assetUrl -OutFile $zipPath
+        Invoke-WebRequest -UseBasicParsing -Uri $sumsUrl  -OutFile $sumsPath
+
+        Say 'verifying SHA-256...'
+        $expectedLine = Get-Content $sumsPath | Where-Object { $_ -match "  ${asset}`$" }
+        if (-not $expectedLine) { Die "SHA256SUMS does not reference $asset" 3 }
+        $expected = ($expectedLine -split '\s+')[0].ToLower()
+        $actual   = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash.ToLower()
+        if ($expected -ne $actual) { Die "SHA mismatch: expected=$expected actual=$actual" 3 }
+
+        # Extract into a temp folder, then move the two exes to the
+        # final location. Avoids partial state if something goes wrong
+        # halfway through extraction.
+        $extractRoot = Join-Path $tmp 'extract'
+        Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
+        # Layout in the zip: thlibo-windows-amd64/bin/{thlibo.exe,thlibod.exe}
+        $srcBin = Join-Path $extractRoot 'thlibo-windows-amd64\bin'
+        if (-not (Test-Path $srcBin)) { Die "unexpected archive layout: $srcBin missing" 3 }
+
+        New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+        Copy-Item -Force (Join-Path $srcBin 'thlibo.exe')  (Join-Path $InstallDir 'thlibo.exe')
+        Copy-Item -Force (Join-Path $srcBin 'thlibod.exe') (Join-Path $InstallDir 'thlibod.exe')
+
+        Say "installed thlibo $tag → $InstallDir"
+    } finally {
+        Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+    }
+
+    # --- User PATH registration ---
+    # Pull the existing User PATH, append if missing, write back.
+    # The Environment-variable target 'User' writes to HKCU and does
+    # NOT require admin.
+    $currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if (-not $currentPath) { $currentPath = '' }
+    $entries = $currentPath.Split(';', [StringSplitOptions]::RemoveEmptyEntries)
+    if ($entries -notcontains $InstallDir) {
+        $newPath = if ($currentPath) { "$currentPath;$InstallDir" } else { $InstallDir }
+        [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+        Say "added $InstallDir to User PATH."
+        Say 'RESTART your shell (or log out and back in) for PATH changes to take effect.'
+    } else {
+        Say "$InstallDir already on User PATH."
+    }
+
+    Write-Host ''
+    Say 'NEXT STEP: finish the install:'
+    Say '    thlibo install --pull-model'
+    Write-Host ''
+    Say 'This wires up the Claude Code hook, registers the daemon for'
+    Say 'autostart, and downloads the ~5 GB Gemma 4 model. See'
+    Say 'README.md for what each flag does.'
+} catch {
+    Die $_.Exception.Message 1
+}
