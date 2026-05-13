@@ -15,8 +15,11 @@ permissions:
 
 jobs:
   # Download the GGUF once, compute its SHA, then reuse that hash
-  # across every per-platform build. Keeps bandwidth to one fetch
-  # per release tag no matter how many OSes we ship.
+  # across every per-platform build. The GGUF itself is NOT
+  # attached to the release (5.4 GB exceeds GitHub's 2 GiB
+  # release-asset cap); users pull it directly from HuggingFace
+  # via `thlibo pull`, and the pinned SHA injected into the binary
+  # guards integrity.
   pin-model:
     name: pin-model
     runs-on: ubuntu-latest
@@ -35,13 +38,6 @@ jobs:
           sha=$(sha256sum /tmp/model/gemma.gguf | awk '{print $1}')
           echo "sha256=$sha" >> "$GITHUB_OUTPUT"
           echo "Model SHA: $sha"
-      - name: Upload model artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: gemma-4-e4b-q4_k_m.gguf
-          path: /tmp/model/gemma.gguf
-          if-no-files-found: error
-          retention-days: 1
 
   build:
     name: build (${{ matrix.goos }}-${{ matrix.goarch }})
@@ -127,16 +123,10 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Rename GGUF for release
-        run: |
-          if [ -f dist/gemma.gguf ]; then
-            mv dist/gemma.gguf dist/gemma-4-e4b-q4_k_m.gguf
-          fi
-
       - name: Generate SHA256 checksums
         run: |
           cd dist
-          sha256sum thlibo-*.tar.gz thlibo-*.zip gemma-*.gguf > SHA256SUMS 2>/dev/null || true
+          sha256sum thlibo-*.tar.gz thlibo-*.zip > SHA256SUMS 2>/dev/null || true
           cat SHA256SUMS
 
       - name: Publish release
@@ -145,7 +135,35 @@ jobs:
           files: |
             dist/thlibo-*.tar.gz
             dist/thlibo-*.zip
-            dist/gemma-*.gguf
             dist/SHA256SUMS
           generate_release_notes: true
           draft: true  # Human reviews before going public.
+          body: |
+            # thlibo v0.1.0 draft
+
+            First release. Local-Gemma tool-output compression
+            middleware for Claude Code + Codex CLI.
+
+            ## Binaries
+
+            Cross-platform binaries are attached as tarballs/zip.
+            Each bundle contains `bin/thlibo`, `bin/thlibod`,
+            `README.md`, `CHANGELOG.md`.
+
+            ## Model (pulled separately)
+
+            The canonical GGUF
+            (`bartowski/google_gemma-4-E4B-it-GGUF/google_gemma-4-E4B-it-Q4_K_M.gguf`,
+            5.4 GB) is not attached to this release: it exceeds
+            GitHub's 2 GiB asset cap. After installing, run:
+
+                thlibo pull gemma-4-e4b
+
+            The binary has the expected SHA-256 pinned at build
+            time, so `thlibo pull` verifies integrity automatically.
+            No network trust required beyond HuggingFace's TLS +
+            our pin.
+
+            See [.plan/release-notes-0.1.0.md](../blob/main/.plan/release-notes-0.1.0.md)
+            for token-savings measurements and the live Claude Code
+            E2E evidence.
