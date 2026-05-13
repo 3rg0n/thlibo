@@ -36,18 +36,22 @@ type Model struct {
 }
 
 // pinnedGemma4E4BQ4KM is the SHA-256 of
-// unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf at repo
-// revision 653803f0 (downloaded 2026-05-13, 4,977,169,568 bytes).
+// unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-UD-Q4_K_XL.gguf
+// (downloaded 2026-05-13, 5,126,304,928 bytes). Despite the
+// variable name's "Q4KM" lineage, the actual pinned quant is
+// UD-Q4_K_XL — unsloth's "Dynamic 2.0" 4-bit variant. It's
+// their recommended CPU default per their docs and benchmarks,
+// and only ~160 MB larger than plain Q4_K_M for meaningfully
+// better quality preservation. The variable name is kept for
+// historical compatibility.
 //
 // Unsloth's repack is the canonical source: public, ungated,
-// Apache-2.0, 1.2M+ downloads, imatrix-calibrated (slightly tighter
-// than bartowski's repacks at no quality cost). See ADR 0001 for
-// the rationale if we ever consider changing this.
+// Apache-2.0, 1.2M+ downloads. See ADR 0001 for rationale.
 //
 // Overridable at build time via -ldflags -X (see the CI release
 // workflow) so a new release can pin a newer GGUF revision without
 // a source-code change.
-var pinnedGemma4E4BQ4KM = "519b9793ed6ce0ff530f1b7c96e848e08e49e7af4d57bb97f76215963a54146d"
+var pinnedGemma4E4BQ4KM = "30d1e7949597a3446726064e80b876fd1b5cba4aa6eec53d27afa420e731fb36"
 
 // DefaultModel is the CPU-default Gemma 4 E4B Q4_K_M quantisation
 // per spec §Model. Pinned to a bartowski repack for reproducibility.
@@ -57,15 +61,16 @@ var pinnedGemma4E4BQ4KM = "519b9793ed6ce0ff530f1b7c96e848e08e49e7af4d57bb97f7621
 // `thlibo pull` refuses to download with an empty expected hash
 // unless --allow-unpinned is passed.
 var DefaultModel = Model{
-	Name: "gemma-4-e4b-q4_k_m",
-	// Pinned to a specific repo revision so the URL doesn't silently
-	// change if unsloth reuploads the file with a different SHA.
-	// The `resolve/<rev>/...` form is HuggingFace's way of fetching
-	// an immutable revision.
-	URL:            "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/653803f092503c04a65164346f3208a36e707693/gemma-4-E4B-it-Q4_K_M.gguf",
+	Name: "gemma-4-e4b",
+	// Pinned to unsloth's Dynamic-2.0 UD-Q4_K_XL quant — their
+	// CPU-default recommendation. `resolve/main/...` is intentional
+	// here: unsloth versions this repo and the SHA pin catches any
+	// upstream byte-level change. Switch to `resolve/<rev>/...`
+	// and bump whenever unsloth publishes a calibration update.
+	URL:            "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-UD-Q4_K_XL.gguf",
 	ExpectedSHA256: pinnedGemma4E4BQ4KM,
-	Filename:       "gemma-4-e4b-q4_k_m.gguf",
-	SizeBytes:      4_977_169_568, // exact from HF tree listing
+	Filename:       "gemma-4-e4b-ud-q4-k-xl.gguf",
+	SizeBytes:      5_126_304_928, // exact from HF tree listing
 }
 
 // ModelsDir returns the directory GGUFs live in. Honors the

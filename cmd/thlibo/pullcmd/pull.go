@@ -44,7 +44,9 @@ const (
 // entry; keeping a table so `thlibo pull` can grow alternatives
 // (Q8_0 GPU quant, larger variants) without restructuring.
 var knownModels = map[string]install.Model{
-	"gemma-4-e4b":        install.DefaultModel,
+	"gemma-4-e4b":            install.DefaultModel,
+	"gemma-4-e4b-ud-q4-k-xl": install.DefaultModel,
+	// Retained aliases so users following older docs still succeed.
 	"gemma-4-e4b-q4_k_m": install.DefaultModel,
 }
 

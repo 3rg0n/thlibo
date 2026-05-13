@@ -31,7 +31,7 @@ jobs:
           mkdir -p /tmp/model
           curl -fsSL \
             -o /tmp/model/gemma.gguf \
-            https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/653803f092503c04a65164346f3208a36e707693/gemma-4-E4B-it-Q4_K_M.gguf
+            https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-UD-Q4_K_XL.gguf
       - name: Compute SHA256
         id: hash
         run: |
