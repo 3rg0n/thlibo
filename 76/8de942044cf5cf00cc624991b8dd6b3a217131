@@ -1,0 +1,21 @@
+internal/install/autostart_darwin.go
+  s_5811b7f24eccc0::t_dc3d5d5389142b 57-58,60,67
+internal/install/autostart_linux.go
+  s_5811b7f24eccc0::t_61a5102219ab44 46-49,51,57-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "768de942044cf5cf00cc624991b8dd6b3a217131",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
