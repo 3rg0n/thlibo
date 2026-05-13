@@ -1,0 +1,34 @@
+internal/logx/logx_test.go
+  s_5811b7f24eccc0::t_28cc764ac21fb6 1-110,114-128,141-166,171,174-229
+  s_5811b7f24eccc0::t_0af64ea1404e2d 167-170,172-173
+  s_5811b7f24eccc0::t_0ac2978236cb75 111-113,129-140
+internal/logx/logx.go
+  s_5811b7f24eccc0::t_e84787e14b5df0 1-252
+cmd/thlibo/execcmd/exec.go
+  s_5811b7f24eccc0::t_35b1c58af875d5 80-88,100,105-108,112,115-132,135-141,144-167,169-171,173
+  s_5811b7f24eccc0::t_693b422e5162c9 29-30,32
+internal/daemon/lifecycle.go
+  s_5811b7f24eccc0::t_cc1b62ffabf776 364-365,372,380,389-392,398-404
+  s_5811b7f24eccc0::t_f66d40709f2083 16
+  s_5811b7f24eccc0::t_7d4bc83b27e352 509,519-523,530-533,536-541
+  s_5811b7f24eccc0::t_c5e890679c5d33 37-41
+cmd/thlibod/main.go
+  s_5811b7f24eccc0::t_ffd7bdadf156bd 30
+  s_5811b7f24eccc0::t_3d1fe98fe342db 185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "c3ec1bcc0353ab89da51994e8e4bb8f6c7ac5f2e",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
