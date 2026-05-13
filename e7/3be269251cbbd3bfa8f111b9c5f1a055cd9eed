@@ -1,0 +1,31 @@
+README.md
+  s_5811b7f24eccc0::t_a8f655383635d0 155,159-160,163
+  s_5811b7f24eccc0::t_7571a4956fdcff 164-170
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_6a5aa7681dd742 34
+  s_5811b7f24eccc0::t_9ead49a73e8b8a 69
+go.mod
+  s_5811b7f24eccc0::t_18f332261ae722 3
+internal/install/model.go
+  s_5811b7f24eccc0::t_245d4571bfd9ed 39-40,42-50
+  s_5811b7f24eccc0::t_8d34e529ca749b 60-65,68
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_4915289a29e8da 22
+  s_5811b7f24eccc0::t_167bdf5b39a5de 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "e73be269251cbbd3bfa8f111b9c5f1a055cd9eed",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
