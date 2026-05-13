@@ -1,0 +1,21 @@
+cmd/thlibo/execcmd/exec_test.go
+  s_5811b7f24eccc0::t_a97bbd03522744 7,9,15
+  s_5811b7f24eccc0::t_1e33643b4ec572 106-108,110-112,117,126-134
+  s_5811b7f24eccc0::t_b16521c3108637 182-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "209bb534a7b1d8ffd3ca26e36fb86fa449b7ed9b",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
