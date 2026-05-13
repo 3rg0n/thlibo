@@ -164,17 +164,53 @@ func WriteFrame(w io.Writer, f Response) error {
 	return err
 }
 
+// MaxRequestBytes caps the size of a single NDJSON request frame.
+// Larger frames are rejected with ErrFrameTooLarge so a local client
+// cannot exhaust the daemon's heap by writing an unbounded line
+// without a newline. See THREAT_MODEL.md finding #5.
+const MaxRequestBytes = 64 << 20
+
+// ErrFrameTooLarge is returned when a single NDJSON frame exceeds
+// MaxRequestBytes.
+var ErrFrameTooLarge = errors.New("ipc: request frame exceeds MaxRequestBytes")
+
 // ReadRequest reads one newline-delimited request from r. io.EOF means the
 // peer closed the connection cleanly with no more requests pending.
+// Frames larger than MaxRequestBytes return ErrFrameTooLarge - the
+// caller should close the connection rather than try to resync.
 func ReadRequest(r *bufio.Reader) (Request, error) {
-	line, err := r.ReadBytes('\n')
+	line, err := readLimitedLine(r, MaxRequestBytes)
 	if err != nil {
+		if errors.Is(err, ErrFrameTooLarge) {
+			return Request{}, err
+		}
 		if len(line) > 0 && errors.Is(err, io.EOF) {
 			return parseRequest(line)
 		}
 		return Request{}, err
 	}
 	return parseRequest(line)
+}
+
+// readLimitedLine is bufio.Reader.ReadBytes('\n') with a hard cap.
+// Returns ErrFrameTooLarge as soon as cap+1 bytes have been read
+// without hitting a newline; the partial bytes are discarded.
+func readLimitedLine(r *bufio.Reader, limit int) ([]byte, error) {
+	buf := make([]byte, 0, 512)
+	for {
+		b, err := r.ReadByte()
+		if err != nil {
+			return buf, err
+		}
+		if b == '\n' {
+			buf = append(buf, b)
+			return buf, nil
+		}
+		if len(buf) >= limit {
+			return nil, ErrFrameTooLarge
+		}
+		buf = append(buf, b)
+	}
 }
 
 func parseRequest(line []byte) (Request, error) {

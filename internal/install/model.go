@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -319,7 +321,9 @@ func verifySHA(path, want string) error {
 		return fmt.Errorf("install: hash: %w", err)
 	}
 	got := hex.EncodeToString(h.Sum(nil))
-	if !equalFold(got, want) {
+	// Constant-time compare to match crypto best practice even though
+	// the pinned hash is public. See THREAT_MODEL.md finding #4.
+	if subtle.ConstantTimeCompare([]byte(got), []byte(strings.ToLower(want))) != 1 {
 		return fmt.Errorf("install: sha256 mismatch for %s\n  got:  %s\n  want: %s", path, got, want)
 	}
 	return nil
@@ -366,23 +370,3 @@ func isLoopbackHost(h string) bool {
 	return len(h) >= 4 && h[:4] == "127."
 }
 
-// equalFold is a case-insensitive string equality check without
-// pulling in strings for one call.
-func equalFold(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := 0; i < len(a); i++ {
-		ca, cb := a[i], b[i]
-		if ca >= 'A' && ca <= 'Z' {
-			ca += 32
-		}
-		if cb >= 'A' && cb <= 'Z' {
-			cb += 32
-		}
-		if ca != cb {
-			return false
-		}
-	}
-	return true
-}

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/3rg0n/thlibo/internal/install"
+	"github.com/3rg0n/thlibo/internal/logx"
 )
 
 // Exit codes kept named so shell scripts and tests can key on them.
@@ -112,6 +113,12 @@ Available models:
 		opts.Progress = newTerminalProgress()
 	}
 
+	// Integrity-relevant events from `thlibo pull` belong in the
+	// NDJSON audit trail even when the operator can also see them on
+	// the terminal - especially SHA mismatches. See THREAT_MODEL.md
+	// finding #11.
+	logger := logx.New("thlibo-pull", "", 0)
+
 	path, err := install.Pull(ctx, model, opts)
 	if err != nil {
 		// Map structured errors to exit codes so scripts can
@@ -120,19 +127,29 @@ Available models:
 		fmt.Fprintln(os.Stderr, "thlibo pull:", err)
 		switch {
 		case errors.Is(err, context.Canceled):
+			logger.Warn("pull_cancelled", logx.Str("model", name))
 			return ExitNetwork
 		case strings.Contains(err.Error(), "sha256 mismatch"):
+			logger.Error("pull_sha_mismatch",
+				logx.Str("model", name),
+				logx.Str("url", model.URL),
+				logx.Err(err))
 			return ExitSHA
 		case strings.Contains(err.Error(), "no pinned SHA256"):
+			logger.Warn("pull_unpinned", logx.Str("model", name))
 			return ExitUnpinned
 		case strings.Contains(err.Error(), "URL") || strings.Contains(err.Error(), "url"):
+			logger.Error("pull_bad_url", logx.Str("model", name), logx.Err(err))
 			return ExitBadURL
 		case strings.Contains(err.Error(), "models dir"):
+			logger.Error("pull_dir_error", logx.Err(err))
 			return ExitDirError
 		default:
+			logger.Error("pull_network_error", logx.Str("model", name), logx.Err(err))
 			return ExitNetwork
 		}
 	}
+	logger.Info("pull_ok", logx.Str("model", name), logx.Str("path", path))
 
 	if !quiet {
 		fmt.Printf("downloaded: %s\n", path)

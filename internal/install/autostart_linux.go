@@ -88,14 +88,32 @@ func (l *linuxInstaller) unitBody(spec AutostartSpec) string {
 	if spec.WorkingDir != "" {
 		wd = "WorkingDirectory=" + spec.WorkingDir + "\n"
 	}
+	// StartLimit caps restart attempts within a 60s window to the
+	// daemon's own MaxRestartAttempts. Without it, systemd would loop
+	// every RestartSec seconds indefinitely for a persistently-dying
+	// daemon. See THREAT_MODEL.md finding #6.
+	//
+	// NoNewPrivileges / ProtectSystem / ProtectHome / PrivateDevices
+	// are defence-in-depth — the daemon already runs as the user.
+	// ~/.thlibo is read-write; everything else under $HOME is read-
+	// only, and system directories are fully protected. See finding #14.
 	return fmt.Sprintf(`[Unit]
 Description=thlibo inference daemon
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
 ExecStart=%s
 %sRestart=on-failure
 RestartSec=2
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%%h/.thlibo
 
 [Install]
 WantedBy=default.target

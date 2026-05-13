@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -149,7 +150,7 @@ type Field struct {
 
 func Int(k string, v int) Field           { return Field{k, v} }
 func Int64(k string, v int64) Field       { return Field{k, v} }
-func Str(k, v string) Field               { return Field{k, v} }
+func Str(k, v string) Field               { return Field{k, Redact(v)} }
 func Bool(k string, v bool) Field         { return Field{k, v} }
 func Any(k string, v any) Field           { return Field{k, v} }
 func Dur(k string, d time.Duration) Field { return Field{k, d.String()} }
@@ -157,7 +158,46 @@ func Err(err error) Field {
 	if err == nil {
 		return Field{"error", nil}
 	}
-	return Field{"error", err.Error()}
+	return Field{"error", Redact(err.Error())}
+}
+
+// Redact masks common secret patterns in log strings. The intent is a
+// best-effort safety net for processor stderr / error messages that
+// might inadvertently echo an API key; it is NOT a substitute for
+// structured-field logging. See THREAT_MODEL.md finding #8.
+//
+// Patterns cover:
+//   - AWS: AKIA[0-9A-Z]{16}, aws_secret_access_key=<v>, AWS_SECRET_* = <v>
+//   - GitHub: ghp_<36>, gho_<36>, ghu_<36>, ghs_<36>, ghr_<36>
+//   - HuggingFace: hf_<30-100>
+//   - Slack: xox[abpr]-<token>
+//   - generic: <UPPER>_TOKEN=<v>, <UPPER>_KEY=<v>, <UPPER>_SECRET=<v>,
+//     Bearer <token>, api_key=<v>, password=<v>
+//
+// Redaction replaces the value with "[REDACTED]"; keys stay visible so
+// an operator can see that a secret was present and investigate the
+// upstream source rather than chasing a mystery blank field.
+var secretPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\bAKIA[0-9A-Z]{16}\b`),
+	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{36,}\b`),
+	regexp.MustCompile(`\bhf_[A-Za-z0-9]{30,}\b`),
+	regexp.MustCompile(`\bxox[abpr]-[A-Za-z0-9-]{10,}\b`),
+	regexp.MustCompile(`(?i)\b(?:authorization|bearer)\s*[:=]?\s*[A-Za-z0-9._\-]{16,}`),
+	regexp.MustCompile(`(?i)\b[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|APIKEY|API_KEY)\b\s*[:=]\s*[^\s"']+`),
+	regexp.MustCompile(`(?i)\b(?:api[_-]?key|password|passwd|secret)\s*[:=]\s*[^\s"']+`),
+}
+
+// Redact applies secretPatterns to s and returns the masked form.
+// Exported so callers that build Field values by hand (Any, Int64) can
+// redact before constructing the Field if they carry sensitive bytes.
+func Redact(s string) string {
+	if s == "" {
+		return s
+	}
+	for _, re := range secretPatterns {
+		s = re.ReplaceAllString(s, "[REDACTED]")
+	}
+	return s
 }
 
 // write is the one place that actually touches the file. Safe on a

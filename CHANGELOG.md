@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+Remediation sweep informed by the new MAESTRO threat model
+(`THREAT_MODEL.md`). Each item links to the finding number it
+addresses.
+
+### Added
+
+- `internal/promptsan` package — escapes Gemma 4 native tool-call
+  markers (`<|`, `|>`) in untrusted tool output before it becomes a
+  model-facing user turn. Used by both the middleware's prompt
+  processors and the router. Closes finding #1.
+- Dependency CVE pass via `govulncheck` returned 0 findings; wired a
+  Dependabot config (`.github/dependabot.yml`) to track GitHub Actions
+  SHA drift. Closes governance gap behind finding #2.
+- `ipc.MaxRequestBytes` (64 MiB) per-frame cap with
+  `ipc.ErrFrameTooLarge` on the daemon-side reader. Closes finding #5.
+- `StartLimitIntervalSec=60 StartLimitBurst=3` + a full
+  `NoNewPrivileges` / `ProtectSystem` / `ProtectHome` / `PrivateTmp` /
+  `PrivateDevices` defence-in-depth block in the systemd user unit.
+  Closes findings #6 and #14.
+- `processors.ShadowWarning` emitted through the existing warnings
+  channel when a user processor overrides a built-in of the same
+  name. Closes finding #7.
+- `logx.Redact` secret-pattern redactor applied to every `Str` /
+  `Err` field (AWS keys, GitHub PATs, HuggingFace tokens, generic
+  `*_TOKEN=` / `*_SECRET=` / `*_PASSWORD=` / `*_API_KEY=` assignments).
+  Closes finding #8.
+- Audit-trail NDJSON records for previously silent paths: daemon boot
+  / ready / signal / stop, `thlibo pull` SHA mismatch or network
+  failure, `parseRoutingResponseDetailed` surfacing unknown router
+  names via `ClientAdapter.OnUnknownProcessor`. Closes findings
+  #10, #11, #12.
+- README "Security model" section explicitly names the auto-allow
+  PreToolUse hook behaviour and points at `THREAT_MODEL.md` for the
+  full trade-off discussion. Closes finding #15.
+- `.gitignore` extra secret patterns: `*.jks`, `*.gpg`, `*.asc`,
+  `*secret*`, `id_rsa*`, `id_ecdsa*`, `id_ed25519*`. Closes
+  finding #20.
+
+### Changed
+
+- `verifySHA` now uses `crypto/subtle.ConstantTimeCompare` in place
+  of the hand-rolled `equalFold` loop. Deleted `equalFold`. Closes
+  finding #4.
+- All GitHub Actions in `ci.yml`, `release.yml`, and `pages.yml` are
+  pinned by commit SHA (with the semver tag preserved as a trailing
+  comment). Closes finding #2.
+
 ## [0.1.0] - 2026-05-13
 
 First release. A working local-Gemma compression middleware for

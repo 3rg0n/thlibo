@@ -67,19 +67,31 @@ func main() {
 // yet. Returns an exit code so it's straightforward to unit-test
 // later.
 func runConsole(argv []string) int {
+	// Boot-path logger so early failures land in the NDJSON audit
+	// trail, not just stderr. Reuses the component name the daemon
+	// uses once it's up. See THREAT_MODEL.md finding #10.
+	bootLog := logx.New("thlibod", "", 0)
+
 	f, err := parseFlags(argv)
 	if err != nil {
+		bootLog.Error("flag_parse_failed", logx.Err(err))
 		fmt.Fprintln(os.Stderr, "thlibod:", err)
 		return exitConfigError
 	}
 
 	cfg, err := buildConfig(f)
 	if err != nil {
+		bootLog.Error("config_build_failed", logx.Err(err))
 		fmt.Fprintln(os.Stderr, "thlibod:", err)
 		return exitConfigError
 	}
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+	bootLog.Info("starting",
+		logx.Str("engine", f.enginePath),
+		logx.Str("lock", cfg.LockPath),
+		logx.Str("infer", cfg.InferenceEndpoint.Address),
+		logx.Str("admin", cfg.AdminEndpoint.Address))
 	if f.verbose {
 		log.Printf("starting: engine=%s lock=%s infer=%s admin=%s",
 			f.enginePath, cfg.LockPath, cfg.InferenceEndpoint.Address, cfg.AdminEndpoint.Address)
@@ -90,23 +102,30 @@ func runConsole(argv []string) int {
 
 	d, err := daemon.Start(ctx, cfg)
 	if err != nil {
+		bootLog.Error("daemon_start_failed", logx.Err(err))
 		fmt.Fprintln(os.Stderr, "thlibod:", err)
 		return exitStartError
 	}
+	bootLog.Info("ready",
+		logx.Str("infer", d.InferenceAddr().String()),
+		logx.Str("admin", d.AdminAddr().String()))
 	log.Printf("ready: inference=%s admin=%s", d.InferenceAddr(), d.AdminAddr())
 
 	// Wait for SIGINT/SIGTERM (and Ctrl-Break on Windows).
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	sig := <-sigCh
+	bootLog.Info("signal_received", logx.Str("signal", sig.String()))
 	log.Printf("signal %v: shutting down", sig)
 
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), f.stopTimeout)
 	defer stopCancel()
 	if err := d.Stop(stopCtx); err != nil {
+		bootLog.Error("daemon_stop_failed", logx.Err(err))
 		fmt.Fprintln(os.Stderr, "thlibod stop:", err)
 		return exitStartError
 	}
+	bootLog.Info("stopped_cleanly")
 	log.Printf("stopped cleanly")
 	return exitOK
 }

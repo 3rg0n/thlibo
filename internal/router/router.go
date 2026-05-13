@@ -16,6 +16,7 @@ import (
 
 	"github.com/3rg0n/thlibo/internal/ipc"
 	"github.com/3rg0n/thlibo/internal/processors"
+	"github.com/3rg0n/thlibo/internal/promptsan"
 )
 
 // Decision is what the router returns to the dispatcher. Chain is
@@ -46,9 +47,12 @@ func Ask(ctx context.Context, client *DaemonClient, reg *processors.Registry, in
 		return Decision{}, nil
 	}
 
+	// Sanitize before truncating: the marker breaks lie at exact
+	// substring positions, so truncation after sanitize cannot split
+	// a ZWSP-separated pair. See THREAT_MODEL.md finding #3.
 	req := ipc.Request{
 		ID:       "route",
-		Messages: buildRoutingMessages(reg, truncate(input, RouteInput)),
+		Messages: buildRoutingMessages(reg, truncate(promptsan.Sanitize(input), RouteInput)),
 		Grammar:  buildGrammar(names),
 	}
 	// Low temperature for a classification task.
@@ -153,35 +157,60 @@ var toolCallRE = regexp.MustCompile(
 // processor-name strings.
 var argValueRE = regexp.MustCompile(`<\|"\|>([^<]*)<\|"\|>`)
 
-// parseRoutingResponse extracts the processor chain from Gemma's
-// native tool-call output. Any parse failure or unknown name produces
+// ParseResult is returned from parseRoutingResponseDetailed. The
+// Decision is what dispatch uses; Unknown/Malformed carry diagnostic
+// info for the caller to log as a security-relevant event (an unknown
+// name in a grammar-constrained response is a signal, not noise). See
+// THREAT_MODEL.md finding #12.
+type ParseResult struct {
+	Decision  Decision
+	Unknown   []string // names Gemma emitted that aren't in the registry
+	Malformed bool     // true when the tool-call envelope itself was unreadable
+}
+
+// parseRoutingResponse preserves the (raw, reg) -> Decision signature
+// for existing callers; see parseRoutingResponseDetailed for the
+// diagnostics-rich form.
+func parseRoutingResponse(raw string, reg *processors.Registry) Decision {
+	return parseRoutingResponseDetailed(raw, reg).Decision
+}
+
+// parseRoutingResponseDetailed extracts the processor chain from
+// Gemma's native tool-call output AND surfaces any unknown names or
+// envelope parse failures. Any parse failure or unknown name produces
 // a passthrough decision (B8c) - partial chains are worse than no
 // run because they produce unexpected output shape.
-func parseRoutingResponse(raw string, reg *processors.Registry) Decision {
+func parseRoutingResponseDetailed(raw string, reg *processors.Registry) ParseResult {
 	m := toolCallRE.FindStringSubmatch(raw)
 	if m == nil {
-		return Decision{} // B8c: no tool call -> passthrough
+		return ParseResult{Malformed: true} // B8c: no tool call -> passthrough
 	}
 
 	inner := strings.TrimSpace(m[1])
 	if inner == "" {
-		return Decision{} // Empty chain -> explicit passthrough
+		return ParseResult{} // Empty chain -> explicit passthrough
 	}
 
 	matches := argValueRE.FindAllStringSubmatch(inner, -1)
 	if matches == nil {
-		return Decision{}
+		return ParseResult{Malformed: true}
 	}
 
 	valid := make([]string, 0, len(matches))
+	var unknown []string
 	for _, mm := range matches {
 		name := strings.TrimSpace(mm[1])
 		if name == "" || reg.Get(name) == nil {
-			return Decision{}
+			unknown = append(unknown, name)
+			continue
 		}
 		valid = append(valid, name)
 	}
-	return Decision{Chain: valid}
+	if len(unknown) > 0 {
+		// Any unknown name drops the whole chain (B8c).
+		return ParseResult{Unknown: unknown}
+	}
+	return ParseResult{Decision: Decision{Chain: valid}}
 }
 
 func truncate(s string, n int) string {
@@ -208,9 +237,43 @@ var ErrDaemonUnreachable = errors.New("router: daemon unreachable")
 // router's package-level Ask function.
 type ClientAdapter struct {
 	Client *DaemonClient
+	// OnUnknownProcessor, if set, is called when Gemma names a
+	// processor that isn't in the registry. Used by the middleware
+	// to log a security-relevant event; logging belongs to the
+	// caller so this package stays import-light. See THREAT_MODEL.md
+	// finding #12.
+	OnUnknownProcessor func(names []string, rawResponse string)
 }
 
 // Ask implements middleware.RouterClient.
 func (a *ClientAdapter) Ask(ctx context.Context, reg *processors.Registry, input string) (Decision, error) {
-	return Ask(ctx, a.Client, reg, input)
+	return a.askDetailed(ctx, reg, input)
+}
+
+func (a *ClientAdapter) askDetailed(ctx context.Context, reg *processors.Registry, input string) (Decision, error) {
+	names := reg.Names()
+	if len(names) == 0 {
+		return Decision{}, nil
+	}
+	req := ipc.Request{
+		ID:       "route",
+		Messages: buildRoutingMessages(reg, truncate(promptsan.Sanitize(input), RouteInput)),
+		Grammar:  buildGrammar(names),
+	}
+	t := 0.0
+	req.Temperature = &t
+	maxTok := 128
+	req.MaxTokens = &maxTok
+	s := false
+	req.Stream = &s
+
+	raw, _, err := a.Client.Post(ctx, req)
+	if err != nil {
+		return Decision{}, err
+	}
+	result := parseRoutingResponseDetailed(raw, reg)
+	if len(result.Unknown) > 0 && a.OnUnknownProcessor != nil {
+		a.OnUnknownProcessor(result.Unknown, raw)
+	}
+	return result.Decision, nil
 }

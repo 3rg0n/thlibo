@@ -1,0 +1,25 @@
+version: 2
+
+# We SHA-pin every GitHub Action (see THREAT_MODEL.md finding #2) to
+# defeat the "mutable tag" class of supply-chain attack. Dependabot
+# tracks the pinned SHAs against the upstream tag (preserved as a
+# comment next to each `uses:`) and opens a PR when the tag moves —
+# controlled update instead of silent drift.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(actions)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "deps(go)"

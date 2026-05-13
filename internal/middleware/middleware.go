@@ -19,6 +19,7 @@ import (
 
 	"github.com/3rg0n/thlibo/internal/ipc"
 	"github.com/3rg0n/thlibo/internal/processors"
+	"github.com/3rg0n/thlibo/internal/promptsan"
 	"github.com/3rg0n/thlibo/internal/router"
 )
 
@@ -175,11 +176,16 @@ func (p *PromptRunner) Run(ctx context.Context, d *processors.Descriptor, input 
 	if p.Client == nil {
 		return "", errors.New("middleware: no daemon client")
 	}
+	// Escape Gemma native tool-call markers in tool output before
+	// it becomes a user turn. Real git/npm/cargo output does not
+	// contain these sequences; if they do appear, they are attacker-
+	// controlled (e.g. a crafted commit diff or README). See
+	// THREAT_MODEL.md finding #1.
 	req := ipc.Request{
 		ID: "prompt-" + d.Name,
 		Messages: []ipc.Message{
 			{Role: ipc.RoleSystem, Content: d.SystemPrompt},
-			{Role: ipc.RoleUser, Content: input},
+			{Role: ipc.RoleUser, Content: promptsan.Sanitize(input)},
 		},
 	}
 	if d.Temperature != nil {

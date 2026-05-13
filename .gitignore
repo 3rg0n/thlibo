@@ -30,6 +30,16 @@ go.work.sum
 *.key
 *.p12
 *.pfx
+*.jks
+*.gpg
+*.asc
+*secret*
+id_rsa
+id_rsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
 credentials.json
 secrets.yaml
 

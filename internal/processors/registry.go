@@ -93,6 +93,21 @@ func BuildFromSources(sources ...Source) (*Registry, []error, error) {
 	return r, warnings, nil
 }
 
+// ShadowWarning is returned as part of the Build warnings set when a
+// user-installed processor overrides a built-in of the same name. It
+// carries the structured fields so callers can log or display it
+// without parsing a formatted string. See THREAT_MODEL.md finding #7.
+type ShadowWarning struct {
+	Name        string
+	BuiltinPath string
+	UserPath    string
+}
+
+func (w *ShadowWarning) Error() string {
+	return fmt.Sprintf("processors: user processor %q shadows built-in (built-in: %s, user: %s)",
+		w.Name, w.BuiltinPath, w.UserPath)
+}
+
 // scan walks one source. Each top-level directory is a processor
 // candidate; parse errors are collected and returned but do not abort
 // the scan.
@@ -121,8 +136,17 @@ func (r *Registry) scan(s Source) []error {
 		// User wins: overwrite any existing entry unconditionally when
 		// origin is User. When origin is Builtin, only add if not
 		// already present (shouldn't happen in practice since scan is
-		// called builtin-first).
+		// called builtin-first). When a user processor shadows a
+		// built-in, emit a ShadowWarning so the middleware can surface
+		// the silent capability swap (T13 / BV-2).
 		if s.Origin == OriginUser {
+			if prev, ok := r.byName[d.Name]; ok && prev.Origin.Source == OriginBuiltin {
+				warnings = append(warnings, &ShadowWarning{
+					Name:        d.Name,
+					BuiltinPath: prev.Origin.Path,
+					UserPath:    d.Origin.Path,
+				})
+			}
 			r.byName[d.Name] = d
 		} else if _, ok := r.byName[d.Name]; !ok {
 			r.byName[d.Name] = d

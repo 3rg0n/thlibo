@@ -351,9 +351,12 @@ Not implemented in v0.1; for now, remove the hook entry from
 
 ## Security model
 
-- **All-local.** No network calls. The daemon listens only on a Unix
-  domain socket / Windows named pipe / loopback TCP — never on a
-  public interface.
+- **All-local at runtime.** No network calls during inference. The
+  daemon listens only on a Unix domain socket / Windows named pipe /
+  loopback TCP — never on a public interface.
+- **One network touch: `thlibo pull`.** The model download reaches
+  HuggingFace over TLS and verifies a SHA-256 pinned into the thlibo
+  binary at build time. Run it once; every subsequent run is offline.
 - **User-scoped.** On Unix, the inference socket is mode 0660 owned
   by group `thlibo-users`; admin socket is 0600 owned by the daemon
   user. On Windows, the pipe ACL grants the current user only;
@@ -364,9 +367,29 @@ Not implemented in v0.1; for now, remove the hook entry from
   fails — daemon down, script crashes, processor times out,
   malformed response — the original output is returned unchanged.
   The AI never sees a broken intermediate state.
-- **Model stays offline.** The GGUF lives at `~/.thlibo/models/`;
-  `thlibod` spawns `llamafile` as a private child on stdio.
-  llamafile is never exposed on the network.
+- **Model stays offline after install.** The GGUF lives at
+  `~/.thlibo/models/`; `thlibod` spawns `llamafile` as a private
+  child on stdio. llamafile is never exposed on the network.
+- **Hook auto-allows rewritten commands.** By design, the PreToolUse
+  hook returns `permissionDecision: allow` for every Bash command it
+  rewrites so users aren't re-prompted for the same action. That
+  means: once installed, every Bash tool-call that matches the hook
+  matcher runs through thlibo's rewrite without a Claude Code
+  permission prompt. See [`THREAT_MODEL.md`](THREAT_MODEL.md) finding
+  #15 for the trade-off discussion. To re-introduce prompting,
+  uninstall the hook (remove the thlibo entry from
+  `~/.claude/settings.json`) or edit
+  `internal/adapters/claudecode/hook.sh` to emit no
+  `permissionDecision` field on the allow path.
+- **Activity log redaction.** `~/.thlibo/logs/*.ndjson` records
+  byte-count telemetry only; subprocess stderr and error strings
+  pass through a secret-pattern redactor before disk write (AWS keys,
+  GitHub PATs, HuggingFace tokens, generic `SECRET=` / `API_KEY=`
+  assignments). The redactor is a best-effort backstop, not a
+  replacement for keeping secrets out of subprocess output.
+- **Supply chain.** Every GitHub Action in this repo is pinned by
+  commit SHA. A full threat model lives at
+  [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 ---
 
