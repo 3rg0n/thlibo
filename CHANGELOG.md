@@ -7,29 +7,142 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-13
+
+First release. A working local-Gemma compression middleware for
+Claude Code + Codex CLI.
+
 ### Added
 
-- Initial repo scaffold: `cmd/thlibod`, `cmd/thlibo`, `internal/{daemon,ipc,processors,router,queue,adapters/{claudecode,codex,proxy},install}`, and `processors/` for built-ins.
-- `go.mod` at module path `github.com/3rg0n/thlibo`, pinned to Go 1.22.
-- `.gitignore` covering Go build artifacts, GGUF model files, secrets, IDE files, and test sandboxes.
-- `.plan/thlibo-spec.md` — v0.1 spec (source of truth).
-- `.plan/release-gate.md` — mechanical release gate, one row per spec requirement.
-- `CLAUDE.md` — guidance for future Claude Code sessions.
-- **Phase 1 — daemon spine.** Newline-delimited JSON protocol (ipc), Gemma 4 sampling defaults, image-token-budget validation (A5/A6/A7). Single-instance `flock`/`LockFileEx` lock (A2). Platform-specific IPC endpoints: Unix sockets with group+mode, Windows named pipes via `go-winio` with SDDL granting current-user only, TCP loopback fallback (A3). `SubprocessEngine` abstraction + `llamafile-stub` test binary (A1). Daemon lifecycle: ready-gating, delayed socket creation, admin status frames, graceful shutdown (A4/A10/A12). 28 tests total, all scanners clean.
-- **Phase 2 — daemon robustness.** `internal/queue` admission layer: 1 active job, 10 queued default, non-blocking `Submit` with `ErrFull` on overflow, per-job context for cancellation (A8). Real queue-backed inference dispatch in the daemon; client disconnect cancels the in-flight job via ctx cancellation plumbed through `SubprocessEngine.Generate` (A9). Engine supervisor with 3-attempt lifetime restart cap; admin clients receive status broadcasts (`restarting_engine_attempt_N`, `ready`) and a terminal error on exhaustion (A11). 35 tests total, all scanners clean.
-- **Phase 3 — middleware core.** `internal/processors` registry loads YAML + markdown descriptors from user + builtin sources, user wins on conflict (B2, B3, C5). Strict YAML decoder rejects unknown fields; broken descriptors are quarantined with a warning instead of failing the whole scan (B8g). `internal/router` builds the daemon routing prompt dynamically, constrains output with a GBNF grammar analogous to Anthropic API `input_schema`, and parses responses defensively (B5). `internal/middleware` wires the main flow: 2000-byte short-circuit (B1), fast-path regex (B4), router call (B5), `none` passthrough (B6), chaining (B7). 8-row fallback matrix as a single table-driven test covers B8a through B8h. Script dispatcher with configurable `ScriptTimeout` (B8e). 77 tests total, all scanners clean. Spec amended: `grammar` field added to request envelope.
-- **Post-Phase-3 refinements from reading the Gemma 4 model card.** Router refactored to use Gemma's native tool-call format (`<|tool_call>call:route{processors:[...]}<tool_call|>`) instead of freeform JSON, with a GBNF grammar targeting the trained-for token pattern. Mandatory thought-stripping (`processors.Strip`) applied to every prompt-processor response — Gemma E2B/E4B emits a `<|channel>thought...<channel|>` block even with thinking disabled, and leaving it in would leak model internals to the AI client (C7). Spec amended to document both.
-- **Phase 4 — built-in processors.** 5 processors embedded via `go:embed` at `processors/{git-filter,npm-filter,cargo-filter,compress,casefolder}/`: 3 Python script filters, 2 Gemma-aligned prompt processors (casefolder uses `<|think|>` for reasoning). `middleware.BuildRegistry` merges the embedded FS with an optional `~/.thlibo/processors/` user source; missing user dir is silently skipped, same-named user processor overrides the built-in (C4, C5). Script C6 test mirrors the embed.FS to disk and runs each filter against a representative fixture — all 3 produce strictly shorter output than input. 86 tests total, all scanners clean.
-- **Phase 5 — client adapters (RTK-mechanism pivot).** Discovered that Claude Code's PostToolUse hook cannot rewrite tool output (per official docs); adopted RTK's PreToolUse + `updatedInput` pattern instead. New subcommands: `thlibo rewrite <cmd>` (registry lookup keyed on argv[0], exit-code protocol 0/1/2/3 matching RTK), `thlibo exec -- <cmd>` (subprocess wrapper — runs the real command, compresses stdout via the middleware pipeline, preserves stderr + exit code). New adapter at `internal/adapters/claudecode/` with an embedded bash hook script and `MergeSettings` that adds a PreToolUse/Bash entry to `~/.claude/settings.json` without clobbering other hooks (idempotent; recognises path changes; refuses to overwrite malformed JSON). Spec amended: D3 (proxy mode) deferred to v0.2; `commands:` field added to processor descriptors. 124 tests total across the project, all scanners clean.
+#### Daemon (`thlibod`)
 
-- **Phase 6 so far — installer, docs, CI, model downloader.** `thlibo install` wires the embedded processors onto disk, merges the Claude Code hook into `~/.claude/settings.json` without clobbering other hooks, and registers `thlibod` for per-user autostart (Windows Startup folder / macOS LaunchAgent / Linux systemd user unit). `thlibod` gains a real foreground console runtime with signal-driven graceful shutdown. `thlibo rewrite` emits its absolute path instead of a bare `thlibo` (Claude Code's Bash tool doesn't inherit parent-shell PATH). Registry fast-path precedence now prefers script over prompt processors on equal match (caught by a live smoke test where casefolder's `(?i)fatal` substring regex was beating git-filter on git diffs containing `t.Fatalf`). README covers install/uninstall/customize/disable/security/limitations. GitHub Actions `ci.yml` runs build+test on linux/macos/windows + staticcheck/govulncheck/gosec/semgrep/gitleaks; `release.yml` cross-compiles tar.gz/zip artifacts for linux-amd64/arm64, darwin-arm64, windows-amd64 on `v*` tag pushes. New `thlibo pull` subcommand + `internal/install.Pull`: HTTPS-only model downloads with HTTP Range resume, SHA-256 verification, progress reporting; unit-tested against an in-process `httptest.Server` so no test touches the real network. Gate rows F1, F2, F5 closed; E2, E3, E4, E5 closed; E1 (group creation) struck-through as not-needed in the per-user model.
+- Newline-delimited JSON protocol with per-request `id` correlation,
+  Gemma 4 sampling defaults (temperature 1.0, top_p 0.95, top_k 64),
+  image-token-budget validation, `grammar` field for GBNF output
+  constraints.
+- Single-instance lock (`flock` on Unix, `LockFileEx` on Windows).
+- Platform-specific IPC: Unix domain sockets with group + mode,
+  Windows named pipes via `go-winio` with SDDL granting current-user
+  only, TCP loopback fallback.
+- Engine-agnostic `SubprocessEngine` abstraction + an in-repo
+  `llamafile-stub` for tests. Ready-gated socket creation, graceful
+  drain-and-exit on SIGTERM.
+- Admission queue: 1 active generation, 10 queued by default,
+  non-blocking `Submit` with `ErrFull` on overflow. Client disconnect
+  cancels the in-flight job via context propagation.
+- Engine supervisor: up to 3 lifetime restart attempts on llamafile
+  crash; admin clients receive `restarting_engine_attempt_N` /
+  `ready` status broadcasts and a terminal error on exhaustion.
 
-- **Phase 7 — v0.1.0 open-item closeout.** D2 (Codex adapter) shipped: PostToolUse + decision:block + reason replaces tool output with a compressed version (different from Claude Code's PreToolUse mechanism but same observable effect). `thlibo install --codex` writes `~/.codex/hooks.json` + enables `[features] codex_hooks = true` in `config.toml`. New `thlibo compress` subcommand for piping arbitrary stdin through the middleware (used by the Codex hook and available for shell pipelines). F6 closed: `TestTokenSavingsTable` records per-processor compression ratios; `.plan/release-notes-0.1.0.md` publishes them (97.6% git diff, 99.4% npm list, 89.2% cargo test, 5.4% git status). GGUF SHA-256 pinned to the real `bartowski/google_gemma-4-E4B-it-GGUF/google_gemma-4-E4B-it-Q4_K_M.gguf` (5.4 GB, SHA `51865750adafd22de56994a343d5a887cc1a589b9bae41d62b748c8bd0ca9c76`); CI release workflow downloads, hashes, and injects via `-ldflags -X` for per-release pinning without source changes. Spec URL corrected: real repo is `bartowski/google_gemma-4-E4B-it-GGUF`, not the earlier placeholder path.
+#### Middleware (`thlibo`)
+
+- Processor registry: YAML + markdown descriptors from embedded
+  built-ins and `~/.thlibo/processors/`. User entries override
+  built-ins by name. Strict YAML decoder rejects unknown fields;
+  broken descriptors are quarantined with a warning instead of
+  aborting the scan.
+- Pipeline: 2000-byte short-circuit → fast-path regex match → daemon
+  routing call → processor chain → compressed output. Every failure
+  mode falls back to the original bytes (8-case fallback matrix).
+- Router uses Gemma 4's native tool-call format
+  (`<|tool_call>call:route{processors:[...]}<tool_call|>`) with a
+  GBNF grammar that enforces the trained-for token pattern
+  token-by-token.
+- Mandatory thought-stripping: `processors.Strip` removes the
+  `<|channel>thought…<channel|>` block Gemma emits before every
+  answer (including the empty block when thinking is disabled),
+  so model internals don't leak into the AI client's context.
+
+#### Built-in processors
+
+- Five embedded processors shipped via `go:embed` under
+  `processors/`:
+  - `git-filter` (script, Python) — `git status`/`diff`/`log`
+  - `npm-filter` (script, Python) — `npm`/`npx`/`pnpm`/`yarn`
+  - `cargo-filter` (script, Python) — `cargo build`/`test`/`clippy`
+  - `compress` (prompt) — generic verbose-output summariser
+  - `casefolder` (prompt, thinking-enabled) — stack traces, error
+    logs, crash output
+
+#### Client adapters
+
+- **Claude Code** (`internal/adapters/claudecode`): PreToolUse hook
+  that calls `thlibo rewrite` and emits `updatedInput` so the Bash
+  tool runs a `thlibo exec -- <cmd>` wrapper instead of the raw
+  command. `MergeSettings` is idempotent, preserves every unrelated
+  key, refuses to overwrite malformed JSON, normalises Windows paths
+  to forward slashes so `bash -c` doesn't eat the backslashes.
+- **Codex CLI** (`internal/adapters/codex`): PostToolUse hook that
+  replaces `tool_response` with a compressed version via
+  `decision:block` + `reason`. Installer also enables
+  `[features] codex_hooks = true` in `config.toml` (required or
+  Codex silently ignores hooks) and merges `hooks.json`.
+
+#### CLI
+
+- `thlibo rewrite <cmd>` — registry lookup keyed on argv[0], RTK-
+  compatible exit-code protocol (0/1/2/3). Emits an absolute-path
+  `thlibo exec --` prefix so the rewritten command runs under
+  Claude Code's Bash tool without PATH inheritance.
+- `thlibo exec -- <cmd>` — subprocess wrapper. Runs the command,
+  captures stdout, pipes through `middleware.Process`, emits
+  compressed stdout with stderr + exit code preserved verbatim.
+- `thlibo compress` — read stdin, compress, write stdout. Used by
+  the Codex hook and for shell pipelines.
+- `thlibo install` — mirrors built-ins to disk, writes + merges the
+  Claude Code hook, registers `thlibod` for per-user autostart
+  (Windows Startup folder / macOS LaunchAgent / Linux systemd user
+  unit). Optional `--codex`, `--pull-model`, `--allow-unpinned`,
+  `--dry-run`, `--engine-path`.
+- `thlibo pull [name]` — HTTPS-only GGUF downloader with HTTP Range
+  resume, SHA-256 verification, progress indicator, context
+  cancellation. Tests never hit the real network (httptest.Server).
+
+#### Infrastructure
+
+- GitHub Actions `ci.yml`: matrix build+test on ubuntu/macos/windows
+  with Go 1.22; scanner job runs `staticcheck`, `govulncheck`,
+  `gosec`, `semgrep --config=auto`; secrets job runs `gitleaks`.
+- GitHub Actions `release.yml`: tagged-release workflow downloads
+  the pinned GGUF once, computes its SHA-256, builds 4 platform
+  bundles (linux-amd64/arm64, darwin-arm64, windows-amd64) with
+  `-ldflags -X ...pinnedGemma4E4BQ4KM=<sha>`, attaches the GGUF as
+  a release asset, publishes a draft release with SHA256SUMS.
+- `DefaultModel.ExpectedSHA256` pinned to
+  `51865750adafd22de56994a343d5a887cc1a589b9bae41d62b748c8bd0ca9c76`
+  for `bartowski/google_gemma-4-E4B-it-GGUF/google_gemma-4-E4B-it-Q4_K_M.gguf`
+  (5.4 GB). CI builds can override per-release via `-ldflags -X`.
+- Token-savings measurements recorded in
+  [.plan/release-notes-0.1.0.md](.plan/release-notes-0.1.0.md):
+  97.6% on git diff, 99.4% on npm list, 89.2% on cargo test, 5.4%
+  on git status.
+- README with install/uninstall/customize/disable/security/limitations
+  sections.
+- 184 tests across the project. `staticcheck`, `govulncheck`,
+  `gosec`, `gitleaks`, `semgrep` clean on shipped code.
 
 ### Changed
 
-- Router now uses Gemma 4's native tool-call format (`<|tool_call>call:route{...}<tool_call|>`) with a GBNF grammar enforcing the token pattern, rather than the earlier freeform-JSON+grammar approach.
+- Spec: request/response frames now carry a client-generated `id`
+  field, echoed on every response. Admin status frames use
+  `id: "admin"`.
+- Spec: request envelope gained a `grammar` field for GBNF output
+  constraints.
+- Spec URL for the canonical GGUF corrected to
+  `bartowski/google_gemma-4-E4B-it-GGUF` (earlier placeholder path
+  did not resolve).
 
-### Changed
+### Deferred
 
-- Spec amended: request/response frames now carry a client-generated `id` field, echoed on every response frame. Admin status frames use `id: "admin"`.
+- **D3 — proxy mode (`ANTHROPIC_BASE_URL=...`).** Would cover
+  `Read`/`Grep`/`Glob` and MCP tools that bypass the Bash-rewrite
+  path. Every example in the spec's own token-savings table is
+  Bash-produced, so v0.1 ships without it. v0.2 candidate.
+
+### Not needed
+
+- **E1 — shared `thlibo-users` group.** Per-user autostart model
+  has the daemon running as the invoking user, with an IPC ACL
+  already scoped to the current user's SID on Windows. No shared
+  group required. Gate row kept struck-through as a deliberate
+  decision, not an oversight.
