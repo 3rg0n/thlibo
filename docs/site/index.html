@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>thlibo — tool output compression for Claude Code + Codex</title>
+<meta name="description" content="AI tool output compressor. Local Gemma 4 for unknown output, deterministic Python filters for git/npm/cargo. 98% fewer tokens on common dev commands. MIT-licensed, runs on your machine.">
+<meta name="color-scheme" content="light only">
+<meta property="og:title" content="thlibo — tool output compression for Claude Code + Codex">
+<meta property="og:description" content="θλίβω — to press, crush, compress. 98% fewer tokens on common dev commands. Local-first, no telemetry, MIT.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f4eedd'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='48' text-anchor='middle' fill='%238b1a1a'%3E%CE%B8%3C/text%3E%3C/svg%3E">
+<style>
+/* ------------------------------------------------------------------
+   thlibo marketing page — "technical archaeology" palette:
+   ivory paper, oxblood ink, a single muted CRT green accent.
+   No web fonts (offline-friendly); strong system font stack that
+   reads as printed-technical-manual rather than SaaS default.
+   ------------------------------------------------------------------ */
+
+:root{
+  --paper:      #f4eedd;   /* warm ivory */
+  --paper-deep: #ece3c7;   /* deeper stock for offset panels */
+  --ink:        #1a1612;   /* near-black ink, warm not cool */
+  --ink-dim:    #5a4f43;   /* secondary copy */
+  --ink-ghost:  #8a7f6f;   /* metadata, captions */
+  --rule:       #c8bc9d;   /* hairline rules */
+  --oxblood:    #8b1a1a;   /* primary accent — the Greek letter, emphasis */
+  --oxblood-dim:#a85050;
+  --crt:        #3a6b1d;   /* one pop of terminal green for raw/compressed split */
+  --crt-dim:    #6b8d4d;
+  --gold:       #a8853a;   /* sparingly used for "after" callouts */
+
+  --f-serif:    "Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,Georgia,"Times New Roman",serif;
+  --f-sans:     "Optima","Avenir Next","Avenir","Gill Sans","Helvetica Neue",Helvetica,sans-serif;
+  --f-mono:     "Berkeley Mono","JetBrains Mono","SF Mono","IBM Plex Mono","Menlo","Consolas","Courier New",monospace;
+
+  /* Fluid typography scale — capped so headlines never get absurd */
+  --step-0: clamp(0.95rem, 0.90rem + 0.25vw, 1.05rem);
+  --step-1: clamp(1.05rem, 1.00rem + 0.35vw, 1.18rem);
+  --step-2: clamp(1.25rem, 1.10rem + 0.75vw, 1.50rem);
+  --step-3: clamp(1.60rem, 1.30rem + 1.50vw, 2.30rem);
+  --step-4: clamp(2.10rem, 1.50rem + 3.00vw, 3.80rem);
+  --step-5: clamp(3.00rem, 1.80rem + 6.00vw, 6.50rem);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; color:var(--ink); background:var(--paper);
+  font-family:var(--f-serif); font-size:var(--step-1); line-height:1.55;
+  font-feature-settings:"liga","onum","kern"; /* old-style figures in body */
+  /* Paper grain: two tiny noise layers so it doesn't feel like a solid swatch */
+  background-image:
+    radial-gradient(rgba(138,127,111,0.06) 1px, transparent 1px),
+    radial-gradient(rgba(138,127,111,0.04) 1px, transparent 1px);
+  background-size: 3px 3px, 7px 7px;
+  background-position: 0 0, 1px 2px;
+}
+::selection{ background:var(--oxblood); color:var(--paper) }
+
+a{ color:var(--oxblood); text-decoration:none; border-bottom:1px solid var(--oxblood); transition:background 120ms }
+a:hover{ background:var(--oxblood); color:var(--paper) }
+
+code, kbd, samp{ font-family:var(--f-mono); font-size:0.92em; letter-spacing:-0.01em }
+
+/* ------------------------------------------------------------------
+   SHELL — every section is anchored to an asymmetric grid.
+   Wide left gutter on desktop with a vertical rule running down the
+   page; content sits to the right of that rule, which also carries
+   the page's classical-number "folio" markings.
+   ------------------------------------------------------------------ */
+
+.shell{
+  max-width: 1240px; margin:0 auto;
+  padding: 0 clamp(1.2rem, 3vw, 3rem);
+}
+.rule-col{ position:relative }
+@media (min-width:880px){
+  .rule-col::before{
+    content:""; position:absolute; left:0; top:0; bottom:0;
+    width:1px; background:var(--rule);
+    pointer-events:none;
+  }
+}
+
+/* Topbar — a masthead, not a nav. Minimal. */
+.masthead{
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding: clamp(1.5rem, 3vw, 2.5rem) 0 1rem;
+  border-bottom:1px solid var(--rule);
+  font-family:var(--f-sans);
+  letter-spacing:0.18em; text-transform:uppercase;
+  font-size:0.72rem; color:var(--ink-dim);
+}
+.masthead .mark{ font-family:var(--f-serif); text-transform:none; letter-spacing:0.02em; font-size:0.95rem; color:var(--ink) }
+.masthead .mark b{ font-style:italic; color:var(--oxblood); font-weight:400 }
+.masthead nav a{ margin-left:1.25rem; border:0; color:var(--ink-dim) }
+.masthead nav a:hover{ background:transparent; color:var(--oxblood) }
+@media (max-width:620px){ .masthead nav{ display:none } }
+
+/* ------------------------------------------------------------------
+   HERO
+   ------------------------------------------------------------------ */
+
+.hero{
+  padding: clamp(3rem, 8vh, 7rem) 0 clamp(3rem, 6vh, 5rem);
+  position:relative;
+}
+.hero-kicker{
+  font-family:var(--f-sans); text-transform:uppercase; letter-spacing:0.22em;
+  font-size:0.72rem; color:var(--ink-dim);
+  margin:0 0 1.25rem;
+}
+.hero-kicker .bullet{ color:var(--oxblood); margin:0 0.6em }
+
+.etymology{
+  display:inline-flex; align-items:baseline; gap:0.9rem;
+  font-family:var(--f-serif);
+  color:var(--ink-dim);
+  font-size:var(--step-2);
+  margin:0 0 1.2rem;
+}
+.etymology .glyph{
+  color:var(--oxblood);
+  font-size:var(--step-5); line-height:0.85;
+  font-style:italic; font-weight:400;
+  letter-spacing:-0.02em;
+  transform:translateY(0.08em);
+  display:inline-block;
+}
+.etymology .word{ font-style:italic; color:var(--ink) }
+.etymology .trans{ font-size:var(--step-1); color:var(--ink-ghost) }
+
+.hero-h1{
+  font-family:var(--f-serif);
+  font-size:var(--step-4); line-height:1.05;
+  font-weight:400; letter-spacing:-0.02em;
+  margin:0 0 1.4rem; max-width:24ch;
+  color:var(--ink);
+}
+.hero-h1 em{ font-style:italic; color:var(--oxblood) }
+
+.hero-lede{
+  font-size:var(--step-1); max-width:58ch; color:var(--ink-dim);
+  margin:0 0 2.2rem;
+}
+.hero-lede strong{ color:var(--ink); font-weight:600 }
+
+/* Install card group — two offset "terminal" blocks */
+.installs{
+  display:grid; gap:1.1rem;
+  grid-template-columns: 1fr;
+  max-width: 780px;
+}
+@media (min-width:880px){
+  .installs{ grid-template-columns: 1fr 1fr }
+}
+.install{
+  position:relative;
+  background:#1a1612; color:#e8decf;
+  border:1px solid #000;
+  box-shadow: 6px 6px 0 var(--oxblood);
+  padding:1.1rem 1.2rem 1.1rem 1.4rem;
+  font-family:var(--f-mono); font-size:0.86rem; line-height:1.5;
+  border-radius:2px;
+  overflow:hidden;
+}
+.install::before{
+  /* classical red capital letter marking the line */
+  content:""; position:absolute; left:0; top:0; bottom:0; width:6px;
+  background:var(--oxblood);
+}
+.install .plat{
+  font-family:var(--f-sans); text-transform:uppercase; letter-spacing:0.22em;
+  font-size:0.62rem; color:#a59a88; margin-bottom:0.6rem;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.install .plat .dot{
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:var(--crt-dim); box-shadow: 0 0 0 2px #0b0a08;
+  margin-right:0.4rem;
+}
+.install pre{
+  margin:0; white-space:pre-wrap; word-break:break-all;
+  font-family:var(--f-mono); color:#f3ead4;
+  font-size:0.85rem;
+}
+.install .prompt{ color:#8b7f6a; user-select:none; margin-right:0.35rem }
+.install button.copy{
+  position:absolute; top:0.7rem; right:0.7rem;
+  background:transparent; color:#a59a88;
+  border:1px solid #3a332a; border-radius:2px;
+  font-family:var(--f-sans); font-size:0.64rem; letter-spacing:0.14em; text-transform:uppercase;
+  padding:0.3rem 0.55rem; cursor:pointer;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.install button.copy:hover{ color:var(--paper); border-color:var(--oxblood-dim); background:var(--oxblood) }
+.install button.copy[data-copied="true"]{ color:var(--crt-dim); border-color:var(--crt-dim) }
+
+.hero-meta{
+  margin-top:1.9rem;
+  font-family:var(--f-sans); font-size:0.78rem; letter-spacing:0.06em;
+  color:var(--ink-ghost); text-transform:uppercase;
+}
+.hero-meta span{ margin-right:1.8rem; white-space:nowrap }
+.hero-meta span b{ color:var(--ink); font-weight:600; letter-spacing:normal; text-transform:none; font-family:var(--f-mono) }
+
+/* decorative mark — a large paper-pressed θ floated behind the hero */
+.press-mark{
+  position:absolute; right: -2%; top: 10%;
+  font-family:var(--f-serif); font-style:italic;
+  color: rgba(139, 26, 26, 0.05);
+  font-size: clamp(18rem, 35vw, 34rem);
+  line-height:1; user-select:none; pointer-events:none;
+  z-index:0;
+}
+.hero > *{ position:relative; z-index:1 }
+
+/* ------------------------------------------------------------------
+   SECTION PRIMITIVES
+   ------------------------------------------------------------------ */
+
+section{ padding: clamp(3rem, 7vh, 6rem) 0; position:relative }
+.section-head{
+  display:flex; align-items:baseline; gap:1.2rem;
+  margin: 0 0 2.5rem;
+  padding-bottom:0.8rem;
+  border-bottom:1px solid var(--rule);
+}
+.section-num{
+  font-family:var(--f-mono); font-size:0.78rem;
+  color:var(--oxblood); letter-spacing:0.04em;
+  min-width: 3ch;
+}
+.section-title{
+  font-family:var(--f-serif); font-weight:400; font-style:italic;
+  font-size:var(--step-2); color:var(--ink);
+  margin:0; letter-spacing:-0.01em;
+}
+.section-tag{
+  margin-left:auto; font-family:var(--f-sans); text-transform:uppercase;
+  font-size:0.68rem; letter-spacing:0.22em; color:var(--ink-ghost);
+}
+@media (max-width:620px){ .section-tag{ display:none } }
+
+/* ------------------------------------------------------------------
+   COMPRESSION DEMO — the emotional centerpiece.
+   Three rows, each a horizontal "bar" that shrinks on viewport entry
+   while its byte counter ticks down. Works without JS: the target
+   (compressed) state is rendered as a static fallback via @media
+   (prefers-reduced-motion) and as the JS=off default state too.
+   ------------------------------------------------------------------ */
+
+.demo{ background: var(--paper-deep); position:relative }
+.demo::before{
+  content:""; position:absolute; inset:0;
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px);
+  background-size: 100% 28px;
+  opacity:0.22; pointer-events:none;
+}
+.demo > .shell{ position:relative }
+
+.bars{
+  display:grid; gap:clamp(1.8rem, 3.5vh, 2.8rem);
+  margin-top:0.5rem;
+}
+
+.bar{
+  display:grid;
+  grid-template-columns: minmax(12rem, 18rem) 1fr;
+  gap: clamp(1rem, 2.5vw, 2.5rem);
+  align-items:start;
+}
+@media (max-width:720px){
+  .bar{ grid-template-columns:1fr }
+}
+
+.bar-label{ font-family:var(--f-mono); font-size:0.95rem; color:var(--ink) }
+.bar-label .cmd{ display:block; font-weight:600 }
+.bar-label .processor{
+  display:block; margin-top:0.4rem; color:var(--ink-ghost);
+  font-family:var(--f-sans); font-size:0.72rem; letter-spacing:0.18em; text-transform:uppercase;
+}
+.bar-label .processor b{ color:var(--oxblood); font-weight:600 }
+
+.bar-canvas{ position:relative; padding-top:0.3rem }
+
+.bar-track{
+  position:relative; height: 44px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(26,22,18,0.05) 0px,
+    rgba(26,22,18,0.05) 1px,
+    transparent 1px,
+    transparent 32px
+  );
+  border-top:1px solid var(--ink);
+  border-bottom:1px solid var(--ink);
+}
+
+.bar-raw{
+  position:absolute; left:0; top:0; bottom:0;
+  width:100%;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--oxblood) 0px,
+    var(--oxblood) 6px,
+    var(--oxblood-dim) 6px,
+    var(--oxblood-dim) 12px
+  );
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2);
+  transform-origin: left center;
+  transition: transform 2.2s cubic-bezier(.2,.85,.2,1);
+  will-change: transform;
+}
+.bar-compressed{
+  position:absolute; left:0; top:0; bottom:0;
+  width: var(--pct, 1%);
+  background: var(--crt);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.3), 2px 0 0 rgba(0,0,0,0.15);
+  opacity: 0;
+  transition: opacity 500ms ease-out 1.9s;
+}
+.bar[data-played="true"] .bar-raw{ transform: scaleX(var(--scale, 0.01)) }
+.bar[data-played="true"] .bar-compressed{ opacity:1 }
+
+/* JS-disabled fallback: show the final collapsed state by default */
+@media (prefers-reduced-motion: reduce){
+  .bar .bar-raw{ transform: scaleX(var(--scale, 0.01)); transition:none }
+  .bar .bar-compressed{ opacity:1; transition:none }
+}
+html.no-js .bar .bar-raw{ transform: scaleX(var(--scale, 0.01)) }
+html.no-js .bar .bar-compressed{ opacity:1 }
+
+.bar-figures{
+  display:flex; align-items:baseline; gap: clamp(0.6rem, 2vw, 1.4rem);
+  margin-top: 0.85rem; font-family:var(--f-mono);
+  flex-wrap:wrap;
+}
+.bar-figures .from{ color:var(--ink-dim); font-size:0.92rem; text-decoration:line-through; text-decoration-color:rgba(90,79,67,0.5) }
+.bar-figures .arrow{ color:var(--ink-ghost); font-family:var(--f-mono) }
+.bar-figures .to{
+  font-size: var(--step-2); font-weight:600; color:var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing:-0.01em;
+}
+.bar-figures .to .unit{ font-size:0.7em; color:var(--ink-dim); font-weight:400; margin-left:0.15rem }
+.bar-figures .reduction{
+  margin-left:auto;
+  font-family:var(--f-sans); font-size:0.72rem; letter-spacing:0.18em; text-transform:uppercase;
+  color: var(--oxblood);
+  padding: 0.25rem 0.55rem;
+  border:1px solid var(--oxblood);
+  border-radius:2px;
+}
+@media (max-width:720px){
+  .bar-figures .reduction{ margin-left:0 }
+}
+
+.demo-foot{
+  margin-top: clamp(2rem, 4vh, 3rem);
+  padding-top:1rem; border-top:1px solid var(--rule);
+  font-family:var(--f-sans); font-size:0.78rem; letter-spacing:0.04em;
+  color:var(--ink-ghost);
+  display:flex; gap:1.5rem; flex-wrap:wrap;
+}
+.demo-foot code{ color:var(--ink); background:var(--paper); padding:0.1rem 0.35rem; border:1px solid var(--rule) }
+
+/* ------------------------------------------------------------------
+   HOW IT WORKS — three cards with classical numerals
+   ------------------------------------------------------------------ */
+
+.how{ }
+.how-grid{
+  display:grid; gap: clamp(1.2rem, 2.5vw, 2rem);
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+}
+.card{
+  position:relative;
+  padding: 2rem 1.8rem 1.8rem;
+  background: transparent;
+  border:1px solid var(--rule);
+  border-top: 3px solid var(--oxblood);
+}
+.card-num{
+  font-family:var(--f-serif); font-style:italic;
+  position:absolute; top:-0.9rem; left:1.2rem;
+  background: var(--paper); color:var(--oxblood);
+  padding: 0 0.5rem; font-size:1.1rem; line-height:1;
+}
+.card h3{
+  font-family:var(--f-serif); font-weight:400; font-size:var(--step-2);
+  margin:0 0 0.8rem; letter-spacing:-0.01em;
+}
+.card p{ margin:0 0 0.7rem; color:var(--ink-dim); font-size:var(--step-0) }
+.card p:last-child{ margin-bottom:0 }
+.card p code{
+  background: rgba(139,26,26,0.06); color:var(--oxblood);
+  padding:0.05rem 0.35rem;
+}
+
+.how-footline{
+  margin-top: 2.5rem; padding-top:1rem;
+  border-top:1px dashed var(--rule);
+  font-family:var(--f-serif); font-style:italic; font-size:var(--step-1);
+  color:var(--ink-dim); max-width:58ch;
+}
+.how-footline b{ color:var(--oxblood); font-style:normal; font-weight:600; font-family:var(--f-mono) }
+
+/* ------------------------------------------------------------------
+   LOCAL / PRIVACY
+   ------------------------------------------------------------------ */
+
+.local{ background:var(--ink); color:var(--paper); position:relative; overflow:hidden }
+.local::before{
+  content:""; position:absolute; inset:0;
+  background-image:
+    radial-gradient(rgba(244,238,221,0.04) 1px, transparent 1px);
+  background-size: 4px 4px;
+  pointer-events:none;
+}
+.local .section-head{ border-bottom-color: rgba(244,238,221,0.15) }
+.local .section-title{ color:var(--paper) }
+.local .section-num{ color: var(--crt-dim) }
+.local .section-tag{ color: rgba(244,238,221,0.5) }
+
+.local-grid{
+  display:grid; gap: clamp(1.5rem, 4vw, 3rem);
+  grid-template-columns: minmax(0, 1fr);
+  align-items:start;
+}
+@media (min-width:880px){
+  .local-grid{ grid-template-columns: 1.2fr 1fr }
+}
+
+.local-copy p{ color: rgba(244,238,221,0.78); font-size:var(--step-1); max-width:52ch; margin:0 0 1rem }
+.local-copy p strong{ color:var(--paper) }
+
+.local-list{
+  list-style:none; padding:0; margin: 1.8rem 0 0;
+  display:grid; gap:0.7rem;
+  font-family:var(--f-mono); font-size:0.88rem;
+}
+.local-list li{
+  display:flex; gap:0.8rem; color: rgba(244,238,221,0.85);
+  padding-left: 1rem; position:relative;
+}
+.local-list li::before{
+  content:"✓"; color: var(--crt-dim); font-family:var(--f-mono);
+  position:absolute; left:0; top:0; font-weight:700;
+}
+.local-list li .k{ color: var(--crt-dim); min-width: 11ch }
+
+.local-diagram{
+  background: #0b0a08;
+  border: 1px solid rgba(244,238,221,0.14);
+  padding: 1.3rem 1.4rem; border-radius:2px;
+  font-family:var(--f-mono); font-size:0.78rem; line-height:1.65;
+  color: #cfc2a8;
+  overflow-x:auto;
+}
+.local-diagram .c-k{ color:#e8decf; font-weight:700 }      /* keyword */
+.local-diagram .c-p{ color:#a85050 }                       /* path */
+.local-diagram .c-n{ color:#9cae71 }                       /* number */
+.local-diagram .c-x{ color:#6d6556 }                       /* comment */
+.local-diagram .hr{
+  border-top:1px dashed rgba(244,238,221,0.2); margin:0.7rem 0;
+  height:0; line-height:0;
+}
+
+/* ------------------------------------------------------------------
+   FOOTER
+   ------------------------------------------------------------------ */
+
+footer{
+  padding: 3rem 0 2.5rem; border-top:1px solid var(--rule);
+  font-family:var(--f-sans); font-size:0.82rem; color:var(--ink-dim);
+}
+.foot-grid{
+  display:grid; gap:1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  margin-bottom:2rem;
+}
+.foot-grid h4{
+  font-family:var(--f-sans); text-transform:uppercase; letter-spacing:0.2em;
+  font-size:0.7rem; color:var(--ink-ghost); margin:0 0 0.7rem;
+}
+.foot-grid ul{ list-style:none; padding:0; margin:0; display:grid; gap:0.35rem }
+.foot-grid a{ border:0; color:var(--ink) }
+.foot-grid a:hover{ background:transparent; color:var(--oxblood) }
+.foot-bottom{
+  display:flex; justify-content:space-between; gap:1.5rem; flex-wrap:wrap;
+  padding-top:1.2rem; border-top:1px solid var(--rule);
+  font-size:0.72rem; letter-spacing:0.08em; color:var(--ink-ghost);
+  text-transform:uppercase;
+}
+.foot-bottom .greek{ text-transform:none; font-family:var(--f-serif); font-style:italic; color:var(--oxblood); letter-spacing:0.02em }
+
+/* ------------------------------------------------------------------
+   reveal-on-scroll (progressive enhancement)
+   ------------------------------------------------------------------ */
+.reveal{ opacity:0; transform: translateY(12px); transition: opacity 600ms ease-out, transform 600ms ease-out }
+.reveal.visible{ opacity:1; transform:none }
+html.no-js .reveal{ opacity:1; transform:none }
+@media (prefers-reduced-motion: reduce){ .reveal{ opacity:1; transform:none; transition:none } }
+</style>
+</head>
+<body class="rule-col-host">
+<script>document.documentElement.classList.remove('no-js')</script>
+
+<div class="shell">
+
+<!-- masthead ................................................................ -->
+<header class="masthead">
+  <div class="mark"><b>θ</b>&nbsp;thlibo <span style="color:var(--ink-ghost)">·&nbsp;v0.1.0</span></div>
+  <nav>
+    <a href="#demo">demo</a>
+    <a href="#how">how it works</a>
+    <a href="#local">local-first</a>
+    <a href="https://github.com/3rg0n/thlibo">github</a>
+  </nav>
+</header>
+
+<!-- hero ..................................................................... -->
+<section class="hero" id="top">
+  <div class="press-mark" aria-hidden="true">θ</div>
+
+  <p class="hero-kicker">
+    a utility <span class="bullet">·</span>
+    ancient greek <span class="bullet">·</span>
+    mit license
+  </p>
+
+  <p class="etymology">
+    <span class="glyph">θ</span>
+    <span>
+      <span class="word">θλίβω</span>
+      <span class="trans"> &nbsp;— to press, crush, compress.</span>
+    </span>
+  </p>
+
+  <h1 class="hero-h1">
+    Your AI assistant doesn't need to read<br>
+    the whole&nbsp;<em>git&nbsp;diff</em>.
+  </h1>
+
+  <p class="hero-lede">
+    <strong>thlibo</strong> sits between Claude Code / Codex and the shell.
+    It rewrites <code>git&nbsp;diff</code>, <code>npm&nbsp;install</code>, <code>cargo&nbsp;test</code>
+    and other verbose commands so the model sees the summary, not the
+    noise. Deterministic Python filters handle the usual suspects; a
+    local Gemma&nbsp;4 model compresses everything else. Nothing leaves
+    your machine.
+  </p>
+
+  <div class="installs" aria-label="Install commands">
+    <div class="install">
+      <div class="plat"><span><span class="dot"></span>unix / macos</span><span>install.sh</span></div>
+      <pre id="cmd-unix"><span class="prompt">$</span>curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | bash</pre>
+      <button class="copy" data-copy-from="cmd-unix" aria-label="Copy Unix install command">copy</button>
+    </div>
+    <div class="install">
+      <div class="plat"><span><span class="dot"></span>windows · powershell</span><span>install.ps1</span></div>
+      <pre id="cmd-win"><span class="prompt">PS&gt;</span>iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex</pre>
+      <button class="copy" data-copy-from="cmd-win" aria-label="Copy Windows install command">copy</button>
+    </div>
+  </div>
+
+  <p class="hero-meta">
+    <span>v <b>0.1.0</b></span>
+    <span>binary <b>~4&nbsp;MB</b></span>
+    <span>model <b>5.1&nbsp;GB</b> (opt-in)</span>
+    <span>hf tokens <b>none</b></span>
+  </p>
+</section>
+
+</div><!-- /shell -->
+
+<!-- demo ..................................................................... -->
+<section class="demo" id="demo">
+  <div class="shell">
+    <div class="section-head">
+      <span class="section-num">§ i</span>
+      <h2 class="section-title">What comes back is smaller.</h2>
+      <span class="section-tag">measured 2026-05-13</span>
+    </div>
+
+    <div class="bars">
+
+      <!-- git diff ............................................................ -->
+      <article class="bar reveal"
+               data-raw="68821" data-compressed="929" data-scale="0.0135">
+        <div class="bar-label">
+          <span class="cmd">git diff HEAD~5</span>
+          <span class="processor">via <b>git-filter</b> · python</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.0135"></div>
+            <div class="bar-compressed" style="--pct:1.35%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">68,821&nbsp;B</span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="929">929<span class="unit">&nbsp;B</span></span>
+            <span class="reduction">−98.6%</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- npm list ............................................................ -->
+      <article class="bar reveal"
+               data-raw="9228" data-compressed="52" data-scale="0.0056">
+        <div class="bar-label">
+          <span class="cmd">npm list (200 deps)</span>
+          <span class="processor">via <b>npm-filter</b> · python</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.0056"></div>
+            <div class="bar-compressed" style="--pct:0.56%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">9,228&nbsp;B</span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="52">52<span class="unit">&nbsp;B</span></span>
+            <span class="reduction">−99.4%</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- cargo test .......................................................... -->
+      <article class="bar reveal"
+               data-raw="13227" data-compressed="1434" data-scale="0.1084">
+        <div class="bar-label">
+          <span class="cmd">cargo test (20 failures)</span>
+          <span class="processor">via <b>cargo-filter</b> · python</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.1084"></div>
+            <div class="bar-compressed" style="--pct:10.84%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">13,227&nbsp;B</span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="1434">1,434<span class="unit">&nbsp;B</span></span>
+            <span class="reduction">−89.2%</span>
+          </div>
+        </div>
+      </article>
+
+    </div>
+
+    <div class="demo-foot">
+      <span>Same inputs, reproducible via <code>go&nbsp;test&nbsp;./internal/middleware/...&nbsp;-run&nbsp;TokenSavings</code>.</span>
+      <span>Raw bytes measured before the <code>thlibo&nbsp;exec</code> wrapper touches them; compressed bytes after the Python filter returns.</span>
+    </div>
+  </div>
+</section>
+
+<div class="shell">
+
+<!-- how it works ............................................................. -->
+<section class="how" id="how">
+  <div class="section-head">
+    <span class="section-num">§ ii</span>
+    <h2 class="section-title">How it works, in three moves.</h2>
+    <span class="section-tag">architecture</span>
+  </div>
+
+  <div class="how-grid">
+
+    <article class="card reveal">
+      <span class="card-num">i.</span>
+      <h3>A hook, not a proxy.</h3>
+      <p>
+        thlibo installs a Claude&nbsp;Code <code>PreToolUse</code> hook.
+        Before the Bash tool runs, the hook asks <code>thlibo&nbsp;rewrite</code>
+        whether to wrap the command. If yes, it swaps
+        <code>git&nbsp;status</code> for <code>thlibo&nbsp;exec&nbsp;--&nbsp;git&nbsp;status</code>.
+      </p>
+      <p>
+        Codex uses the symmetric PostToolUse path — <code>decision:block</code>
+        with the compressed result as the reason. Same engine underneath.
+      </p>
+    </article>
+
+    <article class="card reveal">
+      <span class="card-num">ii.</span>
+      <h3>Python filters, where a regex will do.</h3>
+      <p>
+        <code>git-filter</code>, <code>npm-filter</code>, <code>cargo-filter</code>.
+        Short Python scripts with tight regex rules. They collapse
+        diff hunks, strip dep-tree chatter, keep the failing tests.
+        Nothing a model could do better, faster, or more reliably.
+      </p>
+      <p>
+        Add your own in <code>~/.thlibo/processors/&lt;name&gt;/</code> — a
+        <code>processor.yaml</code> descriptor and a script. It picks
+        up on next invocation.
+      </p>
+    </article>
+
+    <article class="card reveal">
+      <span class="card-num">iii.</span>
+      <h3>A local model, for the rest.</h3>
+      <p>
+        When no deterministic filter matches, thlibo asks a local
+        <em>Gemma&nbsp;4&nbsp;E4B</em> — quantised, ~5&nbsp;GB on disk,
+        CPU-runnable via llamafile — which processor (if any) to
+        route to. Prompt processors summarise stack traces, error
+        logs, and arbitrary output.
+      </p>
+      <p>
+        One warm model per daemon. Single-instance lock. Unix socket
+        or named pipe, ACL'd to your user.
+      </p>
+    </article>
+
+  </div>
+
+  <p class="how-footline">
+    If any step fails — daemon down, model missing, script crashes —
+    the original bytes pass through unchanged. The model sees what
+    it would have seen without thlibo. <b>The compressor never
+    breaks the client.</b>
+  </p>
+</section>
+
+</div><!-- /shell -->
+
+<!-- local-first .............................................................. -->
+<section class="local" id="local">
+  <div class="shell">
+    <div class="section-head">
+      <span class="section-num">§ iii</span>
+      <h2 class="section-title">It's not sending your diffs anywhere.</h2>
+      <span class="section-tag">local-first</span>
+    </div>
+
+    <div class="local-grid">
+      <div class="local-copy">
+        <p>
+          thlibo runs as <strong>your user</strong>. The daemon binds a
+          Unix domain socket (or Windows named pipe) with an ACL that
+          grants only your SID access. <strong>Nothing listens on the
+          network.</strong>
+        </p>
+        <p>
+          No telemetry. No opt-in-to-ship-anonymised-usage-data. No
+          HuggingFace token required — the model pull is a plain
+          anonymous HTTPS GET against a public Apache-licensed repack,
+          SHA-256 pinned at build time.
+        </p>
+        <p>
+          If your repo has a clause against uploading source, thlibo
+          does not violate it. If your model is air-gapped, it works
+          offline.
+        </p>
+
+        <ul class="local-list">
+          <li><span class="k">transport</span>unix socket / named pipe · never tcp*</li>
+          <li><span class="k">bind addr</span>127.0.0.1:47320 · loopback-only fallback</li>
+          <li><span class="k">acl</span>owner SID · mode 0660 group thlibo-users</li>
+          <li><span class="k">telemetry</span>none</li>
+          <li><span class="k">model</span>unsloth/gemma-4-E4B-it · Apache-2.0</li>
+          <li><span class="k">install</span>per-user · no sudo, no admin</li>
+        </ul>
+      </div>
+
+      <pre class="local-diagram" aria-label="IPC endpoints by platform">
+<span class="c-x"># IPC endpoints, by platform</span>
+<span class="c-k">linux  </span> <span class="c-p">/run/thlibo/infer.sock</span>
+<span class="c-k">darwin </span> <span class="c-p">/var/run/thlibo/infer.sock</span>
+<span class="c-k">windows</span> <span class="c-p">\\.\pipe\thlibo-infer</span>
+
+<span class="c-x"># permissions</span>
+infer <span class="c-n">0660</span> group <span class="c-p">thlibo-users</span>
+admin <span class="c-n">0600</span> owner only
+
+<span class="c-x"># single-instance lock</span>
+<span class="c-p">/run/thlibo/thlibod.lock</span>
+
+<span class="c-x"># model, on disk</span>
+<span class="c-p">~/.thlibo/models/gemma-4-e4b-ud-q4-k-xl.gguf</span>
+<span class="c-n">5,126,304,928</span> bytes · sha256 pinned</pre>
+    </div>
+  </div>
+</section>
+
+<div class="shell">
+
+<!-- footer ................................................................... -->
+<footer>
+  <div class="foot-grid">
+    <div>
+      <h4>project</h4>
+      <ul>
+        <li><a href="https://github.com/3rg0n/thlibo">repository</a></li>
+        <li><a href="https://github.com/3rg0n/thlibo/releases/tag/v0.1.0">release · v0.1.0</a></li>
+        <li><a href="https://github.com/3rg0n/thlibo/blob/main/CHANGELOG.md">changelog</a></li>
+        <li><a href="https://github.com/3rg0n/thlibo/blob/main/LICENSE">license · MIT</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>docs</h4>
+      <ul>
+        <li><a href="https://github.com/3rg0n/thlibo#install">install</a></li>
+        <li><a href="https://github.com/3rg0n/thlibo#customise">custom processors</a></li>
+        <li><a href="https://github.com/3rg0n/thlibo/tree/main/docs/adr">architecture decisions</a></li>
+        <li><a href="https://github.com/3rg0n/thlibo/blob/main/.plan/thlibo-spec.md">spec · v0.1</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>contribute</h4>
+      <ul>
+        <li><a href="https://github.com/3rg0n/thlibo/blob/main/CONTRIBUTING.md">contributing guide</a></li>
+        <li><a href="https://github.com/3rg0n/thlibo/issues">issues</a></li>
+        <li><a href="https://github.com/3rg0n/thlibo/discussions">discussions</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>etymology</h4>
+      <ul>
+        <li style="color:var(--ink);font-family:var(--f-serif);font-style:italic">θλίβω</li>
+        <li>1. to press, to squeeze</li>
+        <li>2. to afflict, trouble</li>
+        <li>3. thence: compress.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot-bottom">
+    <span>© 2026 · thlibo authors · mit</span>
+    <span class="greek">θλίβω — to press, crush, compress.</span>
+  </div>
+</footer>
+
+</div><!-- /shell -->
+
+<script>
+/* ------------------------------------------------------------------
+   progressive enhancement: copy buttons, reveals, counter tick-down.
+   Every effect here has a CSS-only fallback above; this script is
+   pure extra polish. If anything throws, the page remains correct.
+   ------------------------------------------------------------------ */
+(function(){
+  'use strict';
+
+  // --- copy buttons -----------------------------------------------
+  function setupCopy(){
+    document.querySelectorAll('button.copy[data-copy-from]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var src = document.getElementById(btn.getAttribute('data-copy-from'));
+        if(!src) return;
+        // Build the copyable text by cloning the node and stripping the
+        // prompt span — we don't want "$ " or "PS> " in the clipboard.
+        var clone = src.cloneNode(true);
+        clone.querySelectorAll('.prompt').forEach(function(p){ p.remove(); });
+        var text = clone.textContent.trim();
+        var done = function(){
+          var prev = btn.textContent;
+          btn.textContent = 'copied';
+          btn.setAttribute('data-copied','true');
+          setTimeout(function(){
+            btn.textContent = prev;
+            btn.removeAttribute('data-copied');
+          }, 1600);
+        };
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(done, function(){
+            // fallback: select the element so keyboard copy works
+            var range = document.createRange();
+            range.selectNodeContents(src);
+            var sel = window.getSelection();
+            sel.removeAllRanges(); sel.addRange(range);
+          });
+        } else {
+          var range = document.createRange();
+          range.selectNodeContents(src);
+          var sel = window.getSelection();
+          sel.removeAllRanges(); sel.addRange(range);
+          try{ document.execCommand('copy'); done(); } catch(e){}
+        }
+      });
+    });
+  }
+
+  // --- reveal on scroll -------------------------------------------
+  function setupReveal(){
+    var els = document.querySelectorAll('.reveal');
+    if(!('IntersectionObserver' in window)){
+      els.forEach(function(el){ el.classList.add('visible'); });
+      return;
+    }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          e.target.classList.add('visible');
+          // If it's a .bar, kick off the animation + counter.
+          if(e.target.classList.contains('bar')){
+            playBar(e.target);
+          }
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.25, rootMargin: '0px 0px -5% 0px' });
+    els.forEach(function(el){ io.observe(el); });
+  }
+
+  // --- bar animation + counter tick-down --------------------------
+  function playBar(bar){
+    // One tick: schedule the scaleX collapse + number countdown.
+    bar.setAttribute('data-played','true');
+
+    var counter = bar.querySelector('[data-counter-to]');
+    if(!counter) return;
+    var from = parseInt(bar.getAttribute('data-raw'), 10);
+    var to   = parseInt(counter.getAttribute('data-counter-to'), 10);
+    if(isNaN(from) || isNaN(to)) return;
+
+    var unitHTML = counter.querySelector('.unit') ? counter.querySelector('.unit').outerHTML : '';
+    var duration = 1900; // matches the CSS bar-raw transition window
+    var start = null;
+
+    function fmt(n){ return n.toLocaleString('en-US'); }
+
+    function tick(ts){
+      if(start === null) start = ts;
+      var t = Math.min(1, (ts - start) / duration);
+      // Ease-out-cubic so the count slows dramatically near the end.
+      var eased = 1 - Math.pow(1 - t, 3);
+      var n = Math.round(from + (to - from) * eased);
+      counter.innerHTML = fmt(n) + unitHTML;
+      if(t < 1) requestAnimationFrame(tick);
+      else counter.innerHTML = fmt(to) + unitHTML;
+    }
+
+    // Seed the counter at the raw value so the first frame isn't blank
+    counter.innerHTML = fmt(from) + unitHTML;
+    requestAnimationFrame(tick);
+  }
+
+  // --- wait for DOM and wire everything ---------------------------
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      setupCopy(); setupReveal();
+    });
+  } else {
+    setupCopy(); setupReveal();
+  }
+})();
+</script>
+
+</body>
+</html>
