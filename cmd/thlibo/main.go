@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/3rg0n/thlibo/cmd/thlibo/compresscmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/execcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/installcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/pullcmd"
@@ -36,6 +37,8 @@ func main() {
 		os.Exit(rewritecmd.Run(os.Args[2:]))
 	case "exec":
 		os.Exit(execcmd.Run(os.Args[2:]))
+	case "compress":
+		os.Exit(compresscmd.Run(os.Args[2:]))
 	case "install":
 		os.Exit(installcmd.Run(os.Args[2:]))
 	case "pull":
@@ -58,6 +61,7 @@ Usage:
                              Exit 0 + rewritten command on stdout = wrap.
                              Exit 1 = passthrough.
   thlibo exec -- <command>   Run <command>, compress stdout, return.
+  thlibo compress            Read stdin, compress, write stdout (Codex hook, pipes).
   thlibo install             Mirror processors, wire the Claude Code
                              hook, register the daemon for autostart.
   thlibo pull [name]         Download a GGUF model (default: gemma-4-e4b).

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/3rg0n/thlibo/internal/adapters/claudecode"
+	"github.com/3rg0n/thlibo/internal/adapters/codex"
 	"github.com/3rg0n/thlibo/internal/install"
 )
 
@@ -63,6 +64,10 @@ func Run(argv []string) int {
 	var allowUnpinned bool
 	fs.BoolVar(&pullModel, "pull-model", false, "download the default GGUF as part of install (~2.5 GB)")
 	fs.BoolVar(&allowUnpinned, "allow-unpinned", false, "allow --pull-model to download without a pinned SHA (bootstrap only)")
+	var installCodex bool
+	var codexHooksPath string
+	fs.BoolVar(&installCodex, "codex", false, "also install the Codex CLI hook (advisory until Codex lands updatedInput support)")
+	fs.StringVar(&codexHooksPath, "codex-hooks", "", "override Codex hooks.json path (default: ~/.codex/hooks.json)")
 	if err := fs.Parse(argv); err != nil {
 		return 2
 	}
@@ -119,6 +124,15 @@ func Run(argv []string) int {
 	} else {
 		fmt.Println("  autostart:      (skipped)")
 	}
+	if installCodex {
+		cp := codexHooksPath
+		if cp == "" && home != "" {
+			cp = filepath.Join(home, ".codex", "hooks.json")
+		}
+		fmt.Printf("  codex hooks:    %s\n", cp)
+	} else {
+		fmt.Println("  codex hooks:    (skipped; use --codex to install)")
+	}
 	if pullModel {
 		fmt.Printf("  model:          %s -> %s\n",
 			install.DefaultModel.Name, install.ModelsDir())
@@ -174,6 +188,32 @@ func Run(argv []string) int {
 			return 7
 		}
 		fmt.Println("  registered autostart via", autostart.Mechanism())
+	}
+
+	if installCodex {
+		cp := codexHooksPath
+		if cp == "" {
+			if homeErr != nil {
+				fmt.Fprintln(os.Stderr, "install: cannot determine home dir for Codex:", homeErr)
+				return 3
+			}
+			cp = filepath.Join(home, ".codex", "hooks.json")
+		}
+		cfgPath := filepath.Join(filepath.Dir(cp), "config.toml")
+		codexHookPath := filepath.Join(hookDir, "thlibo-rewrite-codex.sh")
+		if err := codex.WriteHookScript(codexHookPath); err != nil {
+			fmt.Fprintln(os.Stderr, "install: codex hook:", err)
+			return 9
+		}
+		if err := codex.MergeHooksJSON(cp, codexHookPath); err != nil {
+			fmt.Fprintln(os.Stderr, "install: codex hooks.json:", err)
+			return 9
+		}
+		if err := codex.EnableHooksFeatureFlag(cfgPath); err != nil {
+			fmt.Fprintln(os.Stderr, "install: codex config.toml:", err)
+			return 9
+		}
+		fmt.Printf("  wrote Codex hook + merged %s + enabled codex_hooks in %s\n", cp, cfgPath)
 	}
 
 	if pullModel {
