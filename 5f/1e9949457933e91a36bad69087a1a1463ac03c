@@ -1,0 +1,37 @@
+cmd/thlibo/compresscmd/compress.go
+  s_5811b7f24eccc0::t_44a3fd9b9f55f3 1-81
+internal/adapters/codex/hook.sh
+  s_5811b7f24eccc0::t_ad8b04f7f4f25c 2-85
+internal/adapters/codex/codex.go
+  s_5811b7f24eccc0::t_2671690aee9e32 1-2,4-6,8-9,11-21,54-55,58-60,62-63,65-68,89,103-111,113-115,119,131,144,150-264,267-269
+  s_5811b7f24eccc0::t_f013d6a9e97313 3,7,10,23-53,56-57,61,64,69-88,90-102,112,116-118,120-130,132-143,145-149,265-266,270-275
+internal/adapters/codex/codex_test.go
+  s_5811b7f24eccc0::t_33c53af82cb265 1-11,16-19,24-26,28-30,39-47,49-53,56-69,79-91,94-99,107-108,115-127,131-132,138,142-144,146-158,164,166-168,171-185,187-196,198-200,325-326
+  s_5811b7f24eccc0::t_8084cec1b0ba09 12-15,20-23,27,31-38,48,54-55,70-78,92-93,100-106,109-114,128-130,133-137,139-141,145,159-163,165,169-170,186,197,201-324
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_98a65600bc9b75 127-135
+  s_5811b7f24eccc0::t_39d8ef97317cde 67-70
+  s_5811b7f24eccc0::t_d83133042375cd 202,212-216
+  s_5811b7f24eccc0::t_3823b2150152ca 193-201,203-211,217-218
+  s_5811b7f24eccc0::t_5110d74cd0bf1d 28
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_45f2294c37c767 64
+  s_5811b7f24eccc0::t_4bb3ed7efb18da 40-41
+  s_5811b7f24eccc0::t_8ffdaae06087a8 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "5f1e9949457933e91a36bad69087a1a1463ac03c",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
