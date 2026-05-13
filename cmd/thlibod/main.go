@@ -27,6 +27,7 @@ import (
 
 	"github.com/3rg0n/thlibo/internal/daemon"
 	"github.com/3rg0n/thlibo/internal/ipc"
+	"github.com/3rg0n/thlibo/internal/logx"
 )
 
 // exit codes — kept small and named so operator scripts can key on them.
@@ -181,6 +182,7 @@ func buildConfig(f *flags) (daemon.Config, error) {
 		AdminEndpoint:     adminEP,
 		ReadyPollTimeout:  f.readyTimeout,
 		StopTimeout:       f.stopTimeout,
+		Logger:            logx.New("thlibod", "", 0),
 	}, nil
 }
 

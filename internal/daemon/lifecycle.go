@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/3rg0n/thlibo/internal/ipc"
+	"github.com/3rg0n/thlibo/internal/logx"
 	"github.com/3rg0n/thlibo/internal/queue"
 )
 
@@ -33,6 +34,11 @@ type Config struct {
 	ReadyPollTimeout  time.Duration // default 30s
 	StopTimeout       time.Duration // default 5s (time given to engine on shutdown)
 	QueueDepth        int           // default 10 (spec §Concurrency)
+
+	// Logger is optional; nil is safe (all logging calls are nil-guarded).
+	// cmd/thlibod wires this to a logx.Logger so operators can see what
+	// the daemon's doing.
+	Logger *logx.Logger
 }
 
 // Daemon is the live instance. Build with Start, shut down with Stop.
@@ -355,12 +361,15 @@ func (d *Daemon) acceptInference() {
 // context (A9). Queue full returns an immediate error frame (A8).
 func (d *Daemon) handleInference(conn net.Conn) {
 	defer conn.Close()
+	start := time.Now()
+
 	r := bufio.NewReader(conn)
 	req, err := ipc.ReadRequest(r)
 	if err != nil {
 		if err == io.EOF {
 			return
 		}
+		d.cfg.Logger.Warn("request_parse_failed", logx.Err(err))
 		_ = ipc.WriteFrame(conn, ipc.Response{
 			ID: req.ID, Type: ipc.ResponseError, Message: err.Error(),
 		})
@@ -368,6 +377,7 @@ func (d *Daemon) handleInference(conn net.Conn) {
 	}
 
 	if d.engineDead.Load() {
+		d.cfg.Logger.Warn("engine_dead_refusing_request", logx.Str("req_id", req.ID))
 		_ = ipc.WriteFrame(conn, ipc.Response{
 			ID: req.ID, Type: ipc.ResponseError, Message: "engine unavailable",
 		})
@@ -376,11 +386,22 @@ func (d *Daemon) handleInference(conn net.Conn) {
 
 	resolved, err := req.Resolve()
 	if err != nil {
+		d.cfg.Logger.Warn("request_validation_failed",
+			logx.Str("req_id", req.ID),
+			logx.Err(err),
+		)
 		_ = ipc.WriteFrame(conn, ipc.Response{
 			ID: req.ID, Type: ipc.ResponseError, Message: err.Error(),
 		})
 		return
 	}
+	d.cfg.Logger.Info("request_accepted",
+		logx.Str("req_id", req.ID),
+		logx.Int("msgs", len(req.Messages)),
+		logx.Int("max_tokens", resolved.MaxTokens),
+		logx.Bool("has_grammar", resolved.Grammar != ""),
+	)
+	_ = start
 
 	// Split messages into system / user (the engine takes two distinct
 	// slots; the protocol allows multiple messages but v0.1 is single-
@@ -485,6 +506,7 @@ func (d *Daemon) handleInference(conn net.Conn) {
 		if errors.Is(err, queue.ErrFull) {
 			msg = "queue full"
 		}
+		d.cfg.Logger.Warn("queue_rejected", logx.Str("req_id", req.ID), logx.Str("reason", msg))
 		_ = ipc.WriteFrame(conn, ipc.Response{
 			ID: req.ID, Type: ipc.ResponseError, Message: msg,
 		})
@@ -494,14 +516,29 @@ func (d *Daemon) handleInference(conn net.Conn) {
 	<-job.Done
 
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
+		d.cfg.Logger.Warn("request_failed",
+			logx.Str("req_id", req.ID),
+			logx.Err(runErr),
+			logx.Dur("duration", time.Since(start)),
+		)
 		_ = ipc.WriteFrame(conn, ipc.Response{
 			ID: req.ID, Type: ipc.ResponseError, Message: runErr.Error(),
 		})
 		return
 	}
 	if job.Dropped() {
+		d.cfg.Logger.Info("request_cancelled",
+			logx.Str("req_id", req.ID),
+			logx.Dur("duration", time.Since(start)),
+		)
 		return
 	}
+	d.cfg.Logger.Info("request_done",
+		logx.Str("req_id", req.ID),
+		logx.Int("prompt_tokens", usage.PromptTokens),
+		logx.Int("completion_tokens", usage.CompletionTokens),
+		logx.Dur("duration", time.Since(start)),
+	)
 	_ = ipc.WriteFrame(conn, ipc.Response{
 		ID: req.ID, Type: ipc.ResponseDone, Usage: &usage,
 	})

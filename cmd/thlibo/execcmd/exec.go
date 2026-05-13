@@ -26,7 +26,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
+	"time"
 
+	"github.com/3rg0n/thlibo/internal/logx"
 	"github.com/3rg0n/thlibo/internal/middleware"
 	"github.com/3rg0n/thlibo/internal/router"
 )
@@ -74,6 +77,15 @@ type pipelineFactory func() (*middleware.Pipeline, error)
 // run is the testable core: arguments explicit, no package-global
 // side effects.
 func run(cmdArgv []string, stdin io.Reader, stdout, stderr io.Writer, mkPipeline pipelineFactory) int {
+	log := logx.New("thlibo-exec", "", 0)
+	defer log.Close()
+
+	start := time.Now()
+	log.Info("spawn",
+		logx.Str("cmd", cmdArgv[0]),
+		logx.Int("argc", len(cmdArgv)-1),
+	)
+
 	// #nosec G204 -- cmdArgv comes from the AI client via our hook;
 	// this subcommand exists to execute the command the client
 	// explicitly asked for. Security comes from the client's own
@@ -85,41 +97,80 @@ func run(cmdArgv []string, stdin io.Reader, stdout, stderr io.Writer, mkPipeline
 	var captured bytes.Buffer
 	cmd.Stdout = &captured
 
+	var childCode int
 	if err := cmd.Run(); err != nil {
 		code := childExitCode(err)
 		if code < 0 {
 			// Spawn failed — not even a child exit to forward.
+			log.Error("spawn_failed",
+				logx.Str("cmd", cmdArgv[0]),
+				logx.Err(err),
+			)
 			fmt.Fprintf(stderr, "thlibo exec: %v\n", err)
 			return ExitSpawnFailed
 		}
-		// Child ran but exited non-zero. Compress its stdout if we
-		// can; then forward the exit code verbatim.
-		_ = emitCompressed(captured.Bytes(), stdout, mkPipeline)
-		return code
+		childCode = code
 	}
 
-	_ = emitCompressed(captured.Bytes(), stdout, mkPipeline)
-	return 0
+	rawLen := captured.Len()
+	outLen, warnings := emitCompressedAndReport(captured.Bytes(), stdout, mkPipeline, log)
+
+	// Single terminal record per invocation — easy to find in logs.
+	reduction := 0.0
+	if rawLen > 0 {
+		reduction = (1.0 - float64(outLen)/float64(rawLen)) * 100
+	}
+	log.Info("done",
+		logx.Str("cmd", cmdArgv[0]),
+		logx.Int("raw_bytes", rawLen),
+		logx.Int("out_bytes", outLen),
+		logx.Any("reduction_pct", roundTo(reduction, 2)),
+		logx.Int("child_exit", childCode),
+		logx.Dur("duration", time.Since(start)),
+		logx.Str("fallbacks", strings.Join(warnings, "; ")),
+	)
+	return childCode
 }
 
-// emitCompressed pipes raw through middleware.Process() and writes
-// the result to w. Any pipeline error falls back to raw, matching
-// middleware's own fallback contract.
-func emitCompressed(raw []byte, w io.Writer, mkPipeline pipelineFactory) error {
+// emitCompressedAndReport pipes raw through middleware.Process() and
+// writes the result to w. Returns the number of output bytes and
+// any OnWarning records collected (so the caller can log a single
+// terminal record summarising the invocation).
+func emitCompressedAndReport(raw []byte, w io.Writer, mkPipeline pipelineFactory, log *logx.Logger) (int, []string) {
+	var warnings []string
+
 	p, err := mkPipeline()
 	if err != nil {
-		// No pipeline => no compression available. Emit raw.
-		_, werr := w.Write(raw)
-		return werr
+		log.Warn("pipeline_unavailable", logx.Err(err))
+		n, _ := w.Write(raw)
+		return n, append(warnings, "pipeline_unavailable:"+err.Error())
 	}
-	// Short-circuit: middleware already bails on <2000 bytes.
-	if err := p.Process(context.Background(), bytes.NewReader(raw), w); err != nil {
-		// Pipeline error -> fallback already handled inside Process
-		// (it writes raw). But just in case Process wrote nothing,
-		// ensure we don't lose output.
-		return err
+	p.OnWarning = func(s string) {
+		warnings = append(warnings, s)
+		log.Debug("middleware_warning", logx.Str("detail", s))
 	}
-	return nil
+
+	var buf bytes.Buffer
+	if err := p.Process(context.Background(), bytes.NewReader(raw), &buf); err != nil {
+		log.Warn("process_error", logx.Err(err))
+		warnings = append(warnings, "process_error:"+err.Error())
+	}
+	n, _ := w.Write(buf.Bytes())
+	return n, warnings
+}
+
+// roundTo returns v rounded to prec decimal places. Ad-hoc helper
+// so log records don't carry 15-digit floats.
+func roundTo(v float64, prec int) float64 {
+	shift := 1.0
+	for i := 0; i < prec; i++ {
+		shift *= 10
+	}
+	// Round half-away-from-zero.
+	if v >= 0 {
+		return float64(int64(v*shift+0.5)) / shift
+	}
+	return float64(int64(v*shift-0.5)) / shift
 }
 
 // childExitCode extracts the child process exit code from an
