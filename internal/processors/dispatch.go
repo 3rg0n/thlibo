@@ -67,7 +67,11 @@ func (x *Dispatcher) runScript(ctx context.Context, d *Descriptor, input string)
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(runCtx, bin, args...) // #nosec G204 -- bin is from our EntryCommand (python3/bash/own file), args is either [d.Entry] resolved under d.Origin.Path dir or empty; both are trusted config values, not user input
+	// #nosec G204 -- bin is from our EntryCommand (python3/bash/own file),
+	// args is either [d.Entry] resolved under d.Origin.Path dir or empty;
+	// both are trusted config values, not user input.
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+	cmd := exec.CommandContext(runCtx, bin, args...)
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(input)
 	var stdout, stderr bytes.Buffer

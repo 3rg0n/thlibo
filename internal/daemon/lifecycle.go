@@ -364,6 +364,9 @@ func (d *Daemon) handleInference(conn net.Conn) {
 	start := time.Now()
 
 	r := bufio.NewReader(conn)
+	// ipc.ReadRequest returns (Request, error) by value — req is
+	// safe to address on the error path (it's the zero value).
+	// nosemgrep: trailofbits.go.invalid-usage-of-modified-variable.invalid-usage-of-modified-variable
 	req, err := ipc.ReadRequest(r)
 	if err != nil {
 		if err == io.EOF {

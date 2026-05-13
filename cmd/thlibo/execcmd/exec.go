@@ -90,6 +90,7 @@ func run(cmdArgv []string, stdin io.Reader, stdout, stderr io.Writer, mkPipeline
 	// this subcommand exists to execute the command the client
 	// explicitly asked for. Security comes from the client's own
 	// permission prompts + any thlibo deny rules (v0.2).
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 	cmd := exec.Command(cmdArgv[0], cmdArgv[1:]...)
 	cmd.Stdin = stdin
 	cmd.Stderr = stderr

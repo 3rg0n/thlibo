@@ -176,6 +176,7 @@ func buildConfig(f *flags) (daemon.Config, error) {
 			// never user-controllable at runtime. This is the whole
 			// point of the daemon: it spawns the engine it was told
 			// to spawn.
+			// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 			return exec.Command(f.enginePath, engineArgs...)
 		},
 		InferenceEndpoint: infer,
