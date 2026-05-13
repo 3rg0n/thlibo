@@ -1,0 +1,47 @@
+internal/adapters/claudecode/hook.sh
+  s_5811b7f24eccc0::t_e5679623d2b47b 9
+internal/adapters/claudecode/claudecode_test.go
+  s_5811b7f24eccc0::t_29d01fa7b35336 33-39
+internal/shellcmd/shellcmd.go
+  s_5811b7f24eccc0::t_cd37b7b1d50b8f 7-9
+docs/adr/0001-compression-via-pretooluse-rewrite.md
+  s_5811b7f24eccc0::t_be3168c2e8d1af 31-37
+  s_5811b7f24eccc0::t_260a03f98787b2 74
+CHANGELOG.md
+  s_5811b7f24eccc0::t_c72e1fae762172 83-85
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_808e8a5b6237c2 69
+go.mod
+  s_5811b7f24eccc0::t_f2ec66ca188276 3
+.plan/thlibo-spec.md
+  s_5811b7f24eccc0::t_41b186c443684a 369
+  s_5811b7f24eccc0::t_32c1d53d97e131 84-85
+  s_5811b7f24eccc0::t_9e80c1efa01cf0 384
+  s_5811b7f24eccc0::t_147cb76a9d9bf4 642
+internal/adapters/codex/codex_test.go
+  s_5811b7f24eccc0::t_2743d518538419 30-33
+cmd/thlibo/rewritecmd/rewrite.go
+  s_5811b7f24eccc0::t_9df4728a9202e5 3
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_58de939383bcb4 22,56
+README.md
+  s_5811b7f24eccc0::t_cc0e1a65cb3da6 14-18
+  s_5811b7f24eccc0::t_9e7650070fe702 26-29
+  s_5811b7f24eccc0::t_edef60dfe0fbb7 93-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "973e7da26c8e3dc4f9969304859d7f23f499adf8",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
