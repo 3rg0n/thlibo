@@ -1,0 +1,29 @@
+LICENSE
+  s_5811b7f24eccc0::t_2a3d5c8dc4e695 1-21
+docs/adr/0002-one-warm-model-single-daemon.md
+  s_5811b7f24eccc0::t_83b2d8678029c4 1-62
+CONTRIBUTING.md
+  s_5811b7f24eccc0::t_0c11aab9c1e3b7 1-110
+docs/adr/0003-per-user-autostart-not-system-service.md
+  s_5811b7f24eccc0::t_881b4984b5d986 1-77
+docs/adr/README.md
+  s_5811b7f24eccc0::t_7cc35fcca8b4e0 1-21
+docs/adr/0001-compression-via-pretooluse-rewrite.md
+  s_5811b7f24eccc0::t_70bda2989bbd45 1-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "b156b1224d55bb1fbcc6acbb3200e6a8eaee8f13",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
