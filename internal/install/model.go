@@ -36,15 +36,18 @@ type Model struct {
 }
 
 // pinnedGemma4E4BQ4KM is the SHA-256 of
-// bartowski/google_gemma-4-E4B-it-GGUF/google_gemma-4-E4B-it-Q4_K_M.gguf
-// as downloaded on 2026-05-13 (5,405,168,384 bytes).
+// unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf at repo
+// revision 653803f0 (downloaded 2026-05-13, 4,977,169,568 bytes).
 //
-// Can be overridden at build time via -ldflags -X (see the CI
-// release workflow) so a new release can pin a newer GGUF revision
-// without a source-code change. The baked-in value is the current
-// canonical hash so that `go build` from source produces a working
-// binary without `--allow-unpinned` — no special flags needed.
-var pinnedGemma4E4BQ4KM = "51865750adafd22de56994a343d5a887cc1a589b9bae41d62b748c8bd0ca9c76"
+// Unsloth's repack is the canonical source: public, ungated,
+// Apache-2.0, 1.2M+ downloads, imatrix-calibrated (slightly tighter
+// than bartowski's repacks at no quality cost). See ADR 0001 for
+// the rationale if we ever consider changing this.
+//
+// Overridable at build time via -ldflags -X (see the CI release
+// workflow) so a new release can pin a newer GGUF revision without
+// a source-code change.
+var pinnedGemma4E4BQ4KM = "519b9793ed6ce0ff530f1b7c96e848e08e49e7af4d57bb97f76215963a54146d"
 
 // DefaultModel is the CPU-default Gemma 4 E4B Q4_K_M quantisation
 // per spec §Model. Pinned to a bartowski repack for reproducibility.
@@ -54,11 +57,15 @@ var pinnedGemma4E4BQ4KM = "51865750adafd22de56994a343d5a887cc1a589b9bae41d62b748
 // `thlibo pull` refuses to download with an empty expected hash
 // unless --allow-unpinned is passed.
 var DefaultModel = Model{
-	Name:           "gemma-4-e4b-q4_k_m",
-	URL:            "https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF/resolve/main/google_gemma-4-E4B-it-Q4_K_M.gguf",
+	Name: "gemma-4-e4b-q4_k_m",
+	// Pinned to a specific repo revision so the URL doesn't silently
+	// change if unsloth reuploads the file with a different SHA.
+	// The `resolve/<rev>/...` form is HuggingFace's way of fetching
+	// an immutable revision.
+	URL:            "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/653803f092503c04a65164346f3208a36e707693/gemma-4-E4B-it-Q4_K_M.gguf",
 	ExpectedSHA256: pinnedGemma4E4BQ4KM,
 	Filename:       "gemma-4-e4b-q4_k_m.gguf",
-	SizeBytes:      5_405_168_384, // exact from HF tree listing
+	SizeBytes:      4_977_169_568, // exact from HF tree listing
 }
 
 // ModelsDir returns the directory GGUFs live in. Honors the

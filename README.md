@@ -152,13 +152,22 @@ your user's home directory.
 If you skip `--pull-model` at install time, pull it later with:
 
 ```bash
-./bin/thlibo pull gemma-4-e4b --allow-unpinned
+./bin/thlibo pull gemma-4-e4b
 ```
 
 Writes the GGUF to `~/.thlibo/models/` (or `$THLIBO_MODELS_DIR`),
-resumes from any partial `.part` file, and verifies SHA-256 when a
-pinned hash is available. Progress prints on stderr so stdout
+resumes from any partial `.part` file, and verifies SHA-256 against
+the hash pinned at build time. Progress prints on stderr so stdout
 remains clean for scripting.
+
+**No HuggingFace account required.** The default model
+(`unsloth/gemma-4-E4B-it-GGUF`, Apache-2.0) is a public,
+imatrix-calibrated repack — downloads work anonymously. 1.2M+
+downloads at the time of pinning; thlibo pins a specific repo
+revision so the file bytes are stable across upstream reuploads.
+If you need a different quantisation from Google's gated
+`google/gemma-4-E4B-it` repo, that's where you'd need an HF
+account + token; v0.1 uses the unsloth pin so you don't.
 
 ### Start the daemon now (skip autostart wait)
 
