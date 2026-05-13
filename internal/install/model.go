@@ -35,19 +35,30 @@ type Model struct {
 	SizeBytes int64
 }
 
+// pinnedGemma4E4BQ4KM is the SHA-256 of
+// bartowski/google_gemma-4-E4B-it-GGUF/google_gemma-4-E4B-it-Q4_K_M.gguf
+// as downloaded on 2026-05-13 (5,405,168,384 bytes).
+//
+// Can be overridden at build time via -ldflags -X (see the CI
+// release workflow) so a new release can pin a newer GGUF revision
+// without a source-code change. The baked-in value is the current
+// canonical hash so that `go build` from source produces a working
+// binary without `--allow-unpinned` — no special flags needed.
+var pinnedGemma4E4BQ4KM = "51865750adafd22de56994a343d5a887cc1a589b9bae41d62b748c8bd0ca9c76"
+
 // DefaultModel is the CPU-default Gemma 4 E4B Q4_K_M quantisation
 // per spec §Model. Pinned to a bartowski repack for reproducibility.
 //
-// ExpectedSHA256 is set to a placeholder until an operator pins a
-// real value. The `thlibo pull` command refuses to download with an
-// empty expected hash in production mode (`--allow-unpinned` lets
-// you opt into a one-time un-verified pull for bootstrapping).
+// ExpectedSHA256 is sourced from pinnedGemma4E4BQ4KM above; empty
+// in a local dev build, set in release builds via -ldflags -X.
+// `thlibo pull` refuses to download with an empty expected hash
+// unless --allow-unpinned is passed.
 var DefaultModel = Model{
 	Name:           "gemma-4-e4b-q4_k_m",
-	URL:            "https://huggingface.co/bartowski/gemma-4-E4B-IT-GGUF/resolve/main/gemma-4-E4B-IT-Q4_K_M.gguf",
-	ExpectedSHA256: "", // TODO: pin once the bundle is released; until then users must --allow-unpinned.
+	URL:            "https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF/resolve/main/google_gemma-4-E4B-it-Q4_K_M.gguf",
+	ExpectedSHA256: pinnedGemma4E4BQ4KM,
 	Filename:       "gemma-4-e4b-q4_k_m.gguf",
-	SizeBytes:      2_600_000_000, // ~2.5 GiB advisory
+	SizeBytes:      5_405_168_384, // exact from HF tree listing
 }
 
 // ModelsDir returns the directory GGUFs live in. Honors the
