@@ -54,13 +54,17 @@ func (d *darwinInstaller) Install(spec AutostartSpec) error {
 	// Load into current session. `launchctl bootstrap gui/$UID` is
 	// the modern form; bootstrap is idempotent so re-install works.
 	uid := fmt.Sprintf("gui/%d", os.Getuid())
+	// #nosec G204 -- uid is formatted from os.Getuid, path is an
+	// installer-derived plist location. Neither is user input.
 	_ = exec.Command("launchctl", "bootout", uid, path).Run() // ok to fail
+	// #nosec G204 -- see above
 	return exec.Command("launchctl", "bootstrap", uid, path).Run()
 }
 
 func (d *darwinInstaller) Uninstall(name string) error {
 	path := filepath.Join(d.dir, name+".plist")
 	uid := fmt.Sprintf("gui/%d", os.Getuid())
+	// #nosec G204 -- installer-controlled inputs.
 	_ = exec.Command("launchctl", "bootout", uid, path).Run()
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err

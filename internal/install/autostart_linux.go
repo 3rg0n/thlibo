@@ -43,12 +43,19 @@ func (l *linuxInstaller) Install(spec AutostartSpec) error {
 	// All commands best-effort: if systemd isn't running (e.g. a
 	// bare container), we leave the unit file in place so a
 	// future session with `systemctl --user` works.
+	// #nosec G204 -- spec.Name is an installer-set constant
+	// ("cisco.thlibo.daemon") or user-supplied via --autostart-name;
+	// either way it's intentional input to systemctl. No shell
+	// interpretation happens — exec.Command passes argv directly.
 	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	// #nosec G204 -- see above
 	_ = exec.Command("systemctl", "--user", "enable", "--now", spec.Name+".service").Run()
 	return nil
 }
 
 func (l *linuxInstaller) Uninstall(name string) error {
+	// #nosec G204 -- name is an installer-set identifier; see comment
+	// in Install above.
 	_ = exec.Command("systemctl", "--user", "disable", "--now", name+".service").Run()
 	path := filepath.Join(l.unitDir, name+".service")
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
