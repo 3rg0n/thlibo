@@ -56,7 +56,38 @@ dispatches the Python script directly; the daemon is not involved in
 this particular measurement, but the wire path (hook → `thlibo
 exec` → middleware → script dispatcher → compressed stdout) is.
 
-Prompt-processor token savings (compress, casefolder) will be
-measured against a real llamafile + Gemma 4 E4B at first public
-release. v0.1.0 ships pinned infrastructure; the GGUF SHA-256 and
-prompt-processor numbers get filled in at tag time.
+### Full Claude Code round-trip (2026-05-13)
+
+Using `claude -p` with the thlibo PreToolUse hook installed in
+`~/.claude/settings.json`:
+
+- Prompt: *"Use the Bash tool to run exactly: git diff HEAD~5. Then
+  show me verbatim the first 300 characters of stdout you received."*
+- Claude Code debug log (excerpt): hook `success`,
+  `updatedInput.command = C:/dev/Github/thlibo/.test/bin/thlibo.exe
+  exec -- git diff HEAD~5`, `permissionDecision: allow`.
+- `thlibo-exec.ndjson`:
+  `{"msg":"done","raw_bytes":94806,"out_bytes":778,"reduction_pct":99.18,...}`.
+- Model's verbatim response first line:
+  `diff .github/workflows/release.yml (+43 -4)` — git-filter's
+  compressed per-file summary format. The model never saw the raw
+  diff hunks.
+
+This closes the last-mile uncertainty: hook fires → rewrite takes
+effect → subprocess runs → middleware compresses → compressed bytes
+land in the model's context. End-to-end observable, reproducible,
+and correct.
+
+An aside: asking the model to *self-report byte counts* of its tool
+outputs is unreliable — in an earlier probe it claimed to have
+received 94,806 bytes (the raw diff size) while the log shows it
+actually received 778. The model pattern-matches plausible-looking
+numbers rather than counting. Ask for verbatim content to verify
+what was actually delivered.
+
+### Prompt processors
+
+Token savings for `compress` and `casefolder` will be measured at
+tag time against a real llamafile + Gemma 4 E4B. v0.1.0 ships the
+pinned infrastructure (GGUF SHA-256, hook transport, compression
+pipeline) proven via script processors.
