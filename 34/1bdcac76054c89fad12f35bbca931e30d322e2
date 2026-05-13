@@ -1,0 +1,23 @@
+cmd/thlibod/main.go
+  s_5811b7f24eccc0::t_b9c7c9125639dc 179
+cmd/thlibo/execcmd/exec.go
+  s_5811b7f24eccc0::t_6fbdcf6431bb0d 93
+internal/processors/dispatch.go
+  s_5811b7f24eccc0::t_626da0f1867237 70-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "341bdcac76054c89fad12f35bbca931e30d322e2",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
