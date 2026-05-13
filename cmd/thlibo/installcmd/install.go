@@ -15,10 +15,14 @@
 package installcmd
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 
 	"github.com/3rg0n/thlibo/internal/adapters/claudecode"
 	"github.com/3rg0n/thlibo/internal/install"
@@ -55,6 +59,10 @@ func Run(argv []string) int {
 	fs.StringVar(&daemonPath, "daemon-path", "", "thlibod path for autostart (default: alongside this binary)")
 	var enginePath string
 	fs.StringVar(&enginePath, "engine-path", "", "llamafile/engine path passed to thlibod -engine (default: next to thlibod)")
+	var pullModel bool
+	var allowUnpinned bool
+	fs.BoolVar(&pullModel, "pull-model", false, "download the default GGUF as part of install (~2.5 GB)")
+	fs.BoolVar(&allowUnpinned, "allow-unpinned", false, "allow --pull-model to download without a pinned SHA (bootstrap only)")
 	if err := fs.Parse(argv); err != nil {
 		return 2
 	}
@@ -111,6 +119,12 @@ func Run(argv []string) int {
 	} else {
 		fmt.Println("  autostart:      (skipped)")
 	}
+	if pullModel {
+		fmt.Printf("  model:          %s -> %s\n",
+			install.DefaultModel.Name, install.ModelsDir())
+	} else {
+		fmt.Println("  model:          (not downloaded; run `thlibo pull` separately)")
+	}
 	if dryRun {
 		fmt.Println("  (dry-run: no changes applied)")
 		return 0
@@ -162,8 +176,57 @@ func Run(argv []string) int {
 		fmt.Println("  registered autostart via", autostart.Mechanism())
 	}
 
+	if pullModel {
+		fmt.Println("  downloading model (this may take a while)...")
+		_, err := install.Pull(contextCancellableOnSignal(), install.DefaultModel, install.PullOptions{
+			AllowUnpinned: allowUnpinned,
+			Progress:      installProgress(),
+		})
+		if err != nil {
+			// Model is the very last step so we can still succeed
+			// the rest of the install; leave final exit to the
+			// caller but surface the error clearly.
+			fmt.Fprintln(os.Stderr, "install: pull model:", err)
+			return 8
+		}
+		fmt.Println("  model downloaded to", install.ModelsDir())
+	}
+
 	fmt.Println("thlibo install complete.")
 	return 0
+}
+
+// contextCancellableOnSignal returns a background context that is
+// cancelled on SIGINT/SIGTERM so Ctrl-C during `thlibo install
+// --pull-model` aborts the download cleanly.
+func contextCancellableOnSignal() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+	return ctx
+}
+
+// installProgress returns a simple progress printer that writes
+// updates to stderr on one carriage-returned line.
+func installProgress() install.ProgressFunc {
+	start := time.Now()
+	return func(written, total int64) {
+		pct := "  ?"
+		if total > 0 {
+			pct = fmt.Sprintf("%3d%%", int((written*100)/total))
+		}
+		elapsed := time.Since(start).Seconds()
+		var speed string
+		if elapsed > 0 {
+			speed = fmt.Sprintf(" %.1f MiB/s", float64(written)/elapsed/(1<<20))
+		}
+		fmt.Fprintf(os.Stderr, "\r  model: %s %.1f MiB%s      ",
+			pct, float64(written)/(1<<20), speed)
+	}
 }
 
 // defaultDaemonPath picks the thlibod binary next to the running

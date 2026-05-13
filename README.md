@@ -110,6 +110,8 @@ or `~/bin/`) and omit the flag.
 
 ```bash
 ./bin/thlibo install
+# Or include the model download in one step:
+./bin/thlibo install --pull-model --allow-unpinned
 ```
 
 This does five things:
@@ -138,7 +140,25 @@ your user's home directory.
 --skip-hook         Mirror processors only; don't touch Claude Code.
 --skip-autostart    Don't register the daemon for autostart.
 --daemon-path       Absolute path to thlibod (default: alongside thlibo).
+--engine-path       Path to llamafile/engine binary (passed to thlibod -engine).
+--pull-model        Download the default GGUF (~2.5 GB) as part of install.
+--allow-unpinned    Allow --pull-model before the canonical SHA is pinned
+                    (required in v0.1; goes away once a release hash is
+                    recorded in internal/install/model.go).
 ```
+
+### Download the model separately
+
+If you skip `--pull-model` at install time, pull it later with:
+
+```bash
+./bin/thlibo pull gemma-4-e4b --allow-unpinned
+```
+
+Writes the GGUF to `~/.thlibo/models/` (or `$THLIBO_MODELS_DIR`),
+resumes from any partial `.part` file, and verifies SHA-256 when a
+pinned hash is available. Progress prints on stderr so stdout
+remains clean for scripting.
 
 ### Start the daemon now (skip autostart wait)
 

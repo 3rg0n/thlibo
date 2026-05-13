@@ -1,5 +1,5 @@
-// Command thlibo is the user-facing CLI. It has three subcommands in
-// v0.1:
+// Command thlibo is the user-facing CLI. In v0.1 it has four
+// subcommands:
 //
 //	thlibo rewrite <command>   — given a shell command, decide whether
 //	                             to wrap it for compression. Called by
@@ -7,8 +7,11 @@
 //	thlibo exec -- <command>   — run <command>, pipe stdout through
 //	                             middleware.Process(), emit compressed
 //	                             stdout with stderr + exit code preserved.
-//	thlibo install             — (Phase 6) lay down hook scripts and
-//	                             wire settings.json.
+//	thlibo install             — lay down hook scripts, mirror
+//	                             processors, merge settings.json,
+//	                             register the daemon for autostart.
+//	thlibo pull [name]         — download a GGUF model from its
+//	                             pinned URL, verify SHA-256.
 //
 // The daemon (thlibod) is a separate binary.
 package main
@@ -19,6 +22,7 @@ import (
 
 	"github.com/3rg0n/thlibo/cmd/thlibo/execcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/installcmd"
+	"github.com/3rg0n/thlibo/cmd/thlibo/pullcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/rewritecmd"
 )
 
@@ -34,6 +38,8 @@ func main() {
 		os.Exit(execcmd.Run(os.Args[2:]))
 	case "install":
 		os.Exit(installcmd.Run(os.Args[2:]))
+	case "pull":
+		os.Exit(pullcmd.Run(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -52,7 +58,9 @@ Usage:
                              Exit 0 + rewritten command on stdout = wrap.
                              Exit 1 = passthrough.
   thlibo exec -- <command>   Run <command>, compress stdout, return.
-  thlibo install             Set up Claude Code hook + service (Phase 6).
+  thlibo install             Mirror processors, wire the Claude Code
+                             hook, register the daemon for autostart.
+  thlibo pull [name]         Download a GGUF model (default: gemma-4-e4b).
   thlibo help                Show this message.
 `)
 }
