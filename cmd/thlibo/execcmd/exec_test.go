@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -98,12 +100,20 @@ func TestRunSpawnFailure(t *testing.T) {
 // compressed stdout shorter than the input.
 func TestRunCompressesWhenPipelineRoutes(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		// The built-in git-filter is a Python script and the fixture
-		// below uses Unix-style printf. Covered by Linux CI.
+		// The built-in git-filter is a Python script; we invoke it
+		// on Unix via `cat <fixture>`. Covered by Linux CI.
 		t.Skip("Unix-only fixture; Linux CI covers the integration")
 	}
 	fixture := largeGitStatus()
-	argv := []string{"sh", "-c", "printf '%s' \"" + escape(fixture) + "\""}
+	// Write the fixture to a temp file and cat it. Safer than trying
+	// to embed multi-line diff content inside an sh -c arg — shell
+	// metacharacters (`$`, `!`, backticks, unbalanced quotes) in the
+	// fixture have bitten past attempts.
+	fpath := filepath.Join(t.TempDir(), "fixture.txt")
+	if err := os.WriteFile(fpath, []byte(fixture), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	argv := []string{"cat", fpath}
 
 	var stdout, stderr bytes.Buffer
 	code := run(argv, nil, &stdout, &stderr, func() (*middleware.Pipeline, error) {
@@ -156,16 +166,6 @@ func largeGitStatus() string {
 		b.WriteString("\tpath/to/some/untracked/file/number_" + itoa(i) + ".txt\n")
 	}
 	return b.String()
-}
-
-// escape turns a string into a form safe to pass through `sh -c
-// "printf '%s' \"...\""`. Specifically, we only need to escape
-// backslashes, dollar signs, double quotes, and backticks — our
-// fixtures avoid the first three, so this is an identity for
-// practical inputs. If a test adds one of those, escape it here.
-func escape(s string) string {
-	// Replace ` with nothing (fixtures don't use them).
-	return strings.ReplaceAll(s, "`", "")
 }
 
 // --- test helpers ---------------------------------------------------

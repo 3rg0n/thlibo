@@ -9,7 +9,6 @@
 package shellcmd
 
 import (
-	"path/filepath"
 	"strings"
 	"unicode"
 )
@@ -22,13 +21,25 @@ import (
 //	git             -> git
 //	npm.cmd         -> npm (Windows shell-shim suffix stripped)
 //
-// Only the last path separator is honoured; we don't follow symlinks
-// and we don't resolve PATH.
+// Handles both forward- and backslash separators regardless of the
+// running OS, because thlibo rewrite receives command strings from
+// AI clients that may have been generated on a different OS than
+// the one parsing them.
 func Basename(argv0 string) string {
 	if argv0 == "" {
 		return ""
 	}
-	base := filepath.Base(argv0)
+	// Hand-rolled basename: split on the last / or \, whichever is
+	// later. filepath.Base on Linux treats backslashes as literal
+	// characters in filenames; on Windows it treats both as
+	// separators. We want Windows behaviour everywhere.
+	base := argv0
+	for i := len(base) - 1; i >= 0; i-- {
+		if base[i] == '/' || base[i] == '\\' {
+			base = base[i+1:]
+			break
+		}
+	}
 	// Strip common Windows shell suffixes so `git` and `git.exe`
 	// collapse to the same registry key.
 	for _, suffix := range []string{".exe", ".cmd", ".bat", ".ps1"} {
