@@ -67,6 +67,10 @@ func (d *darwinInstaller) Status(name string) (bool, error) {
 // plistXML hand-rolls the launchd plist. A bespoke writer is used
 // because the cross-platform plist libraries add dependencies for
 // a 30-line file.
+//
+// HOME is injected explicitly: LaunchAgents run with a stripped
+// environment and os.UserHomeDir() returns "" under launchd, which
+// causes thlibod to fail resolving the default model/engine paths.
 func (d *darwinInstaller) plistXML(spec AutostartSpec) string {
 	var args string
 	args += fmt.Sprintf("    <string>%s</string>\n", xmlEscape(spec.DaemonPath))
@@ -84,6 +88,13 @@ func (d *darwinInstaller) plistXML(spec AutostartSpec) string {
 				"  <key>StandardErrorPath</key>\n  <string>%s</string>\n",
 			xmlEscape(spec.LogPath), xmlEscape(spec.LogPath))
 	}
+	home, _ := os.UserHomeDir()
+	envBlock := fmt.Sprintf(
+		"  <key>EnvironmentVariables</key>\n  <dict>\n"+
+			"    <key>HOME</key>\n    <string>%s</string>\n"+
+			"    <key>THLIBO_LOG</key>\n    <string>1</string>\n"+
+			"  </dict>\n",
+		xmlEscape(home))
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -93,7 +104,7 @@ func (d *darwinInstaller) plistXML(spec AutostartSpec) string {
   <key>ProgramArguments</key>
   <array>
 ` + args + `  </array>
-` + wd + logBlock + `  <key>RunAtLoad</key>
+` + wd + logBlock + envBlock + `  <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>

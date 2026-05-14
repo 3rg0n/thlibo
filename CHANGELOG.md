@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- LaunchAgent plist now sets `HOME` env var and passes explicit `-engine`/`-model`
+  flags so thlibod doesn't fail to resolve default paths under launchd's stripped
+  environment. Daemon was crashing in a restart loop with `engine exited before
+  ready: exit status 1` on every launchd-managed start. Closes #11.
+- `THLIBO_LOG=1` baked into the plist so activity logs appear in
+  `~/.thlibo/logs/thlibod.ndjson` without manual configuration.
 - `install.sh` NEXT STEP 2 now instructs `--pull-engine --pull-model`
   together; the engine (~838 MB) is required and was silently omitted
   from the documented flow, causing `thlibod` to fail immediately on

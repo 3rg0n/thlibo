@@ -194,10 +194,17 @@ func Run(argv []string) int {
 		if name == "" {
 			name = "cisco.thlibo.daemon"
 		}
-		var args []string
-		if enginePath != "" {
-			args = append(args, "-engine", enginePath)
+		// Always pass explicit -engine and -model so the daemon doesn't
+		// have to resolve paths from HOME at runtime. LaunchAgents on
+		// macOS run with a stripped environment where HOME may be unset.
+		// See issue #11.
+		resolvedEngine := enginePath
+		if resolvedEngine == "" {
+			resolvedEngine = filepath.Join(install.EngineDir(), install.EngineName())
 		}
+		resolvedModel := filepath.Join(install.ModelsDir(), install.DefaultModel.Filename)
+		var args []string
+		args = append(args, "-engine", resolvedEngine, "-model", resolvedModel)
 		spec := install.AutostartSpec{
 			Name:       name,
 			DaemonPath: daemonPath,
