@@ -77,14 +77,20 @@ func StartLlamafileEngine(enginePath string, extraArgs, stopTokens []string) (*L
 	args := append(serverArgs, extraArgs...)
 
 	var cmd *exec.Cmd
-	// #nosec G204 — enginePath is operator-configured (flag/installer default),
-	// never user-controllable at runtime. nosemgrep: dangerous-exec-command
+	// enginePath is operator-configured (flag or installer default),
+	// never user-controllable at runtime — same contract as every
+	// other exec.Command call in the repo. Both branches get their
+	// own annotations; semgrep doesn't carry the suppression comment
+	// across branches.
 	if runtime.GOOS == "darwin" {
 		// APE binary requires /bin/sh wrapper on macOS (ENOEXEC without it).
 		shArgs := append([]string{enginePath}, args...)
-		// #nosec G204
+		// #nosec G204 -- see above
+		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 		cmd = exec.Command("/bin/sh", shArgs...)
 	} else {
+		// #nosec G204 -- see above
+		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 		cmd = exec.Command(enginePath, args...)
 	}
 
