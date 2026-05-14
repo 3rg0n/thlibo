@@ -225,14 +225,15 @@ future review doesn't re-open settled decisions.
   model. If a multi-tenant deployment mode is ever added, this
   becomes a real requirement.
 
-### Deferred — v0.2 supply-chain infra
+### Closed in v0.2
 
-- **#27 T14 / #28 T25** — cosign keyless signing of release artefacts
-  + CycloneDX SBOM generation in `release.yml`, published separately
-  from the GitHub release. Out of scope for v0.1 because Sigstore
-  keyless requires OIDC setup with GitHub Actions' `id-token: write`
-  and a decision about the transparency-log identity to publish
-  under. Target: v0.2.
+- **#27 T14 / #28 T25** — landed. `release.yml` emits a CycloneDX
+  SBOM via `anchore/sbom-action@v0` (pinned by SHA) and signs every
+  archive, `SHA256SUMS`, and the SBOM with cosign keyless via
+  Sigstore. Identity is bound to the workflow at the release tag;
+  transparency entries go to `rekor.sigstore.dev`. README + release
+  notes include the exact `cosign verify-blob` command consumers
+  run to validate.
 
 ## Recommended Mitigations (Priority Order)
 
