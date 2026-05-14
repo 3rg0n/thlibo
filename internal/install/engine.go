@@ -108,7 +108,7 @@ func PullEngine(ctx context.Context, e Engine, opts PullOptions) (string, error)
 		return "", err
 	}
 
-	if err := os.Chmod(path, 0o755); err != nil {
+	if err := os.Chmod(path, 0o755); err != nil { // #nosec G302 — engine binary must be world-executable
 		return "", fmt.Errorf("install: chmod engine: %w", err)
 	}
 	return path, nil

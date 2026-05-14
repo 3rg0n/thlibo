@@ -33,8 +33,8 @@ func (f *daemonFixture) makeConfig(t *testing.T, engineArgs ...string) Config {
 
 	return Config{
 		LockPath: lockPath,
-		EngineCmd: func() *exec.Cmd {
-			return exec.Command(f.stubPath, engineArgs...)
+		EngineFactory: func() (Engine, error) {
+			return StartSubprocessEngine(exec.Command(f.stubPath, engineArgs...))
 		},
 		InferenceEndpoint: ipc.EndpointConfig{
 			Kind: ipc.EndpointInference, Address: "127.0.0.1:0", UseTCP: true,

@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -201,25 +200,33 @@ func parseFlags(argv []string) (*flags, error) {
 	return f, nil
 }
 
-func buildConfig(f *flags) (daemon.Config, error) {
-	// Build the engine argv. Order: context-window first, then each
-	// stop token, then any operator-supplied extra args. The
-	// operator wins on trailing duplicates because llamafile honours
-	// last-value-wins.
-	var engineArgs []string
+// buildEngineArgs constructs the extra-args slice passed to the engine
+// after the server flags that StartLlamafileEngine prepends. Exposed as
+// a standalone function so main_test.go can inspect the argv without
+// actually spawning a process.
+func buildEngineArgs(f *flags) []string {
+	// Order: model (-m), context (-c), stop tokens, then operator extras.
+	// Operator args come last so last-value-wins favours their overrides.
+	var args []string
 	if f.modelPath != "" {
-		engineArgs = append(engineArgs, "-m", f.modelPath)
+		args = append(args, "-m", f.modelPath)
 	}
 	if f.ctxSize > 0 {
-		engineArgs = append(engineArgs, "-c", fmt.Sprintf("%d", f.ctxSize))
+		args = append(args, "-c", fmt.Sprintf("%d", f.ctxSize))
 	}
 	for _, tok := range splitCommaList(f.stopTokens) {
 		if tok == "" {
 			continue
 		}
-		engineArgs = append(engineArgs, "--stop", tok)
+		args = append(args, "--stop", tok)
 	}
-	engineArgs = append(engineArgs, splitFields(f.engineArgs)...)
+	args = append(args, splitFields(f.engineArgs)...)
+	return args
+}
+
+func buildConfig(f *flags) (daemon.Config, error) {
+	engineArgs := buildEngineArgs(f)
+	enginePath := f.enginePath
 
 	infer := ipc.EndpointConfig{
 		Kind:    ipc.EndpointInference,
@@ -235,23 +242,11 @@ func buildConfig(f *flags) (daemon.Config, error) {
 
 	return daemon.Config{
 		LockPath: f.lockPath,
-		EngineCmd: func() *exec.Cmd {
-			// llamafile ships a polyglot (APE) binary that on macOS
-			// cannot be execve'd directly — the kernel rejects the
-			// MS-DOS/ZIP header with ENOEXEC. Invoking it through the
-			// shell lets the APE bootstrap script self-extract and run
-			// the native Mach-O payload. Linux and Windows exec it
-			// directly (ld-linux.so handles the APE format).
-			// #nosec G204,G702 — enginePath is a daemon config value
-			// set by the operator via a flag or installer default,
-			// never user-controllable at runtime.
-			// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
-			if runtime.GOOS == "darwin" {
-				args := append([]string{f.enginePath}, engineArgs...)
-				// #nosec G204 — same rationale as above
-				return exec.Command("/bin/sh", args...)
-			}
-			return exec.Command(f.enginePath, engineArgs...)
+		// #nosec G204 — enginePath is operator-configured (flag/installer
+		// default), never user-controllable at runtime.
+		// nosemgrep: dangerous-exec-command
+		EngineFactory: func() (daemon.Engine, error) {
+			return daemon.StartLlamafileEngine(enginePath, engineArgs)
 		},
 		InferenceEndpoint: infer,
 		AdminEndpoint:     adminEP,

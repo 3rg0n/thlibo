@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// #13: buildConfig must push -c <ctx> and each --stop <token> into the
+// #13: buildEngineArgs must push -c <ctx> and each --stop <token> into the
 // engine argv, ahead of any operator-supplied --engine-args, so the
 // llamafile spawn always has a bounded context and turn-boundary
 // stops even when the operator doesn't specify them.
@@ -15,11 +15,7 @@ func TestBuildConfigEmitsCtxAndStopArgs(t *testing.T) {
 		ctxSize:    defaultCtxSize,
 		stopTokens: defaultStopTokens,
 	}
-	cfg, err := buildConfig(f)
-	if err != nil {
-		t.Fatalf("buildConfig: %v", err)
-	}
-	args := cfg.EngineCmd().Args // includes argv[0] = enginePath
+	args := buildEngineArgs(f)
 	joined := strings.Join(args, " ")
 
 	if !strings.Contains(joined, "-c 32768") {
@@ -43,11 +39,7 @@ func TestBuildConfigOperatorArgsComeLast(t *testing.T) {
 		stopTokens: defaultStopTokens,
 		engineArgs: "-c 8192 --ngl 99",
 	}
-	cfg, err := buildConfig(f)
-	if err != nil {
-		t.Fatalf("buildConfig: %v", err)
-	}
-	args := cfg.EngineCmd().Args[1:] // drop argv[0]
+	args := buildEngineArgs(f)
 	// Find indices of the first -c (ours) and the second -c
 	// (operator's). Operator's should come strictly after ours.
 	first, second := -1, -1
@@ -78,11 +70,7 @@ func TestBuildConfigZeroValuesSuppress(t *testing.T) {
 		ctxSize:    0,
 		stopTokens: "",
 	}
-	cfg, err := buildConfig(f)
-	if err != nil {
-		t.Fatalf("buildConfig: %v", err)
-	}
-	joined := strings.Join(cfg.EngineCmd().Args, " ")
+	joined := strings.Join(buildEngineArgs(f), " ")
 	if strings.Contains(joined, "-c ") {
 		t.Errorf("ctxSize=0 should suppress -c; got %q", joined)
 	}

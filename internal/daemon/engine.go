@@ -40,6 +40,10 @@ type Engine interface {
 	// Done returns a channel closed when the engine process exits.
 	// Used by the crash-restart supervisor.
 	Done() <-chan struct{}
+
+	// ExitErr returns the process exit error after Done fires. Returns
+	// nil if the process has not yet exited or exited cleanly.
+	ExitErr() error
 }
 
 // GeneratePrompt is the minimum the daemon hands to the engine per

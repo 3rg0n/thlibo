@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,7 +27,7 @@ const MaxRestartAttempts = 3
 // the lifecycle package owns correctness, not ergonomics.
 type Config struct {
 	LockPath          string
-	EngineCmd         func() *exec.Cmd // factory so restarts build a fresh Cmd
+	EngineFactory     func() (Engine, error) // factory so restarts build a fresh Engine
 	InferenceEndpoint ipc.EndpointConfig
 	AdminEndpoint     ipc.EndpointConfig
 	ReadyPollInterval time.Duration // default 50ms
@@ -49,7 +48,7 @@ type Daemon struct {
 	lock *Lock
 
 	engineMu sync.RWMutex
-	engine   *SubprocessEngine
+	engine   Engine
 
 	infL    net.Listener
 	adminL  net.Listener
@@ -91,8 +90,8 @@ func Start(ctx context.Context, cfg Config) (*Daemon, error) {
 	if cfg.QueueDepth == 0 {
 		cfg.QueueDepth = 10
 	}
-	if cfg.EngineCmd == nil {
-		return nil, errors.New("daemon: EngineCmd is required")
+	if cfg.EngineFactory == nil {
+		return nil, errors.New("daemon: EngineFactory is required")
 	}
 
 	d := &Daemon{
@@ -112,7 +111,7 @@ func Start(ctx context.Context, cfg Config) (*Daemon, error) {
 	d.lock = lock
 
 	// Step 2: spawn the engine.
-	eng, err := StartSubprocessEngine(cfg.EngineCmd())
+	eng, err := cfg.EngineFactory()
 	if err != nil {
 		_ = d.lock.Release()
 		return nil, fmt.Errorf("daemon: start engine: %w", err)
@@ -167,14 +166,14 @@ func Start(ctx context.Context, cfg Config) (*Daemon, error) {
 	return d, nil
 }
 
-func (d *Daemon) setEngine(e *SubprocessEngine) {
+func (d *Daemon) setEngine(e Engine) {
 	d.engineMu.Lock()
 	d.engine = e
 	d.engineMu.Unlock()
 	d.engineDead.Store(false)
 }
 
-func (d *Daemon) currentEngine() *SubprocessEngine {
+func (d *Daemon) currentEngine() Engine {
 	d.engineMu.RLock()
 	defer d.engineMu.RUnlock()
 	return d.engine
@@ -222,7 +221,7 @@ func (d *Daemon) superviseEngine() {
 			Status: fmt.Sprintf("restarting_engine_attempt_%d", attempts),
 		})
 
-		newEng, err := StartSubprocessEngine(d.cfg.EngineCmd())
+		newEng, err := d.cfg.EngineFactory()
 		if err != nil {
 			d.broadcastAdmin(ipc.Response{
 				ID:      ipc.AdminID,
