@@ -1,0 +1,20 @@
+THREAT_MODEL.md
+  s_5811b7f24eccc0::t_b7bd90d1b494d7 202-218,220-222,225-228,233-235,238-246
+  s_5811b7f24eccc0::t_437be479bcdc44 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "baab03b4fbd8c6d3a78be7dfd66bed71927cdd48",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
