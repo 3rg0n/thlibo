@@ -3,7 +3,6 @@
 package install
 
 import (
-	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,24 +22,6 @@ func newDarwinInstaller() (Installer, error) {
 }
 
 func (d *darwinInstaller) Mechanism() string { return "LaunchAgent" }
-
-// launchAgent is the minimal plist shape launchd accepts. We build
-// XML manually to keep the dependency footprint tiny — no plist
-// package needed, and the output is stable across launchd versions.
-type launchAgent struct {
-	XMLName          xml.Name `xml:"plist"`
-	Version          string   `xml:"version,attr"`
-	Dict             dictNode `xml:"dict"`
-}
-
-type dictNode struct {
-	Entries []kvNode `xml:",any"`
-}
-
-type kvNode struct {
-	XMLName xml.Name
-	Value   string `xml:",chardata"`
-}
 
 func (d *darwinInstaller) Install(spec AutostartSpec) error {
 	if err := os.MkdirAll(d.dir, 0o750); err != nil {

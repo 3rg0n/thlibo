@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove unused plist XML structs (`launchAgent`, `dictNode`, `kvNode`)
+  in `internal/install/autostart_darwin.go` — leftover from an earlier
+  draft before `plistXML()` switched to hand-rolled string formatting.
+  Closes #10.
+
 ## [0.2.0] - 2026-05-14
 
 Hardening + platform-coverage release. Closes every finding from the
