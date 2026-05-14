@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 )
@@ -110,6 +111,13 @@ func PullEngine(ctx context.Context, e Engine, opts PullOptions) (string, error)
 
 	if err := os.Chmod(path, 0o755); err != nil { // #nosec G302 — engine binary must be world-executable
 		return "", fmt.Errorf("install: chmod engine: %w", err)
+	}
+	// macOS Gatekeeper quarantines binaries downloaded via Go's HTTP
+	// client the same way it does files from a browser. Strip the flag
+	// so thlibod can exec the engine without a "blocked" dialog.
+	if runtime.GOOS == "darwin" {
+		// #nosec G204 — path is installer-derived, not user input
+		_ = exec.Command("xattr", "-d", "com.apple.quarantine", path).Run()
 	}
 	return path, nil
 }

@@ -70,9 +70,13 @@ resolve_tag() {
     echo "$THLIBO_VERSION"
     return
   fi
-  # Plain curl to the API; no auth required for public releases.
+  # Pass GITHUB_TOKEN if set — avoids 403 on rate-limited IPs.
   # grep+head keeps us from needing jq as a prerequisite.
-  curl -fsSL "$RELEASES_API/latest" \
+  local auth_args=()
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  fi
+  curl -fsSL "${auth_args[@]}" "$RELEASES_API/latest" \
     | grep -oE '"tag_name":\s*"[^"]+"' \
     | head -n1 \
     | sed -E 's/.*"([^"]+)"$/\1/'
@@ -123,6 +127,13 @@ main() {
   local extracted="$tmp/thlibo-${platform}"
   install -m 755 "$extracted/bin/thlibo"  "$INSTALL_DIR/thlibo"
   install -m 755 "$extracted/bin/thlibod" "$INSTALL_DIR/thlibod"
+
+  # macOS Gatekeeper quarantines binaries downloaded from the internet.
+  # Strip the flag so they run without a system "blocked" dialog.
+  if [ "$(uname -s)" = "Darwin" ]; then
+    xattr -d com.apple.quarantine "$INSTALL_DIR/thlibo"  2>/dev/null || true
+    xattr -d com.apple.quarantine "$INSTALL_DIR/thlibod" 2>/dev/null || true
+  fi
 
   say "installed thlibo $tag → $INSTALL_DIR"
 

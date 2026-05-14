@@ -53,6 +53,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- macOS Gatekeeper no longer blocks thlibo/thlibod on first run.
+  `install.sh` strips `com.apple.quarantine` from both binaries after
+  extraction; `PullEngine` does the same for the llamafile engine after
+  download. Without this, macOS pops an "app blocked" toast and the
+  daemon cannot start. Closes #13.
+- `install.sh` now passes `GITHUB_TOKEN` (when set) as an
+  `Authorization: Bearer` header to the GitHub releases API call that
+  resolves `latest`. Machines that have exhausted the 60-req/hr
+  unauthenticated rate limit were getting a 403 and the installer
+  bailed before downloading anything. Explicit `THLIBO_VERSION=vX.Y.Z`
+  still bypasses the API entirely. Closes #14.
+
 - LaunchAgent plist now sets `HOME` env var and passes explicit `-engine`/`-model`
   flags so thlibod doesn't fail to resolve default paths under launchd's stripped
   environment. Daemon was crashing in a restart loop with `engine exited before
