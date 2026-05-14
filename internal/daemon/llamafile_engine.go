@@ -52,10 +52,11 @@ func StartLlamafileEngine(enginePath string, extraArgs []string) (*LlamafileEngi
 	}
 
 	// Server flags prepended; extraArgs follow so operator overrides win.
+	// --server puts llamafile in headless HTTP-only mode (no TUI, no browser).
 	serverArgs := []string{
+		"--server",
 		"--port", fmt.Sprintf("%d", port),
 		"--host", "127.0.0.1",
-		"--nobrowser",
 	}
 	args := append(serverArgs, extraArgs...)
 
