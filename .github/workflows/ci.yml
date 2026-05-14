@@ -11,13 +11,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Force every JavaScript action in this workflow onto Node.js 24.
-# Node 20 is being removed from the runners on 2026-09-16 and was
-# already deprecation-warning-loud on our v0.2.0 release run. This
-# flag is GitHub's supported opt-in that makes Node 24 active before
-# the default flip on 2026-06-02 (the new default) and before the
-# v4/v5 action tags we SHA-pinned ship new major versions that
-# embed Node 24 natively. See
+# Most JS actions here are now pinned to Node-24-native majors. Three
+# holdouts still target Node 20:
+#   - actions/upload-artifact@v5    (authored for node20; v5 is the latest major)
+#   - actions/download-artifact@v5  (same)
+#   - gitleaks/gitleaks-action@v2   (no v3 shipped)
+# FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 is GitHub's opt-in that makes
+# the runner execute node20 bundles on Node 24. Drops automatically
+# when each action's next major ships Node 24; Dependabot tracks
+# those bumps.
 # https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -33,9 +35,9 @@ jobs:
         go: ["1.26.3"]
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5 (node24)
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6 (node24)
         with:
           go-version: ${{ matrix.go }}
           cache: true
@@ -43,7 +45,7 @@ jobs:
         # python3 is required for the built-in script processors'
         # on-disk C6 integration test, and will be needed by
         # `thlibo exec` at runtime as well.
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6 (node24)
         with:
           python-version: "3.12"
       - name: go vet
@@ -60,9 +62,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5 (node24)
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6 (node24)
         with:
           go-version: "1.26.3"
           cache: true
@@ -105,7 +107,7 @@ jobs:
 
       - name: Set up Python
         # semgrep is python-based.
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6 (node24)
         with:
           python-version: "3.12"
       - name: Install semgrep
@@ -120,7 +122,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5 (node24)
         with:
           # Full history so gitleaks can look at commit diffs.
           fetch-depth: 0
