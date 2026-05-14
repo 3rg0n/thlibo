@@ -1,0 +1,23 @@
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_92e191e777ca5c 18-22
+.github/workflows/pages.yml
+  s_5811b7f24eccc0::t_ee680854e59155 20-24
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_81a1d793783db5 14-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "1230065d76fe160c216d30219892d029d3b4a5fc",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
