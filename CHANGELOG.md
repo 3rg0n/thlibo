@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `install.sh` NEXT STEP 2 now instructs `--pull-engine --pull-model`
+  together; the engine (~838 MB) is required and was silently omitted
+  from the documented flow, causing `thlibod` to fail immediately on
+  fresh installs with "no such file or directory". Closes #5.
+- `thlibo install` plan output now clearly warns when the engine will
+  not be downloaded ("thlibod will fail without it") instead of the
+  neutral "not downloaded" message.
 - Remove unused plist XML structs (`launchAgent`, `dictNode`, `kvNode`)
   in `internal/install/autostart_darwin.go` — leftover from an earlier
   draft before `plistXML()` switched to hand-rolled string formatting.

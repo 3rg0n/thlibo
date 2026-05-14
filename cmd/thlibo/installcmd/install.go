@@ -144,7 +144,8 @@ func Run(argv []string) int {
 		fmt.Printf("  engine:         llamafile v%s -> %s\n",
 			install.DefaultEngine.Version, install.EngineDir())
 	} else {
-		fmt.Println("  engine:         (not downloaded; run `thlibo install --pull-engine` separately)")
+		fmt.Println("  engine:         (not downloaded — thlibod will fail without it)")
+		fmt.Println("                  run `thlibo install --pull-engine` to download (~838 MB)")
 	}
 	if pullModel {
 		fmt.Printf("  model:          %s -> %s\n",

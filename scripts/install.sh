@@ -136,11 +136,12 @@ main() {
     echo
   fi
   say "NEXT STEP 2: finish the install:"
-  say "    thlibo install --pull-model"
+  say "    thlibo install --pull-engine --pull-model"
   say ""
-  say "  This wires up the Claude Code hook, registers the daemon for"
-  say "  autostart, and downloads the ~5 GB Gemma 4 model. See README.md"
-  say "  for what each flag does."
+  say "  --pull-engine  downloads the llamafile engine binary (~838 MB, required)."
+  say "  --pull-model   downloads the Gemma 4 E4B GGUF model (~5 GB, required)."
+  say "  This also wires up the Claude Code hook and registers the daemon"
+  say "  for autostart. Run it once; both downloads are resumable."
 }
 
 main "$@"
