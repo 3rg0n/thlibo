@@ -3,6 +3,7 @@
 package ipc
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -43,9 +44,18 @@ func listenNative(cfg EndpointConfig) (net.Listener, error) {
 
 	if cfg.Group != "" {
 		if err := chownToGroup(cfg.Address, cfg.Group); err != nil {
-			_ = l.Close()
-			_ = os.Remove(cfg.Address)
-			return nil, fmt.Errorf("ipc: chown %s to group %s: %w", cfg.Address, cfg.Group, err)
+			// Unknown group is non-fatal: the socket is in a user-owned
+			// TMPDIR on macOS, so directory permissions are the primary
+			// gate. On Linux with a properly-configured thlibo-users group
+			// this would succeed. Log and continue.
+			if isUnknownGroup(err) {
+				fmt.Fprintf(os.Stderr, "ipc: group %q not found, skipping chown (socket in %s)\n",
+					cfg.Group, cfg.Address)
+			} else {
+				_ = l.Close()
+				_ = os.Remove(cfg.Address)
+				return nil, fmt.Errorf("ipc: chown %s to group %s: %w", cfg.Address, cfg.Group, err)
+			}
 		}
 	}
 	return l, nil
@@ -54,7 +64,9 @@ func listenNative(cfg EndpointConfig) (net.Listener, error) {
 func chownToGroup(path, groupName string) error {
 	g, err := user.LookupGroup(groupName)
 	if err != nil {
-		return fmt.Errorf("lookup group %q: %w", groupName, err)
+		// user.UnknownGroupError wraps the group name; propagate as-is so
+		// isUnknownGroup can detect it without string-matching.
+		return err
 	}
 	gid, err := strconv.Atoi(g.Gid)
 	if err != nil {
@@ -62,4 +74,9 @@ func chownToGroup(path, groupName string) error {
 	}
 	// -1 uid keeps the current owner.
 	return os.Chown(path, -1, gid)
+}
+
+func isUnknownGroup(err error) bool {
+	var e user.UnknownGroupError
+	return errors.As(err, &e) || errors.As(err, new(user.UnknownGroupIdError))
 }
