@@ -438,6 +438,7 @@ func (d *Daemon) handleInference(conn net.Conn) {
 		TopP:        resolved.TopP,
 		TopK:        resolved.TopK,
 		MaxTokens:   resolved.MaxTokens,
+		Grammar:     req.Grammar,
 	}
 	for _, m := range req.Messages {
 		switch m.Role {

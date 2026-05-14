@@ -55,6 +55,10 @@ type GeneratePrompt struct {
 	TopP        float64
 	TopK        int
 	MaxTokens   int
+	// Grammar is an optional GBNF grammar string that constrains the
+	// model's output token choices. Used by the routing call to force
+	// the model to name a processor. Empty means unconstrained.
+	Grammar string
 }
 
 // ErrNotReady is returned when Generate is called before the engine has

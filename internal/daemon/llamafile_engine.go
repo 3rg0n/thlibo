@@ -11,33 +11,39 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
 )
 
-// LlamafileEngine drives llamafile in HTTP server mode.
+// LlamafileEngine drives llamafile in HTTP server mode over a private
+// Unix-domain socket. No TCP port is allocated or bound.
 //
-// On creation it allocates a random loopback port, spawns llamafile with
-// --server --port/--host, and begins polling GET /health in the background.
-// Ready() flips true once the server accepts the first healthy request.
-// Generate() calls POST /v1/chat/completions with SSE streaming.
+// llamafile supports Unix-socket binding natively via
+//
+//	--host /path/to/file.sock
+//
+// We generate a per-process socket path under the existing thlibo runtime
+// directory ($TMPDIR/thlibo/llamafile-<pid>.sock) and build an HTTP client
+// whose DialContext goes directly to that socket. All traffic between
+// thlibod and llamafile stays in kernel memory with no network involvement.
 //
 // Stop sequences from the -stop flag are NOT passed as CLI arguments
 // (llamafile --server mode does not accept --stop flags; they are
-// per-request parameters). Instead they travel in the "stop" field of
-// each /v1/chat/completions request body.
+// per-request parameters). They travel in the "stop" field of each
+// POST /v1/chat/completions request body.
 //
 // The Engine interface contract (Ready, Generate, Stop, Done, ExitErr) is
 // identical to SubprocessEngine so the daemon lifecycle layer is unaware of
 // which backend is running.
 type LlamafileEngine struct {
 	cmd        *exec.Cmd
-	port       int
-	baseURL    string
+	sockPath   string
+	baseURL    string // "http://llamafile" — host is a dummy; transport uses sockPath
 	stopTokens []string
-	client     *http.Client // short-timeout client for health probes
+	client     *http.Client // unix-socket client for all llamafile requests
 
 	ready atomic.Bool
 	done  chan struct{}
@@ -46,26 +52,27 @@ type LlamafileEngine struct {
 
 // StartLlamafileEngine spawns the llamafile binary at enginePath with
 // extraArgs (e.g. -m model.gguf -c 32768) appended after the internal
-// server flags. stopTokens is a list of per-request stop sequences; they
-// are injected into each /v1/chat/completions request body (not as CLI
-// flags, which are unsupported in --server mode). On macOS the binary is
-// wrapped in /bin/sh because the APE polyglot format cannot be execve'd
-// directly.
+// server flags. stopTokens is a list of per-request stop sequences.
+//
+// On macOS the binary is wrapped in /bin/sh because the APE polyglot
+// format cannot be execve'd directly.
 //
 // The caller must call Stop when done; the engine is NOT ready until
 // Ready() returns true (probed by the daemon's waitReady loop).
 func StartLlamafileEngine(enginePath string, extraArgs, stopTokens []string) (*LlamafileEngine, error) {
-	port, err := freePort()
+	sockPath, err := engineSocketPath()
 	if err != nil {
-		return nil, fmt.Errorf("engine: find free port: %w", err)
+		return nil, fmt.Errorf("engine: pick socket path: %w", err)
 	}
+	_ = os.Remove(sockPath) // clean up any stale socket from a previous crash
 
 	// Server flags prepended; extraArgs follow so operator overrides win.
-	// --server puts llamafile in headless HTTP-only mode (no TUI, no browser).
+	// --server puts llamafile in headless HTTP-only mode.
+	// --host <path>.sock tells llamafile to bind on a Unix socket instead
+	// of a TCP port (supported since llamafile 0.9 / llama.cpp b3xxx).
 	serverArgs := []string{
 		"--server",
-		"--port", fmt.Sprintf("%d", port),
-		"--host", "127.0.0.1",
+		"--host", sockPath,
 	}
 	args := append(serverArgs, extraArgs...)
 
@@ -88,12 +95,24 @@ func StartLlamafileEngine(enginePath string, extraArgs, stopTokens []string) (*L
 		return nil, fmt.Errorf("engine: start: %w", err)
 	}
 
+	// Build an HTTP client whose transport dials the Unix socket.
+	// The URL host ("llamafile") is a dummy label; no DNS lookup happens.
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", sockPath)
+		},
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   2 * time.Second,
+	}
+
 	e := &LlamafileEngine{
 		cmd:        cmd,
-		port:       port,
-		baseURL:    fmt.Sprintf("http://127.0.0.1:%d", port),
+		sockPath:   sockPath,
+		baseURL:    "http://llamafile",
 		stopTokens: stopTokens,
-		client:     &http.Client{Timeout: 2 * time.Second},
+		client:     client,
 		done:       make(chan struct{}),
 	}
 	go e.watchExit()
@@ -104,12 +123,12 @@ func StartLlamafileEngine(enginePath string, extraArgs, stopTokens []string) (*L
 func (e *LlamafileEngine) watchExit() {
 	e.exit = e.cmd.Wait()
 	e.ready.Store(false)
+	_ = os.Remove(e.sockPath)
 	close(e.done)
 }
 
 // pollHealth probes GET /health on the given interval until the server
-// reports healthy or the process exits. It sets ready atomically so the
-// daemon's waitReady loop sees it via Ready().
+// reports healthy or the process exits.
 func (e *LlamafileEngine) pollHealth(interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
@@ -127,13 +146,18 @@ func (e *LlamafileEngine) pollHealth(interval time.Duration) {
 }
 
 func (e *LlamafileEngine) checkHealth() bool {
-	resp, err := e.client.Get(e.baseURL + "/health") //nolint:noctx
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.baseURL+"/health", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := e.client.Do(req)
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		// 503 = model loading; anything else = not ready
 		return false
 	}
 	var h struct {
@@ -146,14 +170,14 @@ func (e *LlamafileEngine) checkHealth() bool {
 	return h.Status == "ok"
 }
 
-func (e *LlamafileEngine) Ready() bool              { return e.ready.Load() }
-func (e *LlamafileEngine) Done() <-chan struct{}     { return e.done }
-func (e *LlamafileEngine) ExitErr() error           { return e.exit }
+func (e *LlamafileEngine) Ready() bool          { return e.ready.Load() }
+func (e *LlamafileEngine) Done() <-chan struct{} { return e.done }
+func (e *LlamafileEngine) ExitErr() error       { return e.exit }
 
-// Generate calls POST /v1/chat/completions (OpenAI-compatible SSE) and
-// streams content tokens into the tokens channel. Returns when the stream
-// ends, ctx is cancelled, or an error occurs. The caller closes tokens
-// after Generate returns.
+// Generate calls POST /v1/chat/completions (OpenAI-compatible SSE) over
+// the Unix socket and streams content tokens into the tokens channel.
+// Returns when the stream ends, ctx is cancelled, or an error occurs.
+// The caller closes tokens after Generate returns.
 func (e *LlamafileEngine) Generate(ctx context.Context, prompt GeneratePrompt, tokens chan<- string) error {
 	if !e.ready.Load() {
 		return ErrNotReady
@@ -179,6 +203,7 @@ func (e *LlamafileEngine) Generate(ctx context.Context, prompt GeneratePrompt, t
 		TopK:        prompt.TopK,
 		MaxTokens:   maxTokens,
 		Stop:        e.stopTokens,
+		Grammar:     prompt.Grammar,
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -193,8 +218,10 @@ func (e *LlamafileEngine) Generate(ctx context.Context, prompt GeneratePrompt, t
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	// No timeout on the streaming client — ctx provides cancellation.
-	resp, err := http.DefaultClient.Do(httpReq)
+	// Use a streaming client (no Timeout) so long generations don't hit a
+	// deadline; ctx provides cancellation.
+	streamClient := &http.Client{Transport: e.client.Transport}
+	resp, err := streamClient.Do(httpReq)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -263,17 +290,23 @@ func (e *LlamafileEngine) Stop(timeout time.Duration) error {
 	}
 }
 
-// freePort finds an available loopback TCP port by briefly binding :0
-// and recording the assigned port. There is a small TOCTOU window before
-// llamafile binds; on loopback this is acceptable for a local daemon.
-func freePort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+// engineSocketPath returns a unique socket path for this thlibod instance
+// under the existing thlibo runtime directory.
+func engineSocketPath() (string, error) {
+	dir, err := thliboRuntimeDir()
 	if err != nil {
-		return 0, err
+		return "", err
 	}
-	port := l.Addr().(*net.TCPAddr).Port
-	_ = l.Close()
-	return port, nil
+	return filepath.Join(dir, fmt.Sprintf("llamafile-%d.sock", os.Getpid())), nil
+}
+
+func thliboRuntimeDir() (string, error) {
+	base := os.TempDir()
+	dir := filepath.Join(base, "thlibo")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	return dir, nil
 }
 
 // chatCompletionRequest is the OpenAI-compatible request body.
@@ -286,6 +319,7 @@ type chatCompletionRequest struct {
 	TopK        int           `json:"top_k"`
 	MaxTokens   int           `json:"max_tokens"`
 	Stop        []string      `json:"stop,omitempty"`
+	Grammar     string        `json:"grammar,omitempty"`
 }
 
 type chatMessage struct {
