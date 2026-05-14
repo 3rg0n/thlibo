@@ -3,6 +3,8 @@ package ipc
 import (
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"runtime"
 )
 
@@ -48,7 +50,7 @@ func DefaultInferenceAddress() string {
 	case "linux":
 		return "/run/thlibo/infer.sock"
 	case "darwin":
-		return "/var/run/thlibo/infer.sock"
+		return filepath.Join(os.TempDir(), "thlibo", "infer.sock")
 	case "windows":
 		return `\\.\pipe\thlibo-infer`
 	default:
@@ -63,7 +65,7 @@ func DefaultAdminAddress() string {
 	case "linux":
 		return "/run/thlibo/admin.sock"
 	case "darwin":
-		return "/var/run/thlibo/admin.sock"
+		return filepath.Join(os.TempDir(), "thlibo", "admin.sock")
 	case "windows":
 		return `\\.\pipe\thlibo-admin`
 	default:

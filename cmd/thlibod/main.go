@@ -327,7 +327,8 @@ func defaultLockPath() string {
 	case "windows":
 		return filepath.Join(os.TempDir(), "thlibod.lock")
 	case "darwin":
-		return "/var/run/thlibo/thlibod.lock"
+		// /var/run is root-owned; $TMPDIR is per-user and always writable.
+		return filepath.Join(os.TempDir(), "thlibo", "thlibod.lock")
 	default:
 		return "/run/thlibo/thlibod.lock"
 	}
