@@ -9,17 +9,17 @@
 # What it does:
 #   1. Downloads thlibo-windows-amd64.zip from the GitHub release.
 #   2. Verifies SHA-256 against SHA256SUMS in the same release.
-#   3. Extracts thlibo.exe + thlibod.exe into %LOCALAPPDATA%\thlibo\bin.
+#   3. Extracts thlibo.exe + thlibod.exe + thlibo-engine.exe into
+#      %LOCALAPPDATA%\thlibo\bin.
 #   4. Adds that directory to the User PATH (via the Registry) so a
 #      fresh shell finds the binary. No admin required.
-#   5. Tells you what to do next.
+#   5. Runs `thlibo install --pull-model` to write Claude Code hooks,
+#      mirror processors, register autostart, and download the ~5 GB
+#      Gemma 4 model. Skip with $env:THLIBO_SKIP_INSTALL=1.
 #
 # What it does NOT do (on purpose):
-#   - Run `thlibo install`. That writes to ~/.claude/settings.json and
-#     registers an autostart entry; you should run it manually.
-#   - Download the 5 GB Gemma model.
 #   - Touch the Machine PATH or any admin-only registry. This is a
-#     per-user install.
+#     per-user install (ADR 0004).
 #
 # Why no shim binary: we install one tool to one directory and add
 # that directory to PATH. Chocolatey-style ShimGen shims solve a
@@ -117,13 +117,39 @@ try {
         Say "$InstallDir already on User PATH."
     }
 
-    Write-Host ''
-    Say 'NEXT STEP: finish the install:'
-    Say '    thlibo install --pull-model'
-    Write-Host ''
-    Say 'This wires up the Claude Code hook, registers the daemon for'
-    Say 'autostart, and downloads the ~5 GB Gemma 4 model. See'
-    Say 'README.md for what each flag does.'
+    # --- run `thlibo install --pull-model` ---
+    # The bare binary is on disk but not yet resolvable in this
+    # session's PATH (Environment changes land in HKCU, not in
+    # $env:Path for already-running processes). Call through the
+    # absolute path.
+    if ($env:THLIBO_SKIP_INSTALL -eq '1' -or
+        $env:THLIBO_SKIP_INSTALL -eq 'true' -or
+        $env:THLIBO_SKIP_INSTALL -eq 'yes') {
+        Write-Host ''
+        Say 'THLIBO_SKIP_INSTALL set — skipping configure step.'
+        Say 'To finish manually later, run (from a fresh shell):'
+        Say '    thlibo install --pull-model'
+    } else {
+        Write-Host ''
+        Say 'running: thlibo install --pull-model (this downloads ~5 GB)'
+        Say 'set $env:THLIBO_SKIP_INSTALL=1 before re-running to skip.'
+        Write-Host ''
+        $thliboExe = Join-Path $InstallDir 'thlibo.exe'
+        if (-not (Test-Path $thliboExe)) {
+            Die "thlibo.exe not found at $thliboExe after extraction" 4
+        }
+        # Forward exit code so automation / CI can key on install
+        # success the same way it keys on the download step.
+        & $thliboExe install --pull-model
+        $code = $LASTEXITCODE
+        if ($code -ne 0) {
+            Die "`"thlibo install --pull-model`" exited $code" $code
+        }
+
+        Write-Host ''
+        Say 'thlibo installed. Restart your shell so PATH picks up thlibo.exe,'
+        Say 'then start a new Claude Code session — hooks will load automatically.'
+    }
 } catch {
     Die $_.Exception.Message 1
 }

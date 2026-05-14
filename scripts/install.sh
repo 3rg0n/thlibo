@@ -6,22 +6,21 @@
 #
 # Or pinned to a specific version:
 #   curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh \
-#     | THLIBO_VERSION=v0.1.0 bash
+#     | THLIBO_VERSION=v0.3.0 bash
 #
 # What it does:
 #   1. Detects OS + architecture (linux/amd64, linux/arm64, darwin/arm64).
 #   2. Downloads the matching tarball from the GitHub release.
 #   3. Verifies SHA-256 against SHA256SUMS in the release.
-#   4. Extracts `thlibo` and `thlibod` into ~/.local/bin (creating it).
-#   5. Tells you what to do next.
+#   4. Extracts `thlibo`, `thlibod`, and `thlibo-engine` into
+#      ~/.local/bin (creating it).
+#   5. Runs `thlibo install --pull-model` to wire Claude Code hooks,
+#      register the daemon for autostart, and download the ~5 GB
+#      Gemma 4 model. Skip with THLIBO_SKIP_INSTALL=1.
 #
 # What it does NOT do (on purpose):
-#   - Run `thlibo install`. That writes to ~/.claude/settings.json and
-#     registers an autostart entry; you should run it manually after
-#     reading what it does. This script's last line tells you how.
-#   - Download the 5 GB Gemma model. Also deferred to `thlibo install`.
-#   - Modify your shell rc. It prints the one-line PATH addition you
-#     need to copy-paste.
+#   - Modify your shell rc. If ~/.local/bin isn't already on PATH it
+#     prints the one-line addition you need to copy-paste.
 #
 # Exit codes:
 #   0  success
@@ -137,22 +136,41 @@ main() {
 
   say "installed thlibo $tag → $INSTALL_DIR"
 
-  # --- next-steps guidance ---
-  echo
+  # If $INSTALL_DIR isn't on PATH for the user's usual shell, print
+  # the one-line addition they'll need. We still run thlibo below
+  # via the absolute path, so the configure step works even when
+  # the PATH line isn't there yet.
   if ! echo ":$PATH:" | grep -q ":${INSTALL_DIR}:"; then
-    say "NEXT STEP 1: add $INSTALL_DIR to your PATH."
-    say "  e.g. add this to ~/.bashrc or ~/.zshrc:"
-    say '    export PATH="$HOME/.local/bin:$PATH"'
-    say "  then restart your shell or run \`source ~/.bashrc\`."
     echo
+    say "NOTE: $INSTALL_DIR is not on your PATH."
+    say "  Add this to ~/.bashrc or ~/.zshrc for future shells:"
+    say '    export PATH="$HOME/.local/bin:$PATH"'
   fi
-  say "NEXT STEP 2: finish the install:"
-  say "    thlibo install --pull-engine --pull-model"
-  say ""
-  say "  --pull-engine  downloads the llamafile engine binary (~838 MB, required)."
-  say "  --pull-model   downloads the Gemma 4 E4B GGUF model (~5 GB, required)."
-  say "  This also wires up the Claude Code hook and registers the daemon"
-  say "  for autostart. Run it once; both downloads are resumable."
+
+  # --- run `thlibo install --pull-model` -----------------------------
+  case "${THLIBO_SKIP_INSTALL:-0}" in
+    1|true|yes|on)
+      echo
+      say "THLIBO_SKIP_INSTALL set — skipping configure step."
+      say "To finish manually later, run:"
+      say "    $INSTALL_DIR/thlibo install --pull-model"
+      ;;
+    *)
+      echo
+      say "running: $INSTALL_DIR/thlibo install --pull-model"
+      say "  (downloads the ~5 GB Gemma 4 model; skip by setting"
+      say "   THLIBO_SKIP_INSTALL=1 and re-running)"
+      echo
+      # Absolute path: PATH in this shell may not yet include
+      # $INSTALL_DIR even if a future rc source will.
+      if ! "$INSTALL_DIR/thlibo" install --pull-model; then
+        die "\`thlibo install --pull-model\` failed; re-run it manually from a fresh shell to retry" 4
+      fi
+      echo
+      say "thlibo installed. Start a new Claude Code session —"
+      say "hooks load automatically."
+      ;;
+  esac
 }
 
 main "$@"
