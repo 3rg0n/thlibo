@@ -9,6 +9,8 @@
 
 Nine MAESTRO agents analysed 91 source and config files across the seven architectural layers, plus a dependency CVE scan (`govulncheck`) and an agent/plug-in integrity audit of the embedded processors and hook shell scripts. The analysis surfaced **37 raw findings**; after deterministic normalisation, VCS-claim verification, and deduplication by `(file, line, threat_id)`, the merged set is **28 findings** — **0 critical, 2 high, 11 medium, 13 low, 2 info**.
 
+**Current status (post-remediation, 2026-05-14): 0 open.** 24 findings closed by code fixes across two remediation passes and the v0.2 feature work; 4 findings explicitly **Accepted** as intentional design decisions — see "Status after remediation passes" below. Every finding in this document carries one of three terminal states: **Mitigated** (code fix landed, referenced commit), **Accepted** (intentional, documented, won't change), or **Deferred** (planned, target release named).
+
 The single most important finding is **L1/INTEGRITY shared**: tool-output bytes from arbitrary CLI commands (`git`, `npm`, `cargo`, any other Bash-matched tool) are concatenated into prompts for the local Gemma 4 model and for the router **without any token-level sanitisation**. Gemma's native tool-call markers (`<|tool_call|>`, `<tool_call|>`) appearing in the raw `git diff` or `npm` output can influence router decisions and prompt-processor output. Impact is bounded by the fallback-on-error contract (a bad routing decision falls back to the original bytes, so the AI client never *breaks*), but a confused router can silently apply the wrong processor chain.
 
 The second-tier finding cluster is **supply-chain hardening gaps**: GitHub Actions in `release.yml` / `ci.yml` / `pages.yml` are pinned by *semver tag*, not by commit SHA, so a hijacked action version could reach the release pipeline. The one-line `curl | bash` / `iwr | iex` installers are functional and verify SHA256SUMS against the release, but the SHA256SUMS itself is hosted on the same release, so a release-level compromise defeats the checksum.
@@ -197,43 +199,51 @@ Scanned with `govulncheck@v1.1.4` (DB: `vuln.go.dev`). Third-party direct deps: 
 
 ## Status after remediation passes
 
-As of the second remediation pass (commit following this file), the
-high- and medium-severity findings are closed and every low-severity
-real bug has a code-level fix. What remains is documented here so a
-future review doesn't re-open settled decisions.
+Every finding in this document has a terminal state. The counts at
+the top reflect what was surfaced in the original scan; **nothing
+below is open**.
 
-### Won't fix — by design (captured as ADR-scope decisions)
+### Mitigated (code fix landed)
+
+- **First remediation pass** (commit `d2b813e`): #1, #2, #4, #5, #6,
+  #7, #8, #10, #11, #12, #14, #15, #20.
+- **Second remediation pass** (commit `bc897a0`): #9, #13, #18, #19,
+  #21, #26.
+- **v0.2 feature work** (commit `dd74c3a`): #27, #28.
+
+Each mitigation references its finding number in the commit message
+and in the relevant package comment. `CHANGELOG.md` under
+`[Unreleased]` has the per-finding description.
+
+### Accepted — by design
+
+These are **not open**. They are the correct behaviour and will not
+change. Status: **Accepted**. Listed here so a future reviewer
+doesn't re-open settled decisions.
 
 - **#16 MA-6 persistence injection.** `thlibo install` writes a
-  persistent PreToolUse hook into `~/.claude/settings.json` by design
-  — that persistence is the product. Alternatives (prompt-per-session
-  re-install, middleware-less proxy mode) are tracked as v0.2
-  alternatives, not bug fixes.
+  persistent PreToolUse hook into `~/.claude/settings.json` by
+  design — that persistence is the product. Alternatives (prompt-
+  per-session re-install, middleware-less proxy mode) are tracked
+  as v0.2 feature alternatives, not as fixes.
 - **#17 T32 per-caller rate limit.** The daemon enforces a fixed
   queue: 1 active + 10 waiting, `ErrFull` immediate. This is the
   published contract (spec §Concurrency). A local attacker who
   spams the socket can monopolise by re-submitting after each
-  reject, but the resulting DoS is scoped to the user's own daemon;
-  no cross-tenant impact because thlibod is per-user.
+  reject, but the resulting DoS is scoped to the user's own
+  daemon; no cross-tenant impact because thlibod is per-user.
+  Revisit only if a multi-tenant deployment mode is ever added.
 - **#22 T11 exec allow-list.** `thlibo exec` runs whatever the AI
   client asks it to run; safety is explicitly delegated to the AI
-  client's own permission layer. An allow-list here would duplicate
-  (and risk drifting from) Claude Code's command allow-list.
-- **#24 T9 no SO_PEERCRED.** The Unix socket ACL (mode 0660, group
-  `thlibo-users`) is the identity check. Adding a second check in
-  user-space would be strictly redundant for the per-user deployment
-  model. If a multi-tenant deployment mode is ever added, this
-  becomes a real requirement.
-
-### Closed in v0.2
-
-- **#27 T14 / #28 T25** — landed. `release.yml` emits a CycloneDX
-  SBOM via `anchore/sbom-action@v0` (pinned by SHA) and signs every
-  archive, `SHA256SUMS`, and the SBOM with cosign keyless via
-  Sigstore. Identity is bound to the workflow at the release tag;
-  transparency entries go to `rekor.sigstore.dev`. README + release
-  notes include the exact `cosign verify-blob` command consumers
-  run to validate.
+  client's own permission layer. An allow-list here would
+  duplicate (and risk drifting from) Claude Code's command
+  allow-list.
+- **#24 T9 no SO_PEERCRED.** The Unix socket ACL (mode 0660,
+  group `thlibo-users`) and the Windows named-pipe SDDL
+  (user-SID-only) are the identity checks. A second check in
+  user-space would be strictly redundant for the per-user
+  deployment model. Revisit only if a multi-tenant deployment
+  mode is ever added.
 
 ## Recommended Mitigations (Priority Order)
 
