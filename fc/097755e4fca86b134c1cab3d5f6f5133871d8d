@@ -1,0 +1,57 @@
+internal/adapters/claudecode/hook-read.ps1
+  s_5811b7f24eccc0::t_919e06b21b8d60 1-69
+internal/adapters/claudecode/claudecode.go
+  s_5811b7f24eccc0::t_3f49e43bb4a820 249-252,255-259
+  s_5811b7f24eccc0::t_62b803d04b1966 272-275,277-300,324-328,344-360
+  s_5811b7f24eccc0::t_53b9de2a3d13b5 455-468
+  s_5811b7f24eccc0::t_e6cd26ee628cd8 431
+  s_5811b7f24eccc0::t_d3872175ec9bab 41-49,52-55,58-66,260,329,361-362
+  s_5811b7f24eccc0::t_7dad3066aa2fe3 109-119
+internal/adapters/claudecode/claudecode_test.go
+  s_5811b7f24eccc0::t_235dc9fe6812d7 671-805
+internal/casefile/casefile.go
+  s_5811b7f24eccc0::t_42376b3ed4b2c6 38
+  s_5811b7f24eccc0::t_9d962b224f1c34 1-37,39-185,192-270,275-323
+  s_5811b7f24eccc0::t_de666021e9d2a6 271-274
+  s_5811b7f24eccc0::t_5c252bca095bb7 186-191
+internal/adapters/claudecode/platform.go
+  s_5811b7f24eccc0::t_acb211f9d99dc8 1-9
+CHANGELOG.md
+  s_5811b7f24eccc0::t_352058d7d80d17 12-28
+skills/caselog/README.md
+  s_5811b7f24eccc0::t_1c8dec63faba17 1-28
+internal/casefile/casefile_test.go
+  s_5811b7f24eccc0::t_bec6c5389fa96d 1-128
+internal/adapters/claudecode/hook-read.sh
+  s_5811b7f24eccc0::t_376d4a9ecc4d43 1-84
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_2192ad85869b9a 236-251
+  s_5811b7f24eccc0::t_5aee398759d20c 102-108,235
+  s_5811b7f24eccc0::t_6f163f79bf5a14 204-230,234
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_c21a50d5c229bd 24
+  s_5811b7f24eccc0::t_36a09a8e5a3a3b 103-106
+  s_5811b7f24eccc0::t_71af4c99d85df1 73-74
+cmd/thlibo/uninstallcmd/uninstall.go
+  s_5811b7f24eccc0::t_79a18403b40446 67-70
+  s_5811b7f24eccc0::t_0ed01b76f6a5e5 95-104,109-117
+internal/adapters/claudecode/skill.go
+  s_5811b7f24eccc0::t_7ba7741d393ad2 1-15,17-54
+  s_5811b7f24eccc0::t_dec7b394c1c9ee 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "fc097755e4fca86b134c1cab3d5f6f5133871d8d",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
