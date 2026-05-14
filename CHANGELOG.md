@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-14
+
+Feature-focused release building on v0.2's hardening foundation.
+New Read-tool hook + `thlibo case` + `/caselog` skill turn dragged
+log files into compressed case directories before Claude sees
+them. Background update checker notifies users of new releases.
+Gatekeeper + GITHUB_TOKEN installer fixes unblock fresh macOS
+installs and rate-limited networks. All CI actions bumped to
+Node-24-native majors where available.
+
 ### Added
 
 - `thlibo case <file>` subcommand and `/caselog` Claude Code skill +
