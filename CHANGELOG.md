@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-14
+
+Hardening + platform-coverage release. Closes every finding from the
+MAESTRO threat model sweep, including the four originally marked
+"Accepted by design" that were re-scoped as the `inferd` split
+surfaced a multi-tenant story. Adds PowerShell tool support for
+Claude Code on Windows, Gemma 4 native context-window + stop-token
+flags for the daemon, and Sigstore keyless signing + CycloneDX SBOM
+on every release artefact.
+
 ### Added (v0.2 hardening — #16, #17, #22, #24)
 
 - `thlibo uninstall` subcommand reverses `thlibo install`: removes
