@@ -398,21 +398,25 @@ Not implemented in v0.1; for now, remove the hook entry from
 
 ---
 
-## Known limitations (v0.1)
+## Known limitations (v0.2)
 
-- **Bash tool only.** The PreToolUse+rewrite mechanism only affects
-  the Bash tool. `Read`, `Grep`, `Glob`, and MCP tools bypass this
-  path. v0.2 may add an HTTP proxy mode for universal coverage.
-- **No GGUF bundling yet.** The installer doesn't download the
-  Gemma 4 model automatically — you need to fetch
-  `bartowski/gemma-4-E4B-IT-GGUF` from HuggingFace manually and
-  place it at `~/.thlibo/models/gemma-4-e4b-q4_k_m.gguf`. v0.1
-  release will bundle the model in the release archive.
-- **No Codex or Cursor support.** The adapters package has
-  scaffolding for both but v0.1 only ships the Claude Code hook.
+- **Bash, PowerShell, and Read tool coverage; MCP tools bypass.** The
+  PreToolUse hook intercepts Claude Code's `Bash` tool, `PowerShell`
+  tool (when `CLAUDE_CODE_USE_POWERSHELL_TOOL=1`), and `Read` tool
+  (for files dragged into the window or referenced by path). `Grep`
+  / `Glob` / `MCP`-served tools bypass the hook — their inputs and
+  outputs are not intercepted.
+- **No Cursor support.** Claude Code (Bash + PowerShell + Read) and
+  Codex CLI (PostToolUse `decision: block`) are both supported;
+  Cursor is not.
 - **Compound shell commands pass through.** `git status | head` or
-  `cmd1 && cmd2` are not rewritten. Only single-program invocations
-  are wrapped.
+  `cmd1 && cmd2` are not rewritten — only single-program
+  invocations. `thlibo rewrite` matches on `argv[0]` and deliberately
+  doesn't try to parse a shell AST.
+- **GGUF must be pulled explicitly.** The 5.1 GB Gemma 4 E4B GGUF is
+  too big to attach to a GitHub release. Run `thlibo pull` (or
+  `thlibo install --pull-model`) to fetch + SHA-verify from
+  HuggingFace.
 
 ---
 
@@ -422,7 +426,7 @@ Models can be 2-8 GB. To clean them up separately from the rest of
 thlibo:
 
 ```bash
-rm ~/.thlibo/models/gemma-4-e4b-q4_k_m.gguf
+rm ~/.thlibo/models/gemma-4-e4b-ud-q4-k-xl.gguf
 ```
 
 The daemon will report an engine spawn failure on next start, which
@@ -445,21 +449,28 @@ eventually gives up. Installing a fresh model resumes normal operation.
 
 ```
 cmd/
-  thlibo/          User CLI: rewrite, exec, install.
+  thlibo/          User CLI: rewrite, exec, compress, case, install, uninstall, pull, version.
   thlibod/         Inference daemon.
 internal/
-  daemon/          Lifecycle, lock, engine supervisor, queue.
-  ipc/             JSON protocol over sockets/pipes.
-  processors/      Registry, descriptors, script+prompt dispatch, thought-stripping.
-  router/          Gemma native tool-call routing + GBNF grammar.
-  middleware/      Main flow: short-circuit → fast-path → router → chain.
   adapters/
-    claudecode/    PreToolUse hook + settings.json merger.
-    codex/         (v0.2 placeholder.)
-  install/         Disk mirror + per-user autostart (Windows/macOS/Linux).
+    claudecode/    PreToolUse Bash + PowerShell + Read hooks, /caselog skill, settings.json merger.
+    codex/         PostToolUse hook (decision: block) + hooks.json merger.
+  casefile/        `thlibo case` directory builder (compressed.log + summary + meta).
+  daemon/          Lifecycle, lock, engine supervisor, queue, llamafile HTTP backend.
+  execpolicy/      `thlibo exec` allow/deny policy (~/.thlibo/policy.yaml).
+  install/         Disk mirror + per-user autostart (Windows/macOS/Linux) + model/engine download.
+  ipc/             NDJSON protocol over sockets/pipes + peer-cred identity check.
+  logx/            NDJSON activity log with rolling rotation + secret redactor.
+  middleware/      Main flow: short-circuit → fast-path → router → chain.
+  processors/      Registry, descriptors, script+prompt dispatch, thought-stripping.
+  promptsan/       Gemma marker sanitiser for untrusted tool output.
+  queue/           Single-active admission queue + per-caller quota.
+  router/          Gemma native tool-call routing + GBNF grammar.
   shellcmd/        Minimal shell-command argv[0] extractor.
-  queue/           Single-active admission queue.
-processors/        Embedded built-ins (go:embed).
+  update/          Background release check + upgrade banner.
+  version/         Build-tag constant (overridable via -ldflags).
+processors/        Embedded built-ins (go:embed): compress, casefolder, git-filter, npm-filter, cargo-filter.
+skills/            Claude Code skills: /caselog.
 ```
 
 ---

@@ -1,63 +1,155 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for AI assistants (Claude Code, Codex, etc.) working in this
+repo. Humans: the README is your starting point; this file is for
+agents that need architectural context in a single shot.
 
 ## Status
 
-**Pre-implementation.** The only file in the repo is `.plan/thlibo-spec.md` (the v0.1 spec). No source, build, test, or lint commands exist yet. When in doubt about intent, the spec is authoritative — read it before making design decisions.
+v0.2.0 released 2026-05-14. Two binaries shipped (`thlibo`,
+`thlibod`), Claude Code hooks for Bash + PowerShell + Read tools,
+Codex PostToolUse hook, full test + scanner CI on linux/macOS/Windows,
+signed releases via Sigstore keyless, CycloneDX SBOM.
 
-Planned language/tooling per the spec's repo structure (`cmd/`, `internal/`): Go. There is no `go.mod` yet.
+Authoritative sources when they disagree:
+
+1. `.plan/thlibo-spec.md` — v0.1/v0.2 design document.
+2. `THREAT_MODEL.md` — security posture + threat decisions.
+3. `docs/adr/*.md` — cross-cutting architectural choices.
+4. This file — drift happens; fix it when you see it.
 
 ## What this project is
 
-Thlibo is a two-binary system that compresses AI-coding-assistant tool output using a locally-hosted Gemma 4 E4B model:
+Two-binary system that compresses AI-coding-assistant tool output
+using a locally-hosted Gemma 4 E4B model:
 
-- **`thlibod`** — inference daemon. Launched by `launchd` / `systemd`. Spawns `llamafile` as a private child, loads the model once, stays warm, serves newline-delimited JSON over a Unix socket (or named pipe on Windows). Knows only about inference.
-- **`thlibo`** — middleware. Invoked by AI-client hooks (Claude Code `PostToolUse`, Codex equivalent, or a proxy mode). Scans `~/.thlibo/processors/`, routes tool output to the right processor (script or prompt), posts fully-formed requests to the daemon, returns the compressed result. Knows only about routing.
+- **`thlibod`** — inference daemon. Spawns `llamafile` as a private
+  HTTP backend on a per-user Unix socket (/Windows named pipe), loads
+  the model once, stays warm, serves newline-delimited JSON over IPC.
+  Knows only about inference.
+- **`thlibo`** — CLI + middleware. Subcommands: `rewrite`, `exec`,
+  `compress`, `case`, `install`, `uninstall`, `pull`, `version`.
+  Scans `~/.thlibo/processors/`, routes tool output to the right
+  processor (script or prompt), posts fully-formed requests to the
+  daemon, returns the compressed result. Knows only about routing.
 
-## Architectural invariants
+## Architectural invariants (load-bearing — do not blur)
 
-These are load-bearing — do not blur them when adding code:
-
-1. **Daemon has zero knowledge of processors, hooks, routing, or clients.** It only accepts fully-formed `messages` arrays + sampling params and streams tokens back. The middleware builds every prompt.
-2. **Middleware has zero knowledge of llamafile, model loading, or inference mechanics.** It only speaks the daemon's JSON protocol.
-3. **Fallback to original output on any error path.** The middleware must never break the AI client. Non-zero script exit, daemon unreachable, parse failure, timeout → pass through the original bytes.
-4. **Short-circuit before doing any work.** Input under 2000 chars passes through without scanning processors or calling the daemon.
-5. **Fast-path before routing.** Each processor's `match` regex is checked before the daemon is asked to route — a regex hit dispatches immediately with no routing call.
-6. **Single daemon instance.** Enforced by lock file (`/run/thlibo/thlibod.lock`). The daemon never restarts the model on its own; only `llamafile` crashes trigger restart (max 3 attempts).
-7. **Concurrency is fixed: 1 active generation, 10 queued, queue-full errors immediately, client disconnect cancels the job.** Don't add backpressure schemes beyond this.
-8. **Thinking mode is owned by the processor prompt, not the daemon.** The daemon has no `thinking` toggle; the `<|think|>` token lives in the processor's `processor.md` body and the GGUF chat template handles it.
+1. **Daemon has zero knowledge of processors, hooks, routing, or
+   clients.** It accepts fully-formed `messages` arrays + sampling
+   params and streams tokens back.
+2. **Middleware has zero knowledge of llamafile, model loading, or
+   inference mechanics.** It speaks only the daemon's JSON protocol.
+3. **Fallback to original output on any error path.** The middleware
+   must never break the AI client. Script non-zero exit, daemon
+   unreachable, parse failure, timeout → pass through the original
+   bytes. Every hook script exits 0 on error.
+4. **Short-circuit before doing any work.** Input under 2000 chars
+   passes through without scanning processors or calling the daemon.
+5. **Fast-path before routing.** Each processor's `match` regex is
+   checked before the daemon is asked to route — a regex hit
+   dispatches immediately, no routing call.
+6. **Single daemon instance.** Enforced by lock file with
+   non-regular-file rejection. The daemon never restarts the model
+   on its own; only `llamafile` crashes trigger restart (max 3).
+7. **Concurrency is fixed: 1 active generation + 10 queued + 4 per
+   caller.** `ErrFull` / `ErrCallerFull` returned immediately; client
+   disconnect cancels the job.
+8. **Thinking mode is owned by the processor prompt, not the
+   daemon.** The daemon has no `thinking` toggle; Gemma 4's
+   `<|channel>thought` block is stripped by `processors.Strip` before
+   output reaches the AI client.
+9. **Daemon is offline-only.** It does not reach the network.
+   `thlibo pull` is the one network touch, by explicit user action.
+10. **All hook scripts are SHA-stamped and survive reinstall.** User
+    edits are preserved; new versions land at `<path>.new` on
+    conflict.
 
 ## Processors
 
-Processors live in `~/.thlibo/processors/<name>/`. Two kinds, distinguished by descriptor file:
+Live in `~/.thlibo/processors/<name>/`. Two kinds:
 
-- `processor.yaml` present → **script processor**. `entry` field names the executable (`.py` → `python3`, `.sh` → `bash`, `.exe`/`.bin` → direct exec). stdin in, stdout out, non-zero exit = fallback.
-- `processor.md` present → **prompt processor**. YAML frontmatter is config (`temperature`, `max_tokens`, `match`, `thinking`, etc.); the markdown body is the system prompt sent to the daemon verbatim.
-- Both present → yaml wins for type, md body becomes the system prompt.
-- Neither present → folder is ignored.
+- `processor.yaml` → **script processor**. `entry` is a plain
+  filename (`.py` → python3, `.sh` → bash, `.exe`/`.bin` → direct).
+  stdin in, stdout out, non-zero exit = fallback. Entry is
+  fingerprinted (size/mtime/mode) at load and re-verified at
+  dispatch — TOCTOU guard.
+- `processor.md` → **prompt processor**. YAML frontmatter is config
+  (`temperature`, `max_tokens`, `match`, `thinking`, etc.); the
+  markdown body is the system prompt, sent to the daemon verbatim.
+- Both present → yaml wins for type, md body is the system prompt.
+- Neither → folder ignored.
 
-Built-in processors (`compress`, `casefolder`, `git-filter`, `npm-filter`, `cargo-filter`) are embedded into the `thlibo` binary at build time; a user processor of the same name in `~/.thlibo/processors/` overrides the built-in.
+Built-ins (`compress`, `casefolder`, `git-filter`, `npm-filter`,
+`cargo-filter`) are embedded via `go:embed`. A user processor of
+the same name overrides a built-in; the registry emits a
+`ShadowWarning` at load time so it's visible.
 
 ## IPC
 
-| Platform | Inference endpoint | Admin endpoint |
-|---|---|---|
-| Linux    | `/run/thlibo/infer.sock`     | `/run/thlibo/admin.sock` |
-| macOS    | `/var/run/thlibo/infer.sock` | `/var/run/thlibo/admin.sock` |
-| Windows  | `\\.\pipe\thlibo-infer`      | `\\.\pipe\thlibo-admin` |
-| Fallback | `127.0.0.1:47320` (loopback) | — |
+| Platform | Inference endpoint              | Admin endpoint                  |
+|----------|---------------------------------|---------------------------------|
+| Linux    | `/run/thlibo/infer.sock`        | `/run/thlibo/admin.sock`        |
+| macOS    | `$TMPDIR/thlibo/infer.sock`     | `$TMPDIR/thlibo/admin.sock`     |
+| Windows  | `\\.\pipe\thlibo-infer`         | `\\.\pipe\thlibo-admin`         |
+| Fallback | `127.0.0.1:47320` (loopback)    | —                               |
 
-Permissions: infer socket `0660`, group `thlibo-users`. Admin socket `0600`, group `thlibo-admin`. Sockets are not created until the daemon emits `{"status":"ready"}`.
+Permissions: infer socket mode `0660`, group `thlibo-users` (if the
+group exists; graceful degrade to user-only if not). Admin socket
+`0600`. Sockets are not created until the daemon emits
+`{"status":"ready"}`. On connect, the daemon does a second identity
+check via `SO_PEERCRED` (Linux) / `GetNamedPipeClientProcessId` +
+`OpenProcessToken` (Windows) and rejects UID/SID mismatches.
+
+NDJSON frames have a 64 MiB per-frame cap; oversized frames get
+`ipc.ErrFrameTooLarge` and the connection is dropped.
 
 ## Model
 
-`bartowski/gemma-4-E4B-IT-GGUF` (HuggingFace). `Q8_0` on GPU, `Q4_K_M` on CPU (~2.5 GB RAM). Recommended sampling: `temperature=1.0`, `top_p=0.95`, `top_k=64`. Context 128K. Multimodal: image content must precede text; image token budget ∈ {70, 140, 280, 560, 1120}. Single-turn only — no multi-turn thought-stripping needed.
+`unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-UD-Q4_K_XL.gguf`
+(HuggingFace). 5.1 GB. SHA-256 pinned into the binary at build time
+via `-ldflags -X`. Not attached to GitHub releases (exceeds 2 GiB
+cap); users fetch via `thlibo pull`.
 
-Inference engine is **llamafile (Mozilla)**. Do not write a custom inference engine; `thlibod` spawns llamafile as a private child on stdio or a private localhost port.
+Sampling defaults from the Gemma 4 model card: `temperature=1.0`,
+`top_p=0.95`, `top_k=64`. Context 128K. `thlibod -ctx` defaults to
+32768; overridable. Stop tokens `<turn|>` + `<end_of_turn>` passed
+to llamafile via `--stop`.
+
+Inference engine is **llamafile (Mozilla)** running in `--server`
+mode, bound to a private Unix socket. thlibod speaks HTTP to it over
+the socket. Do not write a custom inference engine.
+
+## Adapters
+
+- **`internal/adapters/claudecode/`** — PreToolUse hooks for Bash,
+  PowerShell, and Read tools. Settings merger. /caselog skill.
+- **`internal/adapters/codex/`** — PostToolUse hook using
+  `decision: block` + `reason` to substitute the tool result.
 
 ## When adding code
 
-- Follow the repo layout sketched in `.plan/thlibo-spec.md` §"Repo structure" (`cmd/thlibod`, `cmd/thlibo`, `internal/{daemon,ipc,processors,router,queue,adapters,install}`, `processors/` for embedded built-ins).
-- Before declaring a v0.1 task "done", cross-check against the checklist in `.plan/thlibo-spec.md` §"v0.1 build checklist".
-- When the spec and this file disagree, the spec wins — update this file to match.
+- Repo layout: `cmd/thlibo`, `cmd/thlibod`, `internal/*` (adapters,
+  casefile, daemon, execpolicy, install, ipc, logx, middleware,
+  processors, promptsan, queue, router, shellcmd, update, version),
+  `processors/` for embedded built-ins, `skills/` for Claude Code
+  skill definitions.
+- New user-facing features: add a scanner annotation if one fires
+  (gosec / semgrep / staticcheck all block CI). Keep `#nosec` and
+  `nosemgrep` reasons short but honest.
+- New subcommands: wire into `cmd/thlibo/main.go` switch, update the
+  usage string, and exclude from the update-check short-circuit
+  only if the subcommand should NOT trigger a background update
+  fetch (like `version`).
+- When the spec and this file disagree, the spec wins — and update
+  this file.
+
+## Two Claude sessions?
+
+When two Claude Code sessions share this repo (Windows + macOS QA
+pairing, etc.), treat GitHub Issues as the source of truth and
+always `git fetch origin && git rebase origin/main` before every
+local commit. Reference issues by `Fixes #N` / `Refs #N` in commit
+messages so the timeline stays legible. If you see a commit you
+didn't make against a file you're mid-edit on, stop and ask before
+pushing.
