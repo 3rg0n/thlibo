@@ -1,0 +1,47 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_d822cc9938de8f 10-33,38-41
+internal/adapters/claudecode/claudecode.go
+  s_5811b7f24eccc0::t_55ae414901f4b2 96,98-103
+  s_5811b7f24eccc0::t_ba5b354510ddc2 105-107,109-111,113-127,145-150
+  s_5811b7f24eccc0::t_94a999891c0b4d 49-50,52-68,76
+  s_5811b7f24eccc0::t_7d54f0d862fc07 35-38,43-47
+  s_5811b7f24eccc0::t_87d5f4d944ab7e 165-166,168-169,175-176,181,188,194,202-204,214-215,221,225-235
+internal/adapters/claudecode/claudecode_test.go
+  s_5811b7f24eccc0::t_4bb59dcb61a1f7 60-182
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_96be2a73ba3941 15-16
+  s_5811b7f24eccc0::t_43fc3a5da7b449 204,206-207,213-239,244-246
+  s_5811b7f24eccc0::t_6c354890ed36a5 121-127,129-131,144-190,198-200
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_be635f0ee2f6e4 95-99
+  s_5811b7f24eccc0::t_b95f304392f16a 166,168-174,178
+README.md
+  s_5811b7f24eccc0::t_4bf51418a06c38 391-397
+cmd/thlibod/main_test.go
+  s_5811b7f24eccc0::t_ce77a427032674 1-92
+cmd/thlibod/main.go
+  s_5811b7f24eccc0::t_f1e8e410bd97d4 42-53,56-67,73-75
+  s_5811b7f24eccc0::t_9498001ac25d9a 201-215
+  s_5811b7f24eccc0::t_cb4ba2b5633f2b 68-72
+  s_5811b7f24eccc0::t_69a3f7d133f1a9 161-163
+  s_5811b7f24eccc0::t_ede9149ff60611 267-305
+  s_5811b7f24eccc0::t_a88bb3a6f01e0d 363-368
+internal/adapters/claudecode/hook.ps1
+  s_5811b7f24eccc0::t_f7df3856f75a98 1-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "dd74c3aba33e0ce19939782b5d6541ac27107a34",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
