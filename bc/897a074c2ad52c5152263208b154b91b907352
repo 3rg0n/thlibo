@@ -1,0 +1,44 @@
+internal/daemon/engine.go
+  s_5811b7f24eccc0::t_13be4365280e07 6
+  s_5811b7f24eccc0::t_7275be16876bf8 171-193
+internal/daemon/lock.go
+  s_5811b7f24eccc0::t_20deb3728ef82b 23-30,42-51,59-68
+internal/processors/dispatch.go
+  s_5811b7f24eccc0::t_6e5e3529ed3c75 70-89
+  s_5811b7f24eccc0::t_4a6c752ca91ad2 9,11,16-19
+internal/processors/thinking.go
+  s_5811b7f24eccc0::t_58f558576e8d0d 3,26-39,43-48,52-94
+internal/processors/thinking_test.go
+  s_5811b7f24eccc0::t_b72df429f1d623 75-117
+internal/processors/descriptor.go
+  s_5811b7f24eccc0::t_1a40ff383854ce 52-61,67-72
+internal/install/install.go
+  s_5811b7f24eccc0::t_a9759357de1dce 1-15
+internal/logx/logx.go
+  s_5811b7f24eccc0::t_e36442bbaccfee 26
+  s_5811b7f24eccc0::t_bceb0520ae9c27 98-104,120-126
+  s_5811b7f24eccc0::t_f35113e507356a 274-281,292-306,310-317
+internal/processors/registry.go
+  s_5811b7f24eccc0::t_7da6ca647a4473 17-35
+  s_5811b7f24eccc0::t_def7a3834dc62f 154-159
+CHANGELOG.md
+  s_5811b7f24eccc0::t_0c0727eab1d6b2 12-48
+THREAT_MODEL.md
+  s_5811b7f24eccc0::t_8216822400a78b 198-236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "bc897a074c2ad52c5152263208b154b91b907352",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
