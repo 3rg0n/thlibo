@@ -61,9 +61,11 @@ func Run(argv []string) int {
 	var enginePath string
 	fs.StringVar(&enginePath, "engine-path", "", "llamafile/engine path passed to thlibod -engine (default: next to thlibod)")
 	var pullModel bool
+	var pullEngine bool
 	var allowUnpinned bool
-	fs.BoolVar(&pullModel, "pull-model", false, "download the default GGUF as part of install (~2.5 GB)")
-	fs.BoolVar(&allowUnpinned, "allow-unpinned", false, "allow --pull-model to download without a pinned SHA (bootstrap only)")
+	fs.BoolVar(&pullModel, "pull-model", false, "download the default GGUF as part of install (~5 GB)")
+	fs.BoolVar(&pullEngine, "pull-engine", false, "download the llamafile engine binary as part of install (~838 MB)")
+	fs.BoolVar(&allowUnpinned, "allow-unpinned", false, "allow --pull-model/--pull-engine to download without a pinned SHA (bootstrap only)")
 	var installCodex bool
 	var codexHooksPath string
 	fs.BoolVar(&installCodex, "codex", false, "also install the Codex CLI hook (advisory until Codex lands updatedInput support)")
@@ -138,6 +140,12 @@ func Run(argv []string) int {
 	} else {
 		fmt.Println("  codex hooks:    (skipped; use --codex to install)")
 	}
+	if pullEngine {
+		fmt.Printf("  engine:         llamafile v%s -> %s\n",
+			install.DefaultEngine.Version, install.EngineDir())
+	} else {
+		fmt.Println("  engine:         (not downloaded; run `thlibo install --pull-engine` separately)")
+	}
 	if pullModel {
 		fmt.Printf("  model:          %s -> %s\n",
 			install.DefaultModel.Name, install.ModelsDir())
@@ -156,7 +164,7 @@ func Run(argv []string) int {
 	fmt.Println("  mirrored built-in processors")
 
 	if skipHook {
-		return 0
+		return runDownloads(pullEngine, pullModel, allowUnpinned)
 	}
 
 	if err := claudecode.WriteHookScript(hookPath); err != nil {
@@ -227,6 +235,26 @@ func Run(argv []string) int {
 		fmt.Printf("  wrote Codex hook + merged %s + enabled codex_hooks in %s\n", cp, cfgPath)
 	}
 
+	return runDownloads(pullEngine, pullModel, allowUnpinned)
+}
+
+// runDownloads handles the optional --pull-engine and --pull-model
+// steps. Called both from the normal path and from the --skip-hook
+// early-return path so download flags are always honoured.
+func runDownloads(pullEngine, pullModel, allowUnpinned bool) int {
+	if pullEngine {
+		fmt.Println("  downloading engine (this may take a while)...")
+		engineDest, err := install.PullEngine(contextCancellableOnSignal(), install.DefaultEngine, install.PullOptions{
+			AllowUnpinned: allowUnpinned,
+			Progress:      installProgress(),
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "install: pull engine:", err)
+			return 10
+		}
+		fmt.Println("\n  engine downloaded to", engineDest)
+	}
+
 	if pullModel {
 		fmt.Println("  downloading model (this may take a while)...")
 		_, err := install.Pull(contextCancellableOnSignal(), install.DefaultModel, install.PullOptions{
@@ -234,9 +262,6 @@ func Run(argv []string) int {
 			Progress:      installProgress(),
 		})
 		if err != nil {
-			// Model is the very last step so we can still succeed
-			// the rest of the install; leave final exit to the
-			// caller but surface the error clearly.
 			fmt.Fprintln(os.Stderr, "install: pull model:", err)
 			return 8
 		}

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/3rg0n/thlibo/internal/daemon"
+	"github.com/3rg0n/thlibo/internal/install"
 	"github.com/3rg0n/thlibo/internal/ipc"
 	"github.com/3rg0n/thlibo/internal/logx"
 )
@@ -41,6 +42,7 @@ const (
 type flags struct {
 	enginePath    string
 	engineArgs    string
+	modelPath     string
 	ctxSize       int
 	stopTokens    string
 	lockPath      string
@@ -112,12 +114,13 @@ func runConsole(argv []string) int {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	bootLog.Info("starting",
 		logx.Str("engine", f.enginePath),
+		logx.Str("model", f.modelPath),
 		logx.Str("lock", cfg.LockPath),
 		logx.Str("infer", cfg.InferenceEndpoint.Address),
 		logx.Str("admin", cfg.AdminEndpoint.Address))
 	if f.verbose {
-		log.Printf("starting: engine=%s lock=%s infer=%s admin=%s",
-			f.enginePath, cfg.LockPath, cfg.InferenceEndpoint.Address, cfg.AdminEndpoint.Address)
+		log.Printf("starting: engine=%s model=%s lock=%s infer=%s admin=%s",
+			f.enginePath, f.modelPath, cfg.LockPath, cfg.InferenceEndpoint.Address, cfg.AdminEndpoint.Address)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -158,6 +161,7 @@ func parseFlags(argv []string) (*flags, error) {
 	f := &flags{}
 
 	fs.StringVar(&f.enginePath, "engine", defaultEnginePath(), "path to the llamafile-style engine binary")
+	fs.StringVar(&f.modelPath, "model", defaultModelPath(), "path to the GGUF model file (passed to engine as -m)")
 	fs.StringVar(&f.engineArgs, "engine-args", "", "extra arguments to pass to the engine (space-separated, appended after -ctx/-stop)")
 	fs.IntVar(&f.ctxSize, "ctx", defaultCtxSize, "context window size in tokens (passed to engine as -c <n>)")
 	fs.StringVar(&f.stopTokens, "stop", defaultStopTokens, "comma-separated stop tokens (each passed as --stop <t>)")
@@ -203,6 +207,9 @@ func buildConfig(f *flags) (daemon.Config, error) {
 	// operator wins on trailing duplicates because llamafile honours
 	// last-value-wins.
 	var engineArgs []string
+	if f.modelPath != "" {
+		engineArgs = append(engineArgs, "-m", f.modelPath)
+	}
 	if f.ctxSize > 0 {
 		engineArgs = append(engineArgs, "-c", fmt.Sprintf("%d", f.ctxSize))
 	}
@@ -229,12 +236,21 @@ func buildConfig(f *flags) (daemon.Config, error) {
 	return daemon.Config{
 		LockPath: f.lockPath,
 		EngineCmd: func() *exec.Cmd {
+			// llamafile ships a polyglot (APE) binary that on macOS
+			// cannot be execve'd directly — the kernel rejects the
+			// MS-DOS/ZIP header with ENOEXEC. Invoking it through the
+			// shell lets the APE bootstrap script self-extract and run
+			// the native Mach-O payload. Linux and Windows exec it
+			// directly (ld-linux.so handles the APE format).
 			// #nosec G204,G702 — enginePath is a daemon config value
 			// set by the operator via a flag or installer default,
-			// never user-controllable at runtime. This is the whole
-			// point of the daemon: it spawns the engine it was told
-			// to spawn.
+			// never user-controllable at runtime.
 			// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+			if runtime.GOOS == "darwin" {
+				args := append([]string{f.enginePath}, engineArgs...)
+				// #nosec G204 — same rationale as above
+				return exec.Command("/bin/sh", args...)
+			}
 			return exec.Command(f.enginePath, engineArgs...)
 		},
 		InferenceEndpoint: infer,
@@ -334,6 +350,12 @@ func defaultLockPath() string {
 	}
 }
 
+// defaultModelPath returns the path to the default GGUF model
+// installed by `thlibo pull` / `thlibo install --pull-model`.
+func defaultModelPath() string {
+	return filepath.Join(install.ModelsDir(), install.DefaultModel.Filename)
+}
+
 // defaultEnginePath returns the OS-specific default location where
 // the engine binary lives after `thlibo install`. Since no install
 // has happened yet, the default is relative to the running thlibod
@@ -361,7 +383,9 @@ Usage:
 Flags:
   -engine <path>                 Engine binary path.
                                  Default: <thlibod-dir>/thlibo-engine[.exe].
-  -engine-args "<args>"          Extra args appended after -ctx/-stop.
+  -model <path>                  GGUF model file (passed to engine as -m).
+                                 Default: ~/.thlibo/models/<default-model>.
+  -engine-args "<args>"          Extra args appended after -m/-ctx/-stop.
   -ctx N                         Context window tokens (default 32768,
                                  passed to engine as -c N).
   -stop "<t1>,<t2>,..."          Comma-separated stop tokens, each

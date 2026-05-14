@@ -76,6 +76,15 @@ jobs:
           go-version: "1.26.3"
           cache: true
 
+      - name: Download llamafile engine
+        run: |
+          mkdir -p dist-engine
+          curl -fsSL \
+            -o dist-engine/thlibo-engine${{ matrix.ext }} \
+            https://github.com/mozilla-ai/llamafile/releases/download/0.10.1/llamafile-0.10.1
+          chmod +x dist-engine/thlibo-engine${{ matrix.ext }}
+          echo "3cc6ea1a5af07813d6c9f7459a64ec28345352c8322d2b355b6715847871bc13  dist-engine/thlibo-engine${{ matrix.ext }}" | sha256sum --check
+
       - name: Build binaries
         env:
           GOOS: ${{ matrix.goos }}
@@ -91,6 +100,8 @@ jobs:
           go build -trimpath -ldflags="$LDFLAGS" \
             -o dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibod${{ matrix.ext }} \
             ./cmd/thlibod
+          cp dist-engine/thlibo-engine${{ matrix.ext }} \
+            dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibo-engine${{ matrix.ext }}
 
       - name: Copy docs into bundle
         run: |
