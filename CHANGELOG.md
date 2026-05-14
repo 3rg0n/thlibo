@@ -7,14 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (v0.2 feature work)
+
+- **PowerShell tool support (#12).** Embedded `hook.ps1` companion to
+  `hook.sh`; `MergeSettingsFull` registers a second PreToolUse
+  matcher for `PowerShell` pointing at the new hook via
+  `powershell -NoProfile -ExecutionPolicy Bypass -File <path>`.
+  Installer writes both hooks unconditionally so Claude Code picks
+  up whichever tool the current session uses
+  (`CLAUDE_CODE_USE_POWERSHELL_TOOL=1` selects PowerShell).
+- **Gemma 4 context window + stop tokens wired into the daemon (#13).**
+  New `thlibod -ctx N` (default 32768, passed as `-c <N>`) and
+  `thlibod -stop "<t1>,<t2>"` (default `<turn|>,<end_of_turn>`, each
+  passed as `--stop <t>`) flags. Operator-supplied `-engine-args`
+  appears after the built-in flags so last-value-wins overrides
+  work.
+- **Signed releases via Sigstore keyless (#27).** `release.yml` now
+  runs `cosign sign-blob --yes` on every archive, `SHA256SUMS`, and
+  the new SBOM. `.sig` + `.pem` uploaded alongside each asset.
+  Identity = this workflow at the release tag; transparency log
+  entries published to `rekor.sigstore.dev`.
+- **CycloneDX SBOM on release (#28).** `anchore/sbom-action` emits
+  `thlibo-sbom.cdx.json` at release time, pinned by commit SHA,
+  signed with cosign alongside the other artefacts.
+
 ### Security
 
 Second remediation pass sweeping every low-severity finding that is a
 real bug (not a design decision). Combined with the first pass, the
-only items still open in `THREAT_MODEL.md` are the four items
-explicitly marked "won't-fix: by design" (queue-based rate limiting,
-exec allow-list, SO_PEERCRED, persistent hook install) and the v0.2
-supply-chain infrastructure items (SBOM + Sigstore).
+remaining open items in `THREAT_MODEL.md` are the four explicitly
+marked "won't-fix: by design" (queue-based rate limiting, exec
+allow-list, SO_PEERCRED, persistent hook install) — #27 and #28 are
+now closed.
 
 ### Added (second pass)
 

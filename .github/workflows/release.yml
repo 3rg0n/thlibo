@@ -12,6 +12,8 @@ concurrency:
 
 permissions:
   contents: write  # Required to upload release assets.
+  id-token: write  # Required by cosign keyless (OIDC to Fulcio).
+  attestations: write  # Required to attach Sigstore attestations to the release.
 
 jobs:
   # Download the GGUF once, compute its SHA, then reuse that hash
@@ -116,7 +118,17 @@ jobs:
     name: release
     needs: [pin-model, build]
     runs-on: ubuntu-latest
+    # Required for the keyless OIDC-token exchange with Fulcio that
+    # cosign uses to sign without long-lived private keys. See
+    # THREAT_MODEL.md findings #27 and #28.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -129,6 +141,53 @@ jobs:
           sha256sum thlibo-*.tar.gz thlibo-*.zip > SHA256SUMS 2>/dev/null || true
           cat SHA256SUMS
 
+      # CycloneDX SBOM generated from the repo state at the release
+      # tag. Published alongside the archives so downstream consumers
+      # (enterprise procurement, Dependabot-style scanners) have a
+      # machine-readable manifest of every Go module that went into
+      # the build. See THREAT_MODEL.md finding #28.
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/thlibo-sbom.cdx.json
+          artifact-name: thlibo-sbom.cdx.json
+
+      # Install cosign so we can sign the archives + checksums + SBOM
+      # in the next step. Pinned to v3's latest known-good commit; the
+      # cosign binary itself is SHA-verified by the action internally.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      # Keyless signing via Sigstore. Each .sig and .pem lands next
+      # to the file it signs; Fulcio issues a short-lived cert bound
+      # to this workflow's OIDC identity (3rg0n/thlibo/.../release.yml
+      # @ the release tag) and Rekor records the signature in the
+      # transparency log. Consumers verify with:
+      #
+      #   cosign verify-blob \
+      #     --certificate-identity "https://github.com/3rg0n/thlibo/.github/workflows/release.yml@refs/tags/<TAG>" \
+      #     --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+      #     --signature file.tar.gz.sig --certificate file.tar.gz.pem \
+      #     file.tar.gz
+      #
+      # See THREAT_MODEL.md finding #27.
+      - name: Sign artefacts with cosign (keyless)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cd dist
+          for f in thlibo-*.tar.gz thlibo-*.zip SHA256SUMS thlibo-sbom.cdx.json; do
+            [ -f "$f" ] || continue
+            echo "Signing $f"
+            cosign sign-blob --yes \
+              --output-signature "$f.sig" \
+              --output-certificate "$f.pem" \
+              "$f"
+          done
+          ls -la
+
       - name: Publish release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -136,26 +195,55 @@ jobs:
             dist/thlibo-*.tar.gz
             dist/thlibo-*.zip
             dist/SHA256SUMS
+            dist/thlibo-sbom.cdx.json
+            dist/*.sig
+            dist/*.pem
           generate_release_notes: true
           draft: false
           body: |
-            # thlibo v0.1.0 draft
+            # thlibo ${{ github.ref_name }}
 
-            First release. Local-Gemma tool-output compression
-            middleware for Claude Code + Codex CLI.
+            Local-Gemma tool-output compression middleware for Claude
+            Code + Codex CLI.
 
             ## Binaries
 
             Cross-platform binaries are attached as tarballs/zip.
             Each bundle contains `bin/thlibo`, `bin/thlibod`,
-            `README.md`, `CHANGELOG.md`.
+            `README.md`, `CHANGELOG.md`, `LICENSE`.
+
+            ## Verifying signatures
+
+            Each archive, `SHA256SUMS`, and the CycloneDX SBOM are
+            signed by cosign via Sigstore's keyless flow. No public
+            key to manage — the identity is anchored in this
+            workflow's GitHub OIDC token.
+
+                cosign verify-blob \
+                  --certificate-identity \
+                    "https://github.com/3rg0n/thlibo/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}" \
+                  --certificate-oidc-issuer \
+                    "https://token.actions.githubusercontent.com" \
+                  --signature thlibo-linux-amd64.tar.gz.sig \
+                  --certificate thlibo-linux-amd64.tar.gz.pem \
+                  thlibo-linux-amd64.tar.gz
+
+            The transparency-log entry is automatically published to
+            Rekor (`rekor.sigstore.dev`); cosign verifies it as part
+            of the flow above.
+
+            ## SBOM
+
+            `thlibo-sbom.cdx.json` is a CycloneDX SBOM generated from
+            the repo at the release tag. Signed with cosign like the
+            archives.
 
             ## Model (pulled separately)
 
             The canonical GGUF
-            (`bartowski/google_gemma-4-E4B-it-GGUF/google_gemma-4-E4B-it-Q4_K_M.gguf`,
-            5.4 GB) is not attached to this release: it exceeds
-            GitHub's 2 GiB asset cap. After installing, run:
+            (`unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-UD-Q4_K_XL.gguf`,
+            ~5.1 GB) is not attached because it exceeds GitHub's
+            2 GiB asset cap. After installing, run:
 
                 thlibo pull gemma-4-e4b
 
@@ -163,7 +251,3 @@ jobs:
             time, so `thlibo pull` verifies integrity automatically.
             No network trust required beyond HuggingFace's TLS +
             our pin.
-
-            See [.plan/release-notes-0.1.0.md](../blob/main/.plan/release-notes-0.1.0.md)
-            for token-savings measurements and the live Claude Code
-            E2E evidence.

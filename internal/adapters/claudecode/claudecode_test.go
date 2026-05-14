@@ -57,6 +57,129 @@ func TestWriteHookScript(t *testing.T) {
 	}
 }
 
+// v0.2 / #12: MergeSettingsFull registers both Bash and PowerShell
+// matchers when both hook paths are provided, and uses a powershell
+// -File invocation for the PowerShell entry so execution-policy
+// lockdowns don't block us.
+func TestMergeSettingsFullBashAndPS1(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	bashHp := filepath.Join(dir, "thlibo-rewrite.sh")
+	ps1Hp := filepath.Join(dir, "thlibo-rewrite.ps1")
+
+	if err := MergeSettingsFull(sp, bashHp, ps1Hp); err != nil {
+		t.Fatalf("MergeSettingsFull: %v", err)
+	}
+
+	var got map[string]any
+	raw, _ := os.ReadFile(sp)
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("parse written settings: %v\n%s", err, raw)
+	}
+
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+	if len(pre) != 2 {
+		t.Fatalf("PreToolUse groups = %d, want 2 (Bash+PowerShell): %s", len(pre), raw)
+	}
+	matchers := map[string]map[string]any{}
+	for _, g := range pre {
+		obj := g.(map[string]any)
+		matchers[obj["matcher"].(string)] = obj
+	}
+	if matchers["Bash"] == nil {
+		t.Fatal("Bash matcher missing")
+	}
+	if matchers["PowerShell"] == nil {
+		t.Fatal("PowerShell matcher missing")
+	}
+
+	ps1Entry := matchers["PowerShell"]["hooks"].([]any)[0].(map[string]any)
+	cmd := ps1Entry["command"].(string)
+	if !strings.Contains(cmd, "powershell") {
+		t.Errorf("PowerShell command should invoke powershell, got %q", cmd)
+	}
+	if !strings.Contains(cmd, "-ExecutionPolicy Bypass") {
+		t.Errorf("PowerShell command should set ExecutionPolicy Bypass, got %q", cmd)
+	}
+	if !strings.Contains(cmd, "-File") {
+		t.Errorf("PowerShell command should use -File invocation, got %q", cmd)
+	}
+	if !strings.Contains(cmd, ".ps1") {
+		t.Errorf("PowerShell command should reference the .ps1 hook, got %q", cmd)
+	}
+}
+
+// v0.2 / #12: MergeSettingsFull with an empty ps1 path is the legacy
+// "Bash only" behaviour; MergeSettings (deprecated) delegates to this.
+func TestMergeSettingsFullBashOnly(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	bashHp := filepath.Join(dir, "thlibo-rewrite.sh")
+
+	if err := MergeSettingsFull(sp, bashHp, ""); err != nil {
+		t.Fatalf("MergeSettingsFull: %v", err)
+	}
+
+	raw, _ := os.ReadFile(sp)
+	var got map[string]any
+	_ = json.Unmarshal(raw, &got)
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+	if len(pre) != 1 {
+		t.Fatalf("PreToolUse groups = %d, want 1 (Bash only)", len(pre))
+	}
+	if pre[0].(map[string]any)["matcher"] != "Bash" {
+		t.Error("expected only Bash matcher")
+	}
+}
+
+// v0.2 / #12: running MergeSettingsFull twice does not duplicate the
+// PowerShell entry.
+func TestMergeSettingsFullIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	bashHp := filepath.Join(dir, "thlibo-rewrite.sh")
+	ps1Hp := filepath.Join(dir, "thlibo-rewrite.ps1")
+
+	for i := 0; i < 2; i++ {
+		if err := MergeSettingsFull(sp, bashHp, ps1Hp); err != nil {
+			t.Fatalf("MergeSettingsFull pass %d: %v", i, err)
+		}
+	}
+	raw, _ := os.ReadFile(sp)
+	var got map[string]any
+	_ = json.Unmarshal(raw, &got)
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+	if len(pre) != 2 {
+		t.Fatalf("PreToolUse groups = %d, want exactly 2 after two merges", len(pre))
+	}
+	for _, g := range pre {
+		hooks := g.(map[string]any)["hooks"].([]any)
+		if len(hooks) != 1 {
+			t.Errorf("%v: entries = %d, want 1 (duplicate!)", g, len(hooks))
+		}
+	}
+}
+
+// v0.2 / #12: WriteHookScriptPS1 writes the PowerShell hook bytes
+// with an executable bit.
+func TestWriteHookScriptPS1(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "thlibo-rewrite.ps1")
+	if err := WriteHookScriptPS1(dest); err != nil {
+		t.Fatalf("WriteHookScriptPS1: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if !reflect.DeepEqual(got, HookScriptPS1()) {
+		t.Errorf("written PS1 differs from embedded")
+	}
+	if !strings.Contains(string(got), "PowerShell") {
+		t.Errorf("embedded PS1 missing PowerShell keyword; wrong file?")
+	}
+}
+
 // D1 / E4: merging into a non-existent settings file creates it with
 // the right nested structure.
 func TestMergeSettingsFreshFile(t *testing.T) {

@@ -92,6 +92,11 @@ func Run(argv []string) int {
 	}
 
 	hookPath := filepath.Join(hookDir, "thlibo-rewrite.sh")
+	// Second hook for Claude Code's PowerShell tool
+	// (CLAUDE_CODE_USE_POWERSHELL_TOOL=1). We install both unconditionally
+	// - the user's Claude Code runtime will only invoke the matcher it
+	// actually uses, so an unused hook just sits on disk at ~32 KB.
+	ps1HookPath := filepath.Join(hookDir, "thlibo-rewrite.ps1")
 
 	if daemonPath == "" {
 		daemonPath = defaultDaemonPath()
@@ -158,13 +163,19 @@ func Run(argv []string) int {
 		fmt.Fprintln(os.Stderr, "install: write hook:", err)
 		return 5
 	}
-	fmt.Println("  wrote hook script")
+	fmt.Println("  wrote Bash hook script")
 
-	if err := claudecode.MergeSettings(settingsPath, hookPath); err != nil {
+	if err := claudecode.WriteHookScriptPS1(ps1HookPath); err != nil {
+		fmt.Fprintln(os.Stderr, "install: write ps1 hook:", err)
+		return 5
+	}
+	fmt.Println("  wrote PowerShell hook script")
+
+	if err := claudecode.MergeSettingsFull(settingsPath, hookPath, ps1HookPath); err != nil {
 		fmt.Fprintln(os.Stderr, "install: merge settings:", err)
 		return 6
 	}
-	fmt.Println("  merged Claude Code settings.json")
+	fmt.Println("  merged Claude Code settings.json (Bash + PowerShell matchers)")
 
 	if !skipAutostart && autostart != nil {
 		// Allow an override so CI and the .test/ sandbox can register

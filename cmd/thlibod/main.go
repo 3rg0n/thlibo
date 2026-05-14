@@ -39,17 +39,40 @@ const (
 )
 
 type flags struct {
-	enginePath     string
-	engineArgs     string
-	lockPath       string
-	inferenceAddr  string
-	adminAddr      string
-	group          string
-	useTCP         bool
-	readyTimeout   time.Duration
-	stopTimeout    time.Duration
-	verbose        bool
+	enginePath    string
+	engineArgs    string
+	ctxSize       int
+	stopTokens    string
+	lockPath      string
+	inferenceAddr string
+	adminAddr     string
+	group         string
+	useTCP        bool
+	readyTimeout  time.Duration
+	stopTimeout   time.Duration
+	verbose       bool
 }
+
+// Gemma 4 inference defaults. Context window and stop token come
+// from the official model card + capability docs. We pass them to
+// llamafile via `-c <n>` for the context cap and repeated
+// `--stop <token>` flags for the turn-boundary tokens so generation
+// doesn't ramble into the next chat-template stanza. Overridable at
+// runtime via -ctx and -stop. See task #13 / the release notes for
+// why these specific values.
+//
+// Reference: https://ai.google.dev/gemma/docs/core/model_card_4 and
+// the chat template at
+// https://github.com/google/gemma/blob/main/prompt.py
+const (
+	defaultCtxSize = 32768
+	// #nosec G101 -- not a credential; these are Gemma 4's native
+	// chat-template turn-boundary tokens, passed to llamafile via
+	// --stop so generation cuts cleanly. Public values from
+	// https://ai.google.dev/gemma/docs/core/model_card_4.
+	defaultStopTokens    = "<turn|>,<end_of_turn>"
+	gemmaContextMaxBytes = 128 * 1024
+)
 
 func main() {
 	if len(os.Args) > 1 {
@@ -135,7 +158,9 @@ func parseFlags(argv []string) (*flags, error) {
 	f := &flags{}
 
 	fs.StringVar(&f.enginePath, "engine", defaultEnginePath(), "path to the llamafile-style engine binary")
-	fs.StringVar(&f.engineArgs, "engine-args", "", "extra arguments to pass to the engine (space-separated)")
+	fs.StringVar(&f.engineArgs, "engine-args", "", "extra arguments to pass to the engine (space-separated, appended after -ctx/-stop)")
+	fs.IntVar(&f.ctxSize, "ctx", defaultCtxSize, "context window size in tokens (passed to engine as -c <n>)")
+	fs.StringVar(&f.stopTokens, "stop", defaultStopTokens, "comma-separated stop tokens (each passed as --stop <t>)")
 	fs.StringVar(&f.lockPath, "lock", "", "lock file path (default: platform-specific)")
 	fs.StringVar(&f.inferenceAddr, "infer-addr", "", "inference endpoint (default: platform-specific)")
 	fs.StringVar(&f.adminAddr, "admin-addr", "", "admin endpoint (default: platform-specific)")
@@ -173,7 +198,21 @@ func parseFlags(argv []string) (*flags, error) {
 }
 
 func buildConfig(f *flags) (daemon.Config, error) {
-	engineArgs := splitFields(f.engineArgs)
+	// Build the engine argv. Order: context-window first, then each
+	// stop token, then any operator-supplied extra args. The
+	// operator wins on trailing duplicates because llamafile honours
+	// last-value-wins.
+	var engineArgs []string
+	if f.ctxSize > 0 {
+		engineArgs = append(engineArgs, "-c", fmt.Sprintf("%d", f.ctxSize))
+	}
+	for _, tok := range splitCommaList(f.stopTokens) {
+		if tok == "" {
+			continue
+		}
+		engineArgs = append(engineArgs, "--stop", tok)
+	}
+	engineArgs = append(engineArgs, splitFields(f.engineArgs)...)
 
 	infer := ipc.EndpointConfig{
 		Kind:    ipc.EndpointInference,
@@ -223,6 +262,45 @@ func splitFields(s string) []string {
 		out = append(out, cur)
 	}
 	return out
+}
+
+// splitCommaList splits a comma-separated token list, trimming
+// whitespace around each entry. Used for the -stop flag so the
+// operator can pass `--stop "<turn|>,<end_of_turn>"` instead of
+// repeating the flag. Empty entries are dropped.
+func splitCommaList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var out []string
+	cur := ""
+	for _, r := range s {
+		if r == ',' {
+			t := trimSpace(cur)
+			if t != "" {
+				out = append(out, t)
+			}
+			cur = ""
+			continue
+		}
+		cur += string(r)
+	}
+	t := trimSpace(cur)
+	if t != "" {
+		out = append(out, t)
+	}
+	return out
+}
+
+func trimSpace(s string) string {
+	i, j := 0, len(s)
+	for i < j && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	for j > i && (s[j-1] == ' ' || s[j-1] == '\t') {
+		j--
+	}
+	return s[i:j]
 }
 
 func looksLikeTCP(addr string) bool {
@@ -282,7 +360,12 @@ Usage:
 Flags:
   -engine <path>                 Engine binary path.
                                  Default: <thlibod-dir>/thlibo-engine[.exe].
-  -engine-args "<args>"          Extra args to pass to the engine.
+  -engine-args "<args>"          Extra args appended after -ctx/-stop.
+  -ctx N                         Context window tokens (default 32768,
+                                 passed to engine as -c N).
+  -stop "<t1>,<t2>,..."          Comma-separated stop tokens, each
+                                 passed as --stop <t> (default:
+                                 "<turn|>,<end_of_turn>").
   -lock <path>                   Lock file. Default is platform-specific.
   -infer-addr <addr>             Inference endpoint. Default is platform-specific.
   -admin-addr <addr>             Admin endpoint. Default is platform-specific.

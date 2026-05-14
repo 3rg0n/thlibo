@@ -388,8 +388,13 @@ Not implemented in v0.1; for now, remove the hook entry from
   assignments). The redactor is a best-effort backstop, not a
   replacement for keeping secrets out of subprocess output.
 - **Supply chain.** Every GitHub Action in this repo is pinned by
-  commit SHA. A full threat model lives at
-  [`THREAT_MODEL.md`](THREAT_MODEL.md).
+  commit SHA. Every release archive, the `SHA256SUMS`, and the
+  CycloneDX SBOM are signed with cosign via Sigstore's keyless flow
+  — no key to manage, identity rooted in the GitHub OIDC token for
+  `.github/workflows/release.yml` at the release tag, transparency-
+  log entry published to `rekor.sigstore.dev`. Verification command
+  is in the release notes for each tag. A full threat model lives
+  at [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 ---
 

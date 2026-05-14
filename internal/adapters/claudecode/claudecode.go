@@ -32,18 +32,40 @@ import (
 //go:embed hook.sh
 var hookScript []byte
 
-// HookScript returns the embedded hook script bytes, unmodified.
+//go:embed hook.ps1
+var hookScriptPS1 []byte
+
+// HookScript returns the embedded Bash hook script bytes, unmodified.
 // Exposed so the installer can write it to disk and tests can
 // assert on its shape without running an install.
 func HookScript() []byte { return hookScript }
 
-// WriteHookScript writes the hook script to path, creating parent
-// directories as needed. The file is created with a restrictive
-// mode (0o600) and then chmod'd to 0o700 so the owner can execute
-// it. Group and world have no access — this is user-scoped tooling.
-// On Windows the execute bit has no meaning; the file is still
-// written with 0o600-equivalent ACLs through Go's os.WriteFile.
+// HookScriptPS1 returns the embedded PowerShell hook script bytes,
+// unmodified. Companion to HookScript for Windows installs where
+// CLAUDE_CODE_USE_POWERSHELL_TOOL=1 routes tool calls through the
+// PowerShell tool instead of Bash.
+func HookScriptPS1() []byte { return hookScriptPS1 }
+
+// WriteHookScript writes the Bash hook script to path. See writeHookBytes
+// for the mode/permission details.
 func WriteHookScript(path string) error {
+	return writeHookBytes(path, hookScript)
+}
+
+// WriteHookScriptPS1 writes the PowerShell hook script to path. Same
+// permission semantics as WriteHookScript; PowerShell ignores the
+// POSIX execute bit but respects the ACL-equivalent on Windows.
+func WriteHookScriptPS1(path string) error {
+	return writeHookBytes(path, hookScriptPS1)
+}
+
+// writeHookBytes writes b to path, creating parent directories as
+// needed. The file is created with a restrictive mode (0o600) and
+// then chmod'd to 0o700 so the owner can execute it. Group and world
+// have no access - this is user-scoped tooling. On Windows the execute
+// bit has no meaning; the file is still written with 0o600-equivalent
+// ACLs through Go's os.WriteFile.
+func writeHookBytes(path string, b []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("claudecode: create hook dir: %w", err)
 	}
@@ -51,7 +73,7 @@ func WriteHookScript(path string) error {
 	// then chmod adds the owner-execute bit needed for the hook to
 	// run. Group/other stay at 0 — nothing about this script is
 	// meant to be shared.
-	if err := os.WriteFile(path, hookScript, 0o600); err != nil {
+	if err := os.WriteFile(path, b, 0o600); err != nil {
 		return fmt.Errorf("claudecode: write hook: %w", err)
 	}
 	// #nosec G302 -- owner-execute bit is required so the hook can
@@ -71,20 +93,38 @@ type HookEntry struct {
 	Command string `json:"command"`
 }
 
-// Our entry marker: a fixed string in the command path that lets
+// Our entry markers: fixed strings in the command path that let
 // MergeSettings recognise a previous install so re-running the
-// installer doesn't pile up duplicate entries.
-const hookMarker = "thlibo-rewrite.sh"
+// installer doesn't pile up duplicate entries. Matching on a suffix
+// rather than the full path survives user-initiated moves.
+const (
+	hookMarker    = "thlibo-rewrite.sh"
+	hookMarkerPS1 = "thlibo-rewrite.ps1"
+)
 
-// MergeSettings loads settingsPath (creating an empty object if the
-// file doesn't exist), adds a PreToolUse/Bash hook pointing at
-// hookPath, and writes the file back. Preserves every other key
-// and every other hook entry verbatim.
+// MergeSettings loads settingsPath, adds a PreToolUse/Bash hook
+// pointing at bashHookPath, and writes the file back. Preserves every
+// other key and every other hook entry verbatim.
 //
-// Idempotent: calling it twice on the same settings file leaves
-// exactly one thlibo hook entry. If settingsPath is invalid JSON,
-// returns an error without modifying anything.
+// Deprecated: use MergeSettingsFull to also register the PowerShell
+// hook on Windows where CLAUDE_CODE_USE_POWERSHELL_TOOL=1 is set.
+// Kept for compatibility with existing installers and tests.
 func MergeSettings(settingsPath, hookPath string) error {
+	return MergeSettingsFull(settingsPath, hookPath, "")
+}
+
+// MergeSettingsFull loads settingsPath (creating an empty object if
+// the file doesn't exist), adds a PreToolUse hook entry for each
+// non-empty hook path, and writes the file back. bashHookPath is
+// registered under matcher "Bash"; ps1HookPath, if non-empty, is
+// registered under matcher "PowerShell" — which is the tool name
+// Claude Code uses when CLAUDE_CODE_USE_POWERSHELL_TOOL=1.
+// Preserves every other key and every other hook entry verbatim.
+//
+// Idempotent: calling it twice on the same settings file leaves at
+// most one thlibo hook entry per matcher. If settingsPath is invalid
+// JSON, returns an error without modifying anything.
+func MergeSettingsFull(settingsPath, bashHookPath, ps1HookPath string) error {
 	var root map[string]any
 	buf, err := os.ReadFile(settingsPath) // #nosec G304 -- path is a thlibo config location chosen by the installer
 	switch {
@@ -102,7 +142,12 @@ func MergeSettings(settingsPath, hookPath string) error {
 		return fmt.Errorf("claudecode: read %s: %w", settingsPath, err)
 	}
 
-	addBashPreToolUseHook(root, hookPath)
+	if bashHookPath != "" {
+		addPreToolUseHook(root, "Bash", bashHookPath, hookMarker)
+	}
+	if ps1HookPath != "" {
+		addPreToolUseHook(root, "PowerShell", ps1HookPath, hookMarkerPS1)
+	}
 
 	encoded, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
@@ -117,47 +162,46 @@ func MergeSettings(settingsPath, hookPath string) error {
 	return nil
 }
 
-// addBashPreToolUseHook mutates root in-place. It walks/creates the
-// nested structure hooks.PreToolUse[?matcher==Bash].hooks[] and
+// addPreToolUseHook mutates root in-place. It walks/creates the
+// nested structure hooks.PreToolUse[?matcher==<matcher>].hooks[] and
 // appends our command entry. If an entry for our hook already
-// exists (recognised by the hookMarker suffix) it's updated in
-// place instead of duplicated.
+// exists (recognised by markerSuffix in the command string) it's
+// updated in place instead of duplicated.
 //
 // Windows note: the command string is normalised to forward slashes
 // so that when Claude Code's Bash tool spawns bash -c "<cmd>", bash
 // doesn't interpret backslashes as shell escapes. Git Bash / MSYS
 // handle `C:/path/to/file` correctly.
-func addBashPreToolUseHook(root map[string]any, hookPath string) {
-	hookPath = normalisePath(hookPath)
+func addPreToolUseHook(root map[string]any, matcher, hookPath, markerSuffix string) {
+	cmdString := buildHookCommand(matcher, hookPath)
 
 	hooks := asObject(root, "hooks")
 	preArr := asArray(hooks, "PreToolUse")
 
-	// Find an existing matcher group for "Bash".
+	// Find an existing matcher group.
 	var group map[string]any
 	for _, g := range preArr.items() {
 		obj, ok := g.(map[string]any)
 		if !ok {
 			continue
 		}
-		if s, _ := obj["matcher"].(string); s == "Bash" {
+		if s, _ := obj["matcher"].(string); s == matcher {
 			group = obj
 			break
 		}
 	}
 	if group == nil {
-		group = map[string]any{"matcher": "Bash", "hooks": []any{}}
+		group = map[string]any{"matcher": matcher, "hooks": []any{}}
 		preArr.append(group)
 	}
-	// hooks: []any
 	groupHooks, _ := group["hooks"].([]any)
 	if groupHooks == nil {
 		groupHooks = []any{}
 	}
 
-	// Look for our existing entry. Recognise by command-string
-	// suffix so a rename of the script (e.g. user moved it to a
-	// shared dir) still updates the same slot.
+	// Look for our existing entry. Recognise by marker suffix so a
+	// rename of the script (e.g. user moved it to a shared dir)
+	// still updates the same slot.
 	for i, h := range groupHooks {
 		obj, ok := h.(map[string]any)
 		if !ok {
@@ -167,15 +211,28 @@ func addBashPreToolUseHook(root map[string]any, hookPath string) {
 		// Normalise the stored command too so a legacy \-path entry
 		// written by an older thlibo version gets upgraded in place
 		// rather than left alongside a new /-path entry.
-		if strings.Contains(normalisePath(cmd), hookMarker) {
-			groupHooks[i] = map[string]any{"type": "command", "command": hookPath}
+		if strings.Contains(normalisePath(cmd), markerSuffix) {
+			groupHooks[i] = map[string]any{"type": "command", "command": cmdString}
 			group["hooks"] = groupHooks
 			return
 		}
 	}
 
-	groupHooks = append(groupHooks, map[string]any{"type": "command", "command": hookPath})
+	groupHooks = append(groupHooks, map[string]any{"type": "command", "command": cmdString})
 	group["hooks"] = groupHooks
+}
+
+// buildHookCommand returns the `command` string for a PreToolUse
+// entry. Bash hooks are invoked as the raw script path (Claude Code
+// runs them via `bash -c`). PowerShell hooks are invoked via
+// `powershell -ExecutionPolicy Bypass -File <path>` so systems where
+// the signed-script policy would block direct execution still work.
+func buildHookCommand(matcher, hookPath string) string {
+	hookPath = normalisePath(hookPath)
+	if matcher == "PowerShell" {
+		return `powershell -NoProfile -ExecutionPolicy Bypass -File "` + hookPath + `"`
+	}
+	return hookPath
 }
 
 // asObject returns root[key] as a map, creating it if absent or if
