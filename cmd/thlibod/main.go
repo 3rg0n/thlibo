@@ -204,21 +204,18 @@ func parseFlags(argv []string) (*flags, error) {
 // after the server flags that StartLlamafileEngine prepends. Exposed as
 // a standalone function so main_test.go can inspect the argv without
 // actually spawning a process.
+//
+// Note: --stop tokens are NOT included here. In llamafile's --server mode
+// stop sequences are per-request (passed in the API body's "stop" field),
+// not process-level CLI flags. See issue #7.
 func buildEngineArgs(f *flags) []string {
-	// Order: model (-m), context (-c), stop tokens, then operator extras.
-	// Operator args come last so last-value-wins favours their overrides.
+	// Order: model (-m), context (-c), then operator extras.
 	var args []string
 	if f.modelPath != "" {
 		args = append(args, "-m", f.modelPath)
 	}
 	if f.ctxSize > 0 {
 		args = append(args, "-c", fmt.Sprintf("%d", f.ctxSize))
-	}
-	for _, tok := range splitCommaList(f.stopTokens) {
-		if tok == "" {
-			continue
-		}
-		args = append(args, "--stop", tok)
 	}
 	args = append(args, splitFields(f.engineArgs)...)
 	return args
@@ -240,13 +237,14 @@ func buildConfig(f *flags) (daemon.Config, error) {
 		UseTCP:  looksLikeTCP(f.adminAddr),
 	}
 
+	stopTokens := splitCommaList(f.stopTokens)
 	return daemon.Config{
 		LockPath: f.lockPath,
 		// #nosec G204 — enginePath is operator-configured (flag/installer
 		// default), never user-controllable at runtime.
 		// nosemgrep: dangerous-exec-command
 		EngineFactory: func() (daemon.Engine, error) {
-			return daemon.StartLlamafileEngine(enginePath, engineArgs)
+			return daemon.StartLlamafileEngine(enginePath, engineArgs, stopTokens)
 		},
 		InferenceEndpoint: infer,
 		AdminEndpoint:     adminEP,
@@ -380,12 +378,13 @@ Flags:
                                  Default: <thlibod-dir>/thlibo-engine[.exe].
   -model <path>                  GGUF model file (passed to engine as -m).
                                  Default: ~/.thlibo/models/<default-model>.
-  -engine-args "<args>"          Extra args appended after -m/-ctx/-stop.
+  -engine-args "<args>"          Extra args appended after -m/-c.
   -ctx N                         Context window tokens (default 32768,
                                  passed to engine as -c N).
-  -stop "<t1>,<t2>,..."          Comma-separated stop tokens, each
-                                 passed as --stop <t> (default:
-                                 "<turn|>,<end_of_turn>").
+  -stop "<t1>,<t2>,..."          Comma-separated stop tokens (default:
+                                 "<turn|>,<end_of_turn>"). Injected
+                                 per-request via the API body; not
+                                 passed as engine CLI flags.
   -lock <path>                   Lock file. Default is platform-specific.
   -infer-addr <addr>             Inference endpoint. Default is platform-specific.
   -admin-addr <addr>             Admin endpoint. Default is platform-specific.

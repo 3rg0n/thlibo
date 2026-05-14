@@ -20,18 +20,24 @@ import (
 // LlamafileEngine drives llamafile in HTTP server mode.
 //
 // On creation it allocates a random loopback port, spawns llamafile with
-// --port/--host/--nobrowser, and begins polling GET /health in the
-// background. Ready() flips true once the server accepts the first healthy
-// request. Generate() calls POST /v1/chat/completions with SSE streaming.
+// --server --port/--host, and begins polling GET /health in the background.
+// Ready() flips true once the server accepts the first healthy request.
+// Generate() calls POST /v1/chat/completions with SSE streaming.
+//
+// Stop sequences from the -stop flag are NOT passed as CLI arguments
+// (llamafile --server mode does not accept --stop flags; they are
+// per-request parameters). Instead they travel in the "stop" field of
+// each /v1/chat/completions request body.
 //
 // The Engine interface contract (Ready, Generate, Stop, Done, ExitErr) is
 // identical to SubprocessEngine so the daemon lifecycle layer is unaware of
 // which backend is running.
 type LlamafileEngine struct {
-	cmd     *exec.Cmd
-	port    int
-	baseURL string
-	client  *http.Client // short-timeout client for health probes
+	cmd        *exec.Cmd
+	port       int
+	baseURL    string
+	stopTokens []string
+	client     *http.Client // short-timeout client for health probes
 
 	ready atomic.Bool
 	done  chan struct{}
@@ -39,13 +45,16 @@ type LlamafileEngine struct {
 }
 
 // StartLlamafileEngine spawns the llamafile binary at enginePath with
-// extraArgs (e.g. -m model.gguf -c 32768 --stop token) appended after
-// the internal server flags. On macOS the binary is wrapped in /bin/sh
-// because the APE polyglot format cannot be execve'd directly.
+// extraArgs (e.g. -m model.gguf -c 32768) appended after the internal
+// server flags. stopTokens is a list of per-request stop sequences; they
+// are injected into each /v1/chat/completions request body (not as CLI
+// flags, which are unsupported in --server mode). On macOS the binary is
+// wrapped in /bin/sh because the APE polyglot format cannot be execve'd
+// directly.
 //
 // The caller must call Stop when done; the engine is NOT ready until
 // Ready() returns true (probed by the daemon's waitReady loop).
-func StartLlamafileEngine(enginePath string, extraArgs []string) (*LlamafileEngine, error) {
+func StartLlamafileEngine(enginePath string, extraArgs, stopTokens []string) (*LlamafileEngine, error) {
 	port, err := freePort()
 	if err != nil {
 		return nil, fmt.Errorf("engine: find free port: %w", err)
@@ -80,11 +89,12 @@ func StartLlamafileEngine(enginePath string, extraArgs []string) (*LlamafileEngi
 	}
 
 	e := &LlamafileEngine{
-		cmd:     cmd,
-		port:    port,
-		baseURL: fmt.Sprintf("http://127.0.0.1:%d", port),
-		client:  &http.Client{Timeout: 2 * time.Second},
-		done:    make(chan struct{}),
+		cmd:        cmd,
+		port:       port,
+		baseURL:    fmt.Sprintf("http://127.0.0.1:%d", port),
+		stopTokens: stopTokens,
+		client:     &http.Client{Timeout: 2 * time.Second},
+		done:       make(chan struct{}),
 	}
 	go e.watchExit()
 	go e.pollHealth(100 * time.Millisecond)
@@ -168,6 +178,7 @@ func (e *LlamafileEngine) Generate(ctx context.Context, prompt GeneratePrompt, t
 		TopP:        prompt.TopP,
 		TopK:        prompt.TopK,
 		MaxTokens:   maxTokens,
+		Stop:        e.stopTokens,
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -274,6 +285,7 @@ type chatCompletionRequest struct {
 	TopP        float64       `json:"top_p"`
 	TopK        int           `json:"top_k"`
 	MaxTokens   int           `json:"max_tokens"`
+	Stop        []string      `json:"stop,omitempty"`
 }
 
 type chatMessage struct {
