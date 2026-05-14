@@ -18,6 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version is written alongside as `<path>.new` and the user's file is
   preserved (Conflict). `thlibo install` prints a clear message for each
   case. Closes #12.
+- Background update checker. `thlibo` CLI invocations (everything
+  except `thlibo version`) fire a detached goroutine that fetches
+  `api.github.com/repos/3rg0n/thlibo/releases/latest` once per
+  cooldown window (default 24 h, cached at
+  `~/.thlibo/state/update-check.json`). When a newer semver tag is
+  available, prints a single banner to stderr pointing at the
+  install-script upgrade command; the banner repeats on subsequent
+  invocations only if the latest tag changes. Network failures are
+  silent (logged at debug). Kill switches: `THLIBO_NO_UPDATE=1` or
+  `THLIBO_UPDATE_INTERVAL=0`. Dev builds (untagged) never check.
+- New `internal/version` package exposing the build tag via
+  `-ldflags -X github.com/3rg0n/thlibo/internal/version.Tag=v…`;
+  `release.yml` now injects `${{ github.ref_name }}` on every build.
+- New `thlibo version` / `thlibo --version` subcommand prints the
+  embedded tag without triggering the update check.
 
 ### Fixed
 

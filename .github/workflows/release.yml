@@ -93,7 +93,7 @@ jobs:
           MODEL_SHA: ${{ needs.pin-model.outputs.sha256 }}
         run: |
           mkdir -p dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin
-          LDFLAGS="-s -w -X github.com/3rg0n/thlibo/internal/install.pinnedGemma4E4BQ4KM=$MODEL_SHA"
+          LDFLAGS="-s -w -X github.com/3rg0n/thlibo/internal/install.pinnedGemma4E4BQ4KM=$MODEL_SHA -X github.com/3rg0n/thlibo/internal/version.Tag=${{ github.ref_name }}"
           go build -trimpath -ldflags="$LDFLAGS" \
             -o dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibo${{ matrix.ext }} \
             ./cmd/thlibo

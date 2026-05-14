@@ -17,6 +17,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -26,6 +27,9 @@ import (
 	"github.com/3rg0n/thlibo/cmd/thlibo/pullcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/rewritecmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/uninstallcmd"
+	"github.com/3rg0n/thlibo/internal/logx"
+	"github.com/3rg0n/thlibo/internal/update"
+	"github.com/3rg0n/thlibo/internal/version"
 )
 
 func main() {
@@ -33,6 +37,25 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+
+	// Background update check. Fires on every CLI invocation but:
+	//   - cooldown-gated (default 24h) via ~/.thlibo/state/update-check.json
+	//   - runs in a detached goroutine, never blocks the subcommand
+	//   - silent on network failure (logged at debug level only)
+	//   - suppressed by THLIBO_NO_UPDATE=1, THLIBO_UPDATE_INTERVAL=0,
+	//     and for untagged dev builds
+	//
+	// "version" subcommand is hit before the check fires (user
+	// asking "what version am I on" shouldn't spawn a network call).
+	if os.Args[1] != "version" && os.Args[1] != "-v" && os.Args[1] != "--version" {
+		r := &update.Runner{
+			Current: version.Tag,
+			Out:     os.Stderr,
+			Logger:  logx.New("thlibo-update", "", 0),
+		}
+		_ = r.Run(context.Background())
+	}
+
 	switch os.Args[1] {
 	case "rewrite":
 		os.Exit(rewritecmd.Run(os.Args[2:]))
@@ -46,6 +69,9 @@ func main() {
 		os.Exit(uninstallcmd.Run(os.Args[2:]))
 	case "pull":
 		os.Exit(pullcmd.Run(os.Args[2:]))
+	case "version", "-v", "--version":
+		fmt.Println(version.Tag)
+		os.Exit(0)
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -71,10 +97,15 @@ Usage:
                              scripts, unregister autostart. Pass
                              --purge to also delete ~/.thlibo.
   thlibo pull [name]         Download a GGUF model (default: gemma-4-e4b).
+  thlibo version             Print the build tag and exit.
   thlibo help                Show this message.
 
 Environment:
   THLIBO_DISABLED=1          Per-session kill switch; hooks pass
                              through unchanged when set.
+  THLIBO_NO_UPDATE=1         Disable the background update check.
+  THLIBO_UPDATE_INTERVAL=0   Alternate way to disable the check; or
+                             a Go duration like "168h" to change the
+                             cooldown (default: 24h).
 `)
 }
