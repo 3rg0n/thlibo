@@ -1,0 +1,79 @@
+internal/ipc/peercred_unix.go
+  s_5811b7f24eccc0::t_97a44a85bbf70b 1-2,6,8,18-22,24,26,30-33,35-37,39-42,46-48,50,53
+  s_5811b7f24eccc0::t_12d4f234547dab 3-5,7,9-10,25,27-29,34,49,52,54
+  s_5811b7f24eccc0::t_e7fc78f25ee6bd 11-17,23,38,43-45,51,55-62
+internal/ipc/peercred_windows.go
+  s_5811b7f24eccc0::t_3bda4b8063c9d0 8-9,14-20,22-23,26,28-29,57-58,72-79
+  s_5811b7f24eccc0::t_0410d6aa894ad6 68-71
+  s_5811b7f24eccc0::t_a75f5cf4116eeb 1-7,10-13,21,24-25,27,30-56,59-67,80-83
+internal/queue/queue_test.go
+  s_5811b7f24eccc0::t_bb59a901f9c8c7 227-324
+internal/ipc/peercred_darwin.go
+  s_5811b7f24eccc0::t_0815a6c47281a2 1-17
+internal/daemon/sid_windows.go
+  s_5811b7f24eccc0::t_4da018ec13a703 1-35
+CHANGELOG.md
+  s_5811b7f24eccc0::t_d21bce40818f3b 10-34
+internal/execpolicy/execpolicy.go
+  s_5811b7f24eccc0::t_69ee61ddeb442c 1-165
+internal/execpolicy/execpolicy_test.go
+  s_5811b7f24eccc0::t_7dedeba1fd7b31 1-95
+internal/ipc/peercred_linux.go
+  s_5811b7f24eccc0::t_e5070fa5bec70b 1-15
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_26fba010535036 70-72,75-78
+  s_5811b7f24eccc0::t_b17f151aa10ab2 28
+  s_5811b7f24eccc0::t_80881fa598b323 45-46
+internal/daemon/lifecycle.go
+  s_5811b7f24eccc0::t_374e40da4f0784 465-466
+  s_5811b7f24eccc0::t_dbe9e915e7b85f 10
+  s_5811b7f24eccc0::t_a3ae02fb982048 535-536,538-539,541-544
+  s_5811b7f24eccc0::t_ddc35232dba903 668-713
+  s_5811b7f24eccc0::t_9744b41e44c05b 367-390
+THREAT_MODEL.md
+  s_5811b7f24eccc0::t_d1b8131d6dba36 213-233
+  s_5811b7f24eccc0::t_d3220d49c7784d 239-262
+  s_5811b7f24eccc0::t_bf9f756ca555b0 12
+internal/ipc/peercred.go
+  s_5811b7f24eccc0::t_a667bad5570cc2 1-66
+cmd/thlibo/execcmd/exec.go
+  s_5811b7f24eccc0::t_da3a5eab23b91a 91-111
+  s_5811b7f24eccc0::t_9d1313826f78f4 32
+  s_5811b7f24eccc0::t_c08dc4119377a7 43
+internal/adapters/claudecode/claudecode_test.go
+  s_5811b7f24eccc0::t_0f5dace45e12f8 60-151
+internal/adapters/claudecode/claudecode.go
+  s_5811b7f24eccc0::t_6db0e05c0e430a 165-256
+internal/daemon/sid_unix.go
+  s_5811b7f24eccc0::t_051a9662702c8f 1-10
+internal/adapters/claudecode/hook.sh
+  s_5811b7f24eccc0::t_c6d4a4fb644772 28-34
+internal/adapters/codex/hook.sh
+  s_5811b7f24eccc0::t_592c1090d0ff34 37-41
+internal/queue/queue.go
+  s_5811b7f24eccc0::t_530cefefec04a0 14-20,24-28
+  s_5811b7f24eccc0::t_682274b7e3710a 69-77
+  s_5811b7f24eccc0::t_ec0206475cd5dc 97-98,100-106,110-112,114-117
+  s_5811b7f24eccc0::t_d7926d3f4436a1 51-58
+  s_5811b7f24eccc0::t_4129de54444415 125-126,142-154,157-163,166,169,174-193
+internal/adapters/claudecode/hook.ps1
+  s_5811b7f24eccc0::t_5a18d8cc3fd8de 16-23
+cmd/thlibo/uninstallcmd/uninstall.go
+  s_5811b7f24eccc0::t_97d5bfd70df7b8 1-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "4b8b9b6852dcad84730106e5b1c936919c05f69a",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
