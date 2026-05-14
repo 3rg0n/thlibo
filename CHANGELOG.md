@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+Second remediation pass sweeping every low-severity finding that is a
+real bug (not a design decision). Combined with the first pass, the
+only items still open in `THREAT_MODEL.md` are the four items
+explicitly marked "won't-fix: by design" (queue-based rate limiting,
+exec allow-list, SO_PEERCRED, persistent hook install) and the v0.2
+supply-chain infrastructure items (SBOM + Sigstore).
+
+### Added (second pass)
+
+- Script-entry TOCTOU guard — `processors.EntryFingerprint`
+  (size/mtime/mode) captured at registry load and re-verified at
+  dispatch; a mismatch returns `processors.ErrEntrySwapped` and the
+  middleware falls back. Closes finding #9.
+- Rolling log rotation — keeps `.old`, `.old.1`, `.old.2` generations
+  (configurable cap `maxRotatedGenerations`), preserving a forensics
+  window that survives a second rotation. Closes finding #13.
+- `processors.Strip` rewritten as a bounded state-machine parser
+  with a `maxThoughtBytes = 64 KiB` cap on each block. Unclosed /
+  oversized blocks now fall through as literal text instead of
+  being eaten. Regression tests for stacked-open and oversized
+  cases. Closes finding #19.
+- `AcquireLock` rejects pre-existing symlinks at the lock path via
+  `Lstat` + post-open `Stat.IsRegular()` check. Closes finding #21.
+- Clarified `internal/install` package docstring: `thlibo install`
+  does NOT create the `thlibo-users` group (v0.1 is per-user only).
+  Closes finding #26.
+
+### Changed (second pass)
+
+- `SubprocessEngine.Generate` composes the child-request line via
+  `json.Marshal` on an anonymous struct instead of `fmt.Sprintf`
+  with `%q`. `%q` uses Go string-literal escape rules that don't
+  match JSON for some edge cases (U+2028/2029, surrogate pairs).
+  Closes finding #18.
+
+### Security
+
 Remediation sweep informed by the new MAESTRO threat model
 (`THREAT_MODEL.md`). Each item links to the finding number it
 addresses.

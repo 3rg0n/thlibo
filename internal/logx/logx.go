@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -94,10 +95,13 @@ func DefaultDir() string {
 // first write so non-logging invocations (short-circuited requests,
 // `thlibo help`) leave the filesystem untouched.
 //
-// Rotation: when the file grows past rotateBytes, it's renamed to
-// <component>.ndjson.old (overwriting any previous .old) and a
-// fresh file is started. Default rotateBytes is 10 MiB; pass 0
-// for no rotation.
+// Rotation: when the file grows past rotateBytes, it's rotated into
+// a numbered sequence (.ndjson.old → .ndjson.old.1 → .ndjson.old.2
+// → dropped) and a fresh file is started. Keeping three generations
+// preserves a forensics window long enough to resist "trigger
+// rotation twice to erase the audit trail" attacks. See
+// THREAT_MODEL.md finding #13. Default rotateBytes is 10 MiB; pass
+// 0 for no rotation.
 func New(component, dir string, rotateBytes int64) *Logger {
 	if dir == "" {
 		dir = DefaultDir()
@@ -112,6 +116,14 @@ func New(component, dir string, rotateBytes int64) *Logger {
 		verbosity: parseVerbosity(os.Getenv("THLIBO_LOG")),
 	}
 }
+
+// maxRotatedGenerations is the number of historic .old files kept.
+// N=3 means at rotation time we cascade .old.2 → dropped, .old.1 →
+// .old.2, .old → .old.1, current → .old. An attacker with same-UID
+// write access would need to force three rotations to erase the
+// oldest record, which at the default 10 MiB cap is ~30 MiB of log
+// volume per forensics window.
+const maxRotatedGenerations = 3
 
 // Error writes an error-level record. Always emitted.
 func (l *Logger) Error(msg string, fields ...Field) {
@@ -259,6 +271,14 @@ func (l *Logger) ensureOpen() error {
 // threshold. Caller holds l.mu. Rotation is best-effort: a failure
 // just means the file keeps growing, which is strictly less bad
 // than losing writes.
+//
+// Rotation cascades through a bounded history so multiple rotations
+// don't erase the forensics window. Concretely, for N = 3:
+//
+//	.old.2   -> deleted
+//	.old.1   -> .old.2
+//	.old     -> .old.1
+//	current  -> .old
 func (l *Logger) maybeRotateLocked() {
 	if l.rotateAt <= 0 || l.f == nil {
 		return
@@ -267,12 +287,34 @@ func (l *Logger) maybeRotateLocked() {
 	if err != nil || info.Size() < l.rotateAt {
 		return
 	}
-	old := l.path + ".old"
 	_ = l.f.Close()
 	l.f = nil
-	_ = os.Remove(old)
-	_ = os.Rename(l.path, old)
+
+	// Cascade from oldest to newest. Missing files are fine.
+	base := l.path
+	oldestIdx := maxRotatedGenerations - 1
+	// Drop the oldest if it exists.
+	oldest := rotatedName(base, oldestIdx)
+	_ = os.Remove(oldest)
+	// Shift each generation up by one.
+	for i := oldestIdx - 1; i >= 0; i-- {
+		from := rotatedName(base, i)
+		to := rotatedName(base, i+1)
+		_ = os.Rename(from, to)
+	}
+	// Current -> .old (generation 0).
+	_ = os.Rename(base, rotatedName(base, 0))
 	// Next write will reopen and recreate.
+}
+
+// rotatedName returns the on-disk name for generation i. Generation 0
+// is "<base>.old" (matches the pre-rolling naming for compatibility);
+// later generations are "<base>.old.N".
+func rotatedName(base string, i int) string {
+	if i == 0 {
+		return base + ".old"
+	}
+	return base + ".old." + strconv.Itoa(i)
 }
 
 // Close flushes any pending write and releases the underlying file.

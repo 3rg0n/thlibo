@@ -49,9 +49,27 @@ type Descriptor struct {
 	// and the registry override logic can reference it.
 	Origin Origin `yaml:"-" json:"-"`
 
+	// EntryFingerprint is the (size, mtime, mode) snapshot of the
+	// script entry file captured when the registry loaded this
+	// descriptor. Script dispatch re-stats the file and refuses to
+	// run if the fingerprint changed since load — a best-effort
+	// TOCTOU guard against an attacker who swaps the entry file
+	// between registry scan and subprocess spawn. See
+	// THREAT_MODEL.md finding #9. Empty for prompt processors and
+	// for script descriptors without a DiskDir.
+	EntryFingerprint EntryFingerprint `yaml:"-" json:"-"`
+
 	// compiledMatch is the regex compiled from Match, ready for
 	// fast-path dispatch. nil when Match is empty.
 	compiledMatch *regexp.Regexp
+}
+
+// EntryFingerprint is the small summary of a script entry file we
+// capture at registry-load time and re-verify at dispatch time.
+type EntryFingerprint struct {
+	Size  int64
+	ModNs int64 // mtime in Unix nanoseconds; 0 means fingerprint not recorded
+	Mode  uint32
 }
 
 // Origin records where a descriptor was loaded from. "User" descriptors

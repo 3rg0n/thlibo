@@ -20,6 +20,14 @@ type Lock struct {
 	f    *os.File
 }
 
+// ErrLockNotRegularFile is returned when the lock path exists but is
+// not a regular file (symlink, device, FIFO, directory). Refusing to
+// acquire a lock on a non-regular file closes a class of TOCTOU
+// attacks where an attacker with write access to the lock directory
+// pre-seeds the path with a symlink to a file they want us to chown
+// or otherwise touch. See THREAT_MODEL.md finding #21.
+var ErrLockNotRegularFile = errors.New("daemon: lock path is not a regular file")
+
 // AcquireLock creates or opens path and takes an exclusive OS-level lock
 // on it. If another process already holds the lock, returns
 // ErrAlreadyLocked without disturbing that process. The current PID is
@@ -31,12 +39,33 @@ func AcquireLock(path string) (*Lock, error) {
 	if err := os.MkdirAll(dirOf(path), 0o750); err != nil {
 		return nil, fmt.Errorf("daemon: create lock dir: %w", err)
 	}
+	// Refuse to follow a pre-existing symlink at path. If the path is
+	// a symlink, reject immediately - an attacker with write on the
+	// parent dir should not be able to aim our exclusive flock at
+	// someone else's file. Covers Unix; on Windows Lstat behaves the
+	// same way for junctions + symlinks.
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("%w: %s", ErrLockNotRegularFile, path)
+		}
+	}
 	// path is a daemon config value (e.g. /run/thlibo/thlibod.lock), not
 	// user-supplied input. Mode 0600: only the daemon's own uid reads the
 	// PID; other users don't need to see it.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("daemon: open lock file: %w", err)
+	}
+	// Re-check after open: between Lstat and OpenFile the file could
+	// have been swapped. Compare against Stat (follows links) using
+	// the open fd's inode to make sure we actually have a regular file
+	// handle.
+	if info, err := f.Stat(); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("daemon: stat lock file: %w", err)
+	} else if !info.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, fmt.Errorf("%w: %s", ErrLockNotRegularFile, path)
 	}
 	if err := lockFile(f); err != nil {
 		_ = f.Close()

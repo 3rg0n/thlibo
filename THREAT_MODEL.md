@@ -195,6 +195,45 @@ Scanned with `govulncheck@v1.1.4` (DB: `vuln.go.dev`). Third-party direct deps: 
 
 **Trivy supply-chain advisory (CVE-2026-33634)**: noted, not applicable — trivy was not invoked for this scan. Per policy, the blocklist (trivy 0.69.4/5/6 containers and hijacked Actions tags) would have been checked first.
 
+## Status after remediation passes
+
+As of the second remediation pass (commit following this file), the
+high- and medium-severity findings are closed and every low-severity
+real bug has a code-level fix. What remains is documented here so a
+future review doesn't re-open settled decisions.
+
+### Won't fix — by design (captured as ADR-scope decisions)
+
+- **#16 MA-6 persistence injection.** `thlibo install` writes a
+  persistent PreToolUse hook into `~/.claude/settings.json` by design
+  — that persistence is the product. Alternatives (prompt-per-session
+  re-install, middleware-less proxy mode) are tracked as v0.2
+  alternatives, not bug fixes.
+- **#17 T32 per-caller rate limit.** The daemon enforces a fixed
+  queue: 1 active + 10 waiting, `ErrFull` immediate. This is the
+  published contract (spec §Concurrency). A local attacker who
+  spams the socket can monopolise by re-submitting after each
+  reject, but the resulting DoS is scoped to the user's own daemon;
+  no cross-tenant impact because thlibod is per-user.
+- **#22 T11 exec allow-list.** `thlibo exec` runs whatever the AI
+  client asks it to run; safety is explicitly delegated to the AI
+  client's own permission layer. An allow-list here would duplicate
+  (and risk drifting from) Claude Code's command allow-list.
+- **#24 T9 no SO_PEERCRED.** The Unix socket ACL (mode 0660, group
+  `thlibo-users`) is the identity check. Adding a second check in
+  user-space would be strictly redundant for the per-user deployment
+  model. If a multi-tenant deployment mode is ever added, this
+  becomes a real requirement.
+
+### Deferred — v0.2 supply-chain infra
+
+- **#27 T14 / #28 T25** — cosign keyless signing of release artefacts
+  + CycloneDX SBOM generation in `release.yml`, published separately
+  from the GitHub release. Out of scope for v0.1 because Sigstore
+  keyless requires OIDC setup with GitHub Actions' `id-token: write`
+  and a decision about the transparency-log identity to publish
+  under. Target: v0.2.
+
 ## Recommended Mitigations (Priority Order)
 
 1. **(High, #1)** Escape Gemma native tool-call markers in tool-output bytes before they enter any model prompt. One location: add a `sanitizeForPrompt(s)` helper in `internal/middleware` that replaces `<|tool_call|>`, `<tool_call|>`, `<|channel|>` with visually-identical non-control runes (or HTML entities). Apply at `PromptRunner.Run` and at `router.buildRoutingMessages`. Unit test: property-test asserting no input containing those substrings survives to the daemon.

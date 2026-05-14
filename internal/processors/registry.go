@@ -14,6 +14,25 @@ import (
 	"strings"
 )
 
+// fingerprintEntry records (size, mtime, mode) for a script entry
+// file so the dispatcher can detect swaps between load and dispatch.
+// Returns zero-value fingerprint on any stat error; dispatch treats
+// a zero fingerprint as "not recorded, skip the check".
+func fingerprintEntry(dir, entry string) EntryFingerprint {
+	if dir == "" || entry == "" {
+		return EntryFingerprint{}
+	}
+	info, err := os.Stat(filepath.Join(dir, entry))
+	if err != nil {
+		return EntryFingerprint{}
+	}
+	return EntryFingerprint{
+		Size:  info.Size(),
+		ModNs: info.ModTime().UnixNano(),
+		Mode:  uint32(info.Mode().Perm()),
+	}
+}
+
 // Registry is the set of known processors after scanning both built-in
 // and user sources. Registry operations are read-only after Build
 // returns; concurrent readers do not need to lock.
@@ -132,6 +151,12 @@ func (r *Registry) scan(s Source) []error {
 		// Record the on-disk directory for script processor dispatch.
 		if s.DiskRoot != "" {
 			d.Origin.DiskDir = filepath.Join(s.DiskRoot, e.Name())
+			// Capture (size, mtime, mode) of the script entry so
+			// the dispatcher can detect swaps between load and
+			// dispatch — best-effort TOCTOU guard per finding #9.
+			if d.Type == KindScript {
+				d.EntryFingerprint = fingerprintEntry(d.Origin.DiskDir, d.Entry)
+			}
 		}
 		// User wins: overwrite any existing entry unconditionally when
 		// origin is User. When origin is Builtin, only add if not

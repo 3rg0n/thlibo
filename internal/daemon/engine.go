@@ -3,6 +3,7 @@ package daemon
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -167,9 +168,29 @@ func (e *SubprocessEngine) Generate(ctx context.Context, prompt GeneratePrompt, 
 	e.genMu.Lock()
 	defer e.genMu.Unlock()
 
-	line := fmt.Sprintf("{\"system\":%q,\"user\":%q,\"temperature\":%g,\"top_p\":%g,\"top_k\":%d,\"max_tokens\":%d}\n",
-		prompt.System, prompt.User, prompt.Temperature, prompt.TopP, prompt.TopK, prompt.MaxTokens)
-	if _, err := e.stdin.Write([]byte(line)); err != nil {
+	// Build the child request via json.Marshal, not fmt.Sprintf(%q).
+	// %q uses Go's string-literal escape rules, which differ from JSON
+	// for control characters (e.g. U+2028 / U+2029) and for raw
+	// backslash/quote edge cases in non-ASCII text. json.Marshal
+	// produces spec-correct JSON regardless of the input bytes. See
+	// THREAT_MODEL.md finding #18.
+	buf, err := json.Marshal(struct {
+		System      string  `json:"system"`
+		User        string  `json:"user"`
+		Temperature float64 `json:"temperature"`
+		TopP        float64 `json:"top_p"`
+		TopK        int     `json:"top_k"`
+		MaxTokens   int     `json:"max_tokens"`
+	}{
+		System: prompt.System, User: prompt.User,
+		Temperature: prompt.Temperature, TopP: prompt.TopP,
+		TopK: prompt.TopK, MaxTokens: prompt.MaxTokens,
+	})
+	if err != nil {
+		return fmt.Errorf("engine: marshal prompt: %w", err)
+	}
+	buf = append(buf, '\n')
+	if _, err := e.stdin.Write(buf); err != nil {
 		return fmt.Errorf("engine: write prompt: %w", err)
 	}
 

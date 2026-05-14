@@ -72,3 +72,46 @@ func TestStripDoesNotEatUnclosedOpen(t *testing.T) {
 		t.Errorf("unclosed thought should pass through; got %q", got)
 	}
 }
+
+// THREAT_MODEL.md finding #19: a block exceeding maxThoughtBytes is
+// treated as literal, not greedily swallowed. This bounds the damage
+// of a malformed open marker.
+func TestStripOversizedBlockLeavesMarkerLiteral(t *testing.T) {
+	// Build a body longer than maxThoughtBytes before the close.
+	big := make([]byte, maxThoughtBytes+10)
+	for i := range big {
+		big[i] = 'x'
+	}
+	in := "<|channel>thought" + string(big) + "<channel|>tail"
+	got := Strip(in)
+	// Since the close fell outside the scan window, the open marker
+	// passes through as literal and "tail" must still be visible.
+	if !contains(got, "<|channel>thought") {
+		t.Errorf("oversized block: open marker should be literal, got %q", got[:60])
+	}
+	if !contains(got, "tail") {
+		t.Errorf("oversized block: tail must survive, got trailing %q", got[len(got)-20:])
+	}
+}
+
+// THREAT_MODEL.md finding #19: adjacent open markers without a close
+// must not cause an infinite loop or greedily eat the suffix.
+func TestStripStackedOpenMarkersTerminate(t *testing.T) {
+	in := "<|channel>thought<|channel>thoughttail"
+	got := Strip(in)
+	if got == "" {
+		t.Errorf("stacked open markers must not collapse to empty")
+	}
+	if !contains(got, "tail") {
+		t.Errorf("stacked open markers: tail lost, got %q", got)
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

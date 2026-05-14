@@ -6,10 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
+
+// ErrEntrySwapped is returned when a script entry's (size, mtime, mode)
+// differs from what the registry recorded at load time. Best-effort
+// TOCTOU guard. See THREAT_MODEL.md finding #9.
+var ErrEntrySwapped = errors.New("dispatch: entry file changed since registry load")
 
 // Dispatcher runs a processor against input and returns the processed
 // output. Every error path is wrapped - callers (the middleware main
@@ -58,6 +65,26 @@ func (x *Dispatcher) runScript(ctx context.Context, d *Descriptor, input string)
 	bin, args, err := d.EntryCommand(dir)
 	if err != nil {
 		return "", err
+	}
+
+	// Re-verify the entry fingerprint. If the registry captured one
+	// (non-zero ModNs), compare against the current on-disk state; a
+	// mismatch means the file was rewritten since load and the
+	// dispatcher refuses to run it. Middleware treats this as any
+	// other dispatch error and falls back to original input.
+	if d.EntryFingerprint.ModNs != 0 {
+		info, statErr := os.Stat(filepath.Join(dir, d.Entry))
+		if statErr != nil {
+			return "", fmt.Errorf("dispatch: %s: stat entry: %w", d.Name, statErr)
+		}
+		now := EntryFingerprint{
+			Size:  info.Size(),
+			ModNs: info.ModTime().UnixNano(),
+			Mode:  uint32(info.Mode().Perm()),
+		}
+		if now != d.EntryFingerprint {
+			return "", fmt.Errorf("%w: %s/%s", ErrEntrySwapped, d.Name, d.Entry)
+		}
 	}
 
 	timeout := x.ScriptTimeout
