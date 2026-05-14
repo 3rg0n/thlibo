@@ -1,0 +1,34 @@
+internal/update/runner.go
+  s_5811b7f24eccc0::t_eaac60acdf8e53 1-236
+CHANGELOG.md
+  s_5811b7f24eccc0::t_cd0ac97d77136f 10-27
+internal/update/runner_test.go
+  s_5811b7f24eccc0::t_5ddab277b20314 1-211
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_723a5a8e80f623 96
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_a38029d58e4c61 20,30-32,40-58,72-74
+  s_5811b7f24eccc0::t_fc03c4e3d9936d 100,106-109
+internal/update/check_test.go
+  s_5811b7f24eccc0::t_a00c410a208b07 1-100
+internal/version/version.go
+  s_5811b7f24eccc0::t_cf567ec3912882 1-18
+internal/update/check.go
+  s_5811b7f24eccc0::t_a955a16c1c7403 1-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "4b3eb9256277a46311967f8a312f77dcbdf15969",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
