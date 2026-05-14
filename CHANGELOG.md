@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (v0.2 hardening — #16, #17, #22, #24)
+
+- `thlibo uninstall` subcommand reverses `thlibo install`: removes
+  thlibo entries from `~/.claude/settings.json` via new
+  `claudecode.RemoveHooks`, deletes hook scripts, unregisters
+  autostart. `--purge` additionally deletes `~/.thlibo/` (processors,
+  models, logs). `--dry-run` prints the plan without touching the
+  filesystem. Closes finding #16.
+- `$THLIBO_DISABLED=1` env gate honoured by `hook.sh`, `hook.ps1`,
+  and Codex `hook.sh`. Per-session bypass without uninstalling.
+- `queue.NewWithCallerCap` adds a per-caller concurrent-queued
+  quota (default 4) on top of the global 10-slot limit. Exceeding
+  the cap returns new `queue.ErrCallerFull`. Closes finding #17.
+- `internal/execpolicy` package: loads `~/.thlibo/policy.yaml`
+  (override via `$THLIBO_POLICY`), evaluates against `argv[0]`
+  with deny-wins semantics and configurable default. `thlibo exec`
+  calls it before spawn; denial returns exit 77 (`EX_NOPERM`).
+  Closes finding #22.
+- `ipc.PeerIdentity(net.Conn) (PeerID, error)` reads
+  `SO_PEERCRED` on Linux and `GetNamedPipeClientProcessId` +
+  `OpenProcessToken` on Windows. Darwin path returns a bare Unix
+  transport identity with `UID=-1` until `LOCAL_PEERCRED` lands
+  in v0.3. Daemon rejects UID/SID mismatches at accept time.
+  Closes finding #24.
+
 ### Added (v0.2 feature work)
 
 - **PowerShell tool support (#12).** Embedded `hook.ps1` companion to

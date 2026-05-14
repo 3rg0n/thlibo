@@ -9,7 +9,7 @@
 
 Nine MAESTRO agents analysed 91 source and config files across the seven architectural layers, plus a dependency CVE scan (`govulncheck`) and an agent/plug-in integrity audit of the embedded processors and hook shell scripts. The analysis surfaced **37 raw findings**; after deterministic normalisation, VCS-claim verification, and deduplication by `(file, line, threat_id)`, the merged set is **28 findings** — **0 critical, 2 high, 11 medium, 13 low, 2 info**.
 
-**Current status (post-remediation, 2026-05-14): 0 open.** 24 findings closed by code fixes across two remediation passes and the v0.2 feature work; 4 findings explicitly **Accepted** as intentional design decisions — see "Status after remediation passes" below. Every finding in this document carries one of three terminal states: **Mitigated** (code fix landed, referenced commit), **Accepted** (intentional, documented, won't change), or **Deferred** (planned, target release named).
+**Current status (post-hardening, 2026-05-14): 0 open, 0 Accepted.** All 28 findings are **Mitigated** by code fixes. The four items (#16, #17, #22, #24) originally marked Accepted-by-design were subsequently implemented as defence-in-depth once the `inferd` split surfaced a multi-tenant story where the single-user deployment premise no longer holds.
 
 The single most important finding is **L1/INTEGRITY shared**: tool-output bytes from arbitrary CLI commands (`git`, `npm`, `cargo`, any other Bash-matched tool) are concatenated into prompts for the local Gemma 4 model and for the router **without any token-level sanitisation**. Gemma's native tool-call markers (`<|tool_call|>`, `<tool_call|>`) appearing in the raw `git diff` or `npm` output can influence router decisions and prompt-processor output. Impact is bounded by the fallback-on-error contract (a bad routing decision falls back to the original bytes, so the AI client never *breaks*), but a confused router can silently apply the wrong processor chain.
 
@@ -210,40 +210,56 @@ below is open**.
 - **Second remediation pass** (commit `bc897a0`): #9, #13, #18, #19,
   #21, #26.
 - **v0.2 feature work** (commit `dd74c3a`): #27, #28.
+- **v0.2 hardening pass** (subsequent commit): #16, #17, #22, #24 —
+  previously marked Accepted, now implemented as defence-in-depth
+  because the forthcoming `inferd` split puts the same code in
+  multi-tenant-capable territory where the "one local user" premise
+  no longer holds. Details:
+  - **#16**: new `thlibo uninstall` subcommand (reverses the
+    installer cleanly, with `--purge` for full `~/.thlibo` wipe)
+    and `$THLIBO_DISABLED=1` env gate honoured by every hook
+    script.
+  - **#17**: queue gains a per-caller concurrent-queued cap (4
+    default) on top of the global 10-slot limit; identity comes
+    from the new peer-cred path below.
+  - **#22**: `~/.thlibo/policy.yaml` allow/deny list evaluated in
+    `thlibo exec` before spawn. Default fall-through is allow;
+    setting `default: deny` flips to block-unless-listed.
+  - **#24**: `ipc.PeerIdentity` reads `SO_PEERCRED` on Linux and
+    `GetNamedPipeClientProcessId` + `OpenProcessToken` on Windows.
+    Daemon rejects UID/SID mismatches at accept time. Darwin falls
+    through to the socket ACL until `LOCAL_PEERCRED` is wrapped in
+    v0.3. TCP loopback is allowed-by-operator-choice (API-key
+    challenge is a v0.3 item).
 
 Each mitigation references its finding number in the commit message
 and in the relevant package comment. `CHANGELOG.md` under
 `[Unreleased]` has the per-finding description.
 
-### Accepted — by design
+### Previously Accepted, now Mitigated
 
-These are **not open**. They are the correct behaviour and will not
-change. Status: **Accepted**. Listed here so a future reviewer
-doesn't re-open settled decisions.
+The four items below were initially marked Accepted on the grounds
+that the v0.1 deployment model was strictly single-user. With
+`inferd` planned as a host-wide daemon consumed by multiple
+middlewares, those assumptions no longer hold, so the hardening
+landed early in thlibo. See the "Mitigated" section above for the
+commit reference.
 
-- **#16 MA-6 persistence injection.** `thlibo install` writes a
-  persistent PreToolUse hook into `~/.claude/settings.json` by
-  design — that persistence is the product. Alternatives (prompt-
-  per-session re-install, middleware-less proxy mode) are tracked
-  as v0.2 feature alternatives, not as fixes.
-- **#17 T32 per-caller rate limit.** The daemon enforces a fixed
-  queue: 1 active + 10 waiting, `ErrFull` immediate. This is the
-  published contract (spec §Concurrency). A local attacker who
-  spams the socket can monopolise by re-submitting after each
-  reject, but the resulting DoS is scoped to the user's own
-  daemon; no cross-tenant impact because thlibod is per-user.
-  Revisit only if a multi-tenant deployment mode is ever added.
-- **#22 T11 exec allow-list.** `thlibo exec` runs whatever the AI
-  client asks it to run; safety is explicitly delegated to the AI
-  client's own permission layer. An allow-list here would
-  duplicate (and risk drifting from) Claude Code's command
-  allow-list.
-- **#24 T9 no SO_PEERCRED.** The Unix socket ACL (mode 0660,
-  group `thlibo-users`) and the Windows named-pipe SDDL
-  (user-SID-only) are the identity checks. A second check in
-  user-space would be strictly redundant for the per-user
-  deployment model. Revisit only if a multi-tenant deployment
-  mode is ever added.
+- **#16 MA-6 persistence injection.** Persistence is still the
+  product; the mitigation is the round-trip: `thlibo uninstall`
+  exits cleanly, and `$THLIBO_DISABLED=1` is a per-session kill
+  switch for users who don't want to remove anything.
+- **#17 T32 per-caller rate limit.** Implemented as a per-
+  `CallerID` concurrent-queued cap (default 4) on top of the
+  global 10-slot limit. A noisy caller can no longer starve
+  others.
+- **#22 T11 exec allow-list.** Implemented as an opt-in
+  `~/.thlibo/policy.yaml` evaluated before spawn. Default
+  fall-through stays permissive; operators who want stricter
+  posture set `default: deny`.
+- **#24 T9 no SO_PEERCRED.** Implemented as defence-in-depth at
+  IPC accept on both Unix (SO_PEERCRED) and Windows
+  (GetNamedPipeClientProcessId + OpenProcessToken SID compare).
 
 ## Recommended Mitigations (Priority Order)
 

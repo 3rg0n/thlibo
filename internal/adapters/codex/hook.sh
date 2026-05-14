@@ -34,6 +34,11 @@ if ! command -v thlibo >/dev/null 2>&1; then
   exit 0
 fi
 
+# Per-shell kill switch; see THREAT_MODEL.md finding #16.
+case "${THLIBO_DISABLED:-0}" in
+  1|true|on|yes) exit 0 ;;
+esac
+
 INPUT=$(cat)
 
 # Codex's Bash tool_response shape isn't explicitly documented in

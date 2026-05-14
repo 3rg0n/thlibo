@@ -57,6 +57,98 @@ func TestWriteHookScript(t *testing.T) {
 	}
 }
 
+// v0.2 / #16: RemoveHooks drops every thlibo entry (Bash + PS1),
+// cleans empty matcher groups, and removes an empty PreToolUse
+// array. Unrelated hooks survive untouched.
+func TestRemoveHooksDropsThliboAndCleansUp(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	bashHp := filepath.Join(dir, "thlibo-rewrite.sh")
+	ps1Hp := filepath.Join(dir, "thlibo-rewrite.ps1")
+
+	// Seed with both thlibo entries plus an unrelated PreToolUse
+	// hook we must not touch.
+	root := map[string]any{
+		"model": "claude-sonnet-4-6",
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "Bash",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": bashHp},
+					},
+				},
+				map[string]any{
+					"matcher": "PowerShell",
+					"hooks": []any{
+						map[string]any{"type": "command",
+							"command": `powershell -NoProfile -ExecutionPolicy Bypass -File "` + ps1Hp + `"`},
+					},
+				},
+				map[string]any{
+					"matcher": "Edit|Write",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": "prettier --write"},
+					},
+				},
+			},
+		},
+	}
+	raw, _ := json.MarshalIndent(root, "", "  ")
+	if err := os.WriteFile(sp, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RemoveHooks(sp); err != nil {
+		t.Fatalf("RemoveHooks: %v", err)
+	}
+
+	var got map[string]any
+	out, _ := os.ReadFile(sp)
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("parse: %v\n%s", err, out)
+	}
+	if got["model"] != "claude-sonnet-4-6" {
+		t.Errorf("model lost: %v", got["model"])
+	}
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+	if len(pre) != 1 {
+		t.Fatalf("PreToolUse groups = %d after remove, want 1 (the unrelated one): %s", len(pre), out)
+	}
+	if pre[0].(map[string]any)["matcher"] != "Edit|Write" {
+		t.Errorf("unrelated hook damaged: %v", pre[0])
+	}
+}
+
+// v0.2 / #16: RemoveHooks on a non-existent file is a no-op.
+func TestRemoveHooksNoFileIsNoop(t *testing.T) {
+	if err := RemoveHooks(filepath.Join(t.TempDir(), "does-not-exist.json")); err != nil {
+		t.Fatalf("RemoveHooks should no-op on missing file, got %v", err)
+	}
+}
+
+// v0.2 / #16: when thlibo is the only PreToolUse entry, the whole
+// hooks.PreToolUse key is removed, and an empty hooks object is
+// removed too, keeping the settings file tidy.
+func TestRemoveHooksTrimsEmptyContainers(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	bashHp := filepath.Join(dir, "thlibo-rewrite.sh")
+
+	if err := MergeSettingsFull(sp, bashHp, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveHooks(sp); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	out, _ := os.ReadFile(sp)
+	_ = json.Unmarshal(out, &got)
+	if _, ok := got["hooks"]; ok {
+		t.Errorf("hooks container should be removed when empty, got %v", got["hooks"])
+	}
+}
+
 // v0.2 / #12: MergeSettingsFull registers both Bash and PowerShell
 // matchers when both hook paths are provided, and uses a powershell
 // -File invocation for the PowerShell entry so execution-policy

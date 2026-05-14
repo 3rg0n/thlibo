@@ -13,6 +13,14 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
+# Per-session kill switch. Users who want to bypass thlibo for one
+# session set $env:THLIBO_DISABLED=1 without needing to uninstall.
+# See THREAT_MODEL.md finding #16.
+$disabled = $env:THLIBO_DISABLED
+if ($disabled -eq '1' -or $disabled -eq 'true' -or $disabled -eq 'on' -or $disabled -eq 'yes') {
+    exit 0
+}
+
 # If thlibo isn't on PATH, bail out cleanly so Claude Code proceeds.
 $thlibo = Get-Command thlibo -ErrorAction SilentlyContinue
 if (-not $thlibo) {

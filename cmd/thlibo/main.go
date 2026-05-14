@@ -25,6 +25,7 @@ import (
 	"github.com/3rg0n/thlibo/cmd/thlibo/installcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/pullcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/rewritecmd"
+	"github.com/3rg0n/thlibo/cmd/thlibo/uninstallcmd"
 )
 
 func main() {
@@ -41,6 +42,8 @@ func main() {
 		os.Exit(compresscmd.Run(os.Args[2:]))
 	case "install":
 		os.Exit(installcmd.Run(os.Args[2:]))
+	case "uninstall":
+		os.Exit(uninstallcmd.Run(os.Args[2:]))
 	case "pull":
 		os.Exit(pullcmd.Run(os.Args[2:]))
 	case "-h", "--help", "help":
@@ -64,7 +67,14 @@ Usage:
   thlibo compress            Read stdin, compress, write stdout (Codex hook, pipes).
   thlibo install             Mirror processors, wire the Claude Code
                              hook, register the daemon for autostart.
+  thlibo uninstall           Reverse install: remove hook entries +
+                             scripts, unregister autostart. Pass
+                             --purge to also delete ~/.thlibo.
   thlibo pull [name]         Download a GGUF model (default: gemma-4-e4b).
   thlibo help                Show this message.
+
+Environment:
+  THLIBO_DISABLED=1          Per-session kill switch; hooks pass
+                             through unchanged when set.
 `)
 }

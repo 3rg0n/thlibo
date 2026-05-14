@@ -25,6 +25,13 @@ if ! command -v thlibo >/dev/null 2>&1; then
   exit 0
 fi
 
+# Per-shell kill switch. Users who want to bypass thlibo for a
+# single session export THLIBO_DISABLED=1 without needing to
+# uninstall. See THREAT_MODEL.md finding #16.
+case "${THLIBO_DISABLED:-0}" in
+  1|true|on|yes) exit 0 ;;
+esac
+
 INPUT=$(cat)
 CMD=$(jq -r '.tool_input.command // empty' <<<"$INPUT")
 

@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/3rg0n/thlibo/internal/execpolicy"
 	"github.com/3rg0n/thlibo/internal/logx"
 	"github.com/3rg0n/thlibo/internal/middleware"
 	"github.com/3rg0n/thlibo/internal/router"
@@ -39,6 +40,7 @@ import (
 const (
 	ExitUsage         = 64 // argv parsing failed
 	ExitSpawnFailed   = 65 // couldn't start the subprocess at all
+	ExitPolicyDenied  = 77 // execpolicy denied the command (EX_NOPERM)
 	ExitChildSignaled = 130
 )
 
@@ -85,6 +87,27 @@ func run(cmdArgv []string, stdin io.Reader, stdout, stderr io.Writer, mkPipeline
 		logx.Str("cmd", cmdArgv[0]),
 		logx.Int("argc", len(cmdArgv)-1),
 	)
+
+	// Belt-and-suspenders check against a user-configurable deny
+	// list before we spawn. Claude Code's own permission layer is
+	// the primary gate; this is defence-in-depth. See
+	// THREAT_MODEL.md finding #22.
+	policy, policyErr := execpolicy.Load(execpolicy.DefaultPath())
+	if policyErr != nil {
+		log.Warn("policy_load_failed", logx.Err(policyErr))
+		fmt.Fprintf(stderr, "thlibo exec: policy file invalid: %v\n", policyErr)
+		// Fail closed on parse error: the user meant to restrict
+		// something and we can't tell what.
+		return ExitPolicyDenied
+	}
+	if policy.Evaluate(cmdArgv[0]) == execpolicy.DecisionDeny {
+		log.Warn("policy_deny",
+			logx.Str("cmd", cmdArgv[0]),
+			logx.Str("reason", "blocked by ~/.thlibo/policy.yaml"),
+		)
+		fmt.Fprintf(stderr, "thlibo exec: command %q denied by thlibo policy\n", cmdArgv[0])
+		return ExitPolicyDenied
+	}
 
 	// #nosec G204 -- cmdArgv comes from the AI client via our hook;
 	// this subcommand exists to execute the command the client

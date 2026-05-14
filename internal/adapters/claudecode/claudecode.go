@@ -162,6 +162,98 @@ func MergeSettingsFull(settingsPath, bashHookPath, ps1HookPath string) error {
 	return nil
 }
 
+// RemoveHooks loads settingsPath and removes every thlibo-authored
+// PreToolUse hook entry (recognised by the hookMarker / hookMarkerPS1
+// suffix in the command string). Empty matcher groups and an empty
+// PreToolUse array are cleaned up so the JSON stays tidy. Preserves
+// every unrelated key. Returns nil if the file doesn't exist.
+//
+// Companion to MergeSettingsFull — together they form the round-trip
+// for thlibo install / uninstall. See THREAT_MODEL.md finding #16.
+func RemoveHooks(settingsPath string) error {
+	buf, err := os.ReadFile(settingsPath) // #nosec G304 -- same rationale as MergeSettingsFull
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("claudecode: read %s: %w", settingsPath, err)
+	}
+	if len(buf) == 0 {
+		return nil
+	}
+	var root map[string]any
+	if err := json.Unmarshal(buf, &root); err != nil {
+		return fmt.Errorf("claudecode: parse %s: %w", settingsPath, err)
+	}
+
+	if removePreToolUseHooks(root) {
+		encoded, err := json.MarshalIndent(root, "", "  ")
+		if err != nil {
+			return fmt.Errorf("claudecode: marshal settings: %w", err)
+		}
+		if err := os.WriteFile(settingsPath, encoded, 0o600); err != nil {
+			return fmt.Errorf("claudecode: write %s: %w", settingsPath, err)
+		}
+	}
+	return nil
+}
+
+// removePreToolUseHooks mutates root, returning true if any entry
+// was removed. Any entry whose command string contains either the
+// .sh or .ps1 marker suffix is dropped; matcher groups whose hooks
+// array goes empty are also dropped; an empty PreToolUse array is
+// deleted entirely.
+func removePreToolUseHooks(root map[string]any) bool {
+	hooksObj, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return false
+	}
+	preArr, ok := hooksObj["PreToolUse"].([]any)
+	if !ok {
+		return false
+	}
+	var changed bool
+	outGroups := preArr[:0]
+	for _, g := range preArr {
+		obj, ok := g.(map[string]any)
+		if !ok {
+			outGroups = append(outGroups, g)
+			continue
+		}
+		hooksList, _ := obj["hooks"].([]any)
+		keep := hooksList[:0]
+		for _, h := range hooksList {
+			hobj, ok := h.(map[string]any)
+			if !ok {
+				keep = append(keep, h)
+				continue
+			}
+			cmd, _ := hobj["command"].(string)
+			n := normalisePath(cmd)
+			if strings.Contains(n, hookMarker) || strings.Contains(n, hookMarkerPS1) {
+				changed = true
+				continue // drop
+			}
+			keep = append(keep, h)
+		}
+		if len(keep) == 0 {
+			changed = true
+			continue // drop empty group
+		}
+		obj["hooks"] = keep
+		outGroups = append(outGroups, obj)
+	}
+	if len(outGroups) == 0 {
+		delete(hooksObj, "PreToolUse")
+		if len(hooksObj) == 0 {
+			delete(root, "hooks")
+		}
+	} else {
+		hooksObj["PreToolUse"] = outGroups
+	}
+	return changed
+}
+
 // addPreToolUseHook mutates root in-place. It walks/creates the
 // nested structure hooks.PreToolUse[?matcher==<matcher>].hooks[] and
 // appends our command entry. If an entry for our hook already

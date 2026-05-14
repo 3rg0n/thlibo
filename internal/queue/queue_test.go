@@ -224,3 +224,101 @@ func TestQueueSubmitAfterClose(t *testing.T) {
 		t.Errorf("Submit after Close = %v, want ErrShutdown", err)
 	}
 }
+
+// #17: a single caller submitting up to callerCap jobs succeeds;
+// the (callerCap+1)th returns ErrCallerFull even when the global
+// queue has room.
+func TestQueueCallerCapBlocksSingleNoisyCaller(t *testing.T) {
+	q := NewWithCallerCap(10 /*global*/, 3 /*per caller*/)
+	defer q.Close()
+
+	// Block the worker on the first job so subsequent submissions
+	// stay queued, letting us exercise the admission check.
+	release := make(chan struct{})
+	busy := &Job{
+		Ctx:      context.Background(),
+		CallerID: "noisy",
+		Run:      func(ctx context.Context) { <-release },
+	}
+	if err := q.Submit(busy); err != nil {
+		t.Fatalf("Submit busy: %v", err)
+	}
+
+	// Fill the caller's quota (2 more with CallerID "noisy" =
+	// total 3 = callerCap).
+	for i := 0; i < 2; i++ {
+		if err := q.Submit(&Job{Ctx: context.Background(), CallerID: "noisy",
+			Run: func(ctx context.Context) {}}); err != nil {
+			t.Fatalf("Submit filler %d: %v", i, err)
+		}
+	}
+
+	// Fourth job from the same caller must fail with ErrCallerFull.
+	if err := q.Submit(&Job{Ctx: context.Background(), CallerID: "noisy",
+		Run: func(ctx context.Context) {}}); !errors.Is(err, ErrCallerFull) {
+		t.Errorf("over-quota Submit = %v, want ErrCallerFull", err)
+	}
+
+	// A different caller still has room in the global queue.
+	if err := q.Submit(&Job{Ctx: context.Background(), CallerID: "quiet",
+		Run: func(ctx context.Context) {}}); err != nil {
+		t.Errorf("other caller Submit = %v, want nil", err)
+	}
+
+	close(release)
+}
+
+// #17: once a caller's job completes, its slot is released so the
+// caller can submit again.
+func TestQueueCallerCapReleasesOnDone(t *testing.T) {
+	q := NewWithCallerCap(10, 1)
+	defer q.Close()
+
+	first := &Job{Ctx: context.Background(), CallerID: "x",
+		Run: func(ctx context.Context) {}}
+	if err := q.Submit(first); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	<-first.Done
+
+	// Give the releaseOnDone goroutine a beat to run.
+	for i := 0; i < 20; i++ {
+		err := q.Submit(&Job{Ctx: context.Background(), CallerID: "x",
+			Run: func(ctx context.Context) {}})
+		if err == nil {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("caller slot never released after Done")
+}
+
+// #17: a job with empty CallerID bypasses the per-caller check so
+// transports that don't support peer identification (e.g. a test
+// harness) aren't artificially constrained.
+func TestQueueCallerCapSkipsEmptyID(t *testing.T) {
+	q := NewWithCallerCap(10, 1)
+	defer q.Close()
+
+	// Block the worker.
+	release := make(chan struct{})
+	if err := q.Submit(&Job{Ctx: context.Background(),
+		Run: func(ctx context.Context) { <-release }}); err != nil {
+		t.Fatal(err)
+	}
+	// Two more empty-ID jobs should still queue fine.
+	for i := 0; i < 2; i++ {
+		if err := q.Submit(&Job{Ctx: context.Background(),
+			Run: func(ctx context.Context) {}}); err != nil {
+			t.Fatalf("empty-ID job %d rejected: %v", i, err)
+		}
+	}
+	close(release)
+}
+
+// Compile-time check that we didn't accidentally break the atomic
+// import the existing tests reference.
+var _ = atomic.Uint32{}
+
+// Same for sync.
+var _ = sync.Mutex{}

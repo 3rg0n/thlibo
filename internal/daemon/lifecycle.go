@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"os/exec"
 	"sync"
 	"sync/atomic"
@@ -363,6 +364,30 @@ func (d *Daemon) handleInference(conn net.Conn) {
 	defer conn.Close()
 	start := time.Now()
 
+	// Defence-in-depth identity check at accept time. See
+	// THREAT_MODEL.md finding #24. Primary identity gate is still
+	// the socket ACL (0660 group thlibo-users on Unix; user-SID-only
+	// SDDL on Windows). A mismatch here means either a group-
+	// membership misconfiguration or an active attempt to talk to
+	// the daemon from a different identity; either way we reject.
+	peer, perr := ipc.PeerIdentity(conn)
+	if perr != nil && !errors.Is(perr, ipc.ErrNoPeerIdentity) {
+		d.cfg.Logger.Warn("peer_identity_failed", logx.Err(perr))
+		// Don't reject; if we can't read the peer we still honour
+		// the socket ACL, which is the primary gate. Log and
+		// continue with an empty caller ID (skips per-caller quota).
+	}
+	if !d.peerAllowed(peer) {
+		d.cfg.Logger.Warn("peer_rejected",
+			logx.Str("transport", peer.Transport),
+			logx.Int("peer_uid", peer.UID),
+			logx.Str("peer_sid", peer.SID))
+		_ = ipc.WriteFrame(conn, ipc.Response{
+			Type: ipc.ResponseError, Message: "peer identity mismatch",
+		})
+		return
+	}
+
 	r := bufio.NewReader(conn)
 	// ipc.ReadRequest returns (Request, error) by value — req is
 	// safe to address on the error path (it's the zero value).
@@ -437,7 +462,8 @@ func (d *Daemon) handleInference(conn net.Conn) {
 	var usage ipc.Usage
 
 	job := &queue.Job{
-		Ctx: ctx,
+		Ctx:      ctx,
+		CallerID: peer.String(),
 		Run: func(jobCtx context.Context) {
 			eng := d.currentEngine()
 			if eng == nil || !eng.Ready() {
@@ -506,10 +532,16 @@ func (d *Daemon) handleInference(conn net.Conn) {
 
 	if err := d.q.Submit(job); err != nil {
 		msg := err.Error()
-		if errors.Is(err, queue.ErrFull) {
+		switch {
+		case errors.Is(err, queue.ErrFull):
 			msg = "queue full"
+		case errors.Is(err, queue.ErrCallerFull):
+			msg = "caller quota exceeded"
 		}
-		d.cfg.Logger.Warn("queue_rejected", logx.Str("req_id", req.ID), logx.Str("reason", msg))
+		d.cfg.Logger.Warn("queue_rejected",
+			logx.Str("req_id", req.ID),
+			logx.Str("reason", msg),
+			logx.Str("caller", peer.String()))
 		_ = ipc.WriteFrame(conn, ipc.Response{
 			ID: req.ID, Type: ipc.ResponseError, Message: msg,
 		})
@@ -633,3 +665,49 @@ func (d *Daemon) InferenceAddr() net.Addr { return d.infL.Addr() }
 
 // AdminAddr returns the listener address of the admin endpoint.
 func (d *Daemon) AdminAddr() net.Addr { return d.adminL.Addr() }
+
+// peerAllowed is the second-layer identity check at accept. It's
+// complementary to the socket ACL: the ACL keeps out the wrong
+// users at the kernel level, and this check catches the case where
+// the ACL is misconfigured (e.g. thlibo-users group contains more
+// members than the operator intended) or a compromised process with
+// legitimate group membership is trying to act on another user's
+// behalf.
+//
+// Rules:
+//   - tcp transport: allow (TCP loopback has no kernel-enforced
+//     identity; operators expose it explicitly when they trust the
+//     host).
+//   - unix transport with peer.UID == -1: allow (darwin stub path
+//     until LOCAL_PEERCRED is wrapped in v0.3).
+//   - unix: allow iff peer.UID == os.Geteuid().
+//   - windows: allow iff peer.SID matches the daemon's own user
+//     SID. We compute the daemon SID lazily on first check.
+//   - empty transport / no peer: allow (ErrNoPeerIdentity already
+//     logged upstream).
+//
+// See THREAT_MODEL.md finding #24.
+func (d *Daemon) peerAllowed(peer ipc.PeerID) bool {
+	switch peer.Transport {
+	case "":
+		return true // no identity — rely on ACL
+	case "tcp":
+		return true // operator-chosen loopback; API-key auth is v0.3
+	case "unix":
+		if peer.UID < 0 {
+			return true // darwin stub — allow, ACL is primary gate
+		}
+		return peer.UID == os.Geteuid()
+	case "windows":
+		ok, err := daemonSIDMatches(peer.SID)
+		if err != nil {
+			// If we can't resolve our own SID, log and fall back to
+			// the ACL (primary gate) by allowing the connection.
+			d.cfg.Logger.Warn("daemon_sid_lookup_failed", logx.Err(err))
+			return true
+		}
+		return ok
+	default:
+		return true
+	}
+}
