@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -40,20 +39,117 @@ func TestEmbeddedHookShape(t *testing.T) {
 	}
 }
 
-// WriteHookScript creates the file with the expected contents and
-// (on Unix) an executable mode.
+// WriteHookScript creates the file with stamped contents when absent.
 func TestWriteHookScript(t *testing.T) {
 	dir := t.TempDir()
 	dest := filepath.Join(dir, "sub", "thlibo-rewrite.sh")
-	if err := WriteHookScript(dest); err != nil {
+	result, err := WriteHookScript(dest)
+	if err != nil {
 		t.Fatalf("WriteHookScript: %v", err)
+	}
+	if result != WriteResultCreated {
+		t.Errorf("first install: result = %v, want Created", result)
 	}
 	got, err := os.ReadFile(dest)
 	if err != nil {
 		t.Fatalf("read written hook: %v", err)
 	}
-	if !reflect.DeepEqual(got, HookScript()) {
-		t.Errorf("written contents differ from embedded hook script")
+	// The written file is the stamped version (original + SHA comment),
+	// not the raw embedded bytes.
+	want := stampedContent(HookScript(), "# thlibo-installed-sha: ")
+	if string(got) != string(want) {
+		t.Errorf("written contents differ from expected stamped hook")
+	}
+	// Stamped file must contain the SHA comment.
+	if !strings.Contains(string(got), "# thlibo-installed-sha: ") {
+		t.Errorf("stamped file missing SHA comment")
+	}
+}
+
+// WriteHookScript returns Unchanged when called again with no embedded changes.
+func TestWriteHookScriptUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "thlibo-rewrite.sh")
+	if _, err := WriteHookScript(dest); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	result, err := WriteHookScript(dest)
+	if err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+	if result != WriteResultUnchanged {
+		t.Errorf("second install with same embedded: result = %v, want Unchanged", result)
+	}
+}
+
+// WriteHookScript returns Updated when the embedded content changed but the
+// user never edited the file. We simulate an older install by writing a
+// file stamped with a different (fake) hash.
+func TestWriteHookScriptUpdated(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "thlibo-rewrite.sh")
+
+	// Write a pristine file stamped with a hash that does NOT match
+	// the current embedded content — simulates a previous version.
+	prefix := "# thlibo-installed-sha: "
+	fakeOld := []byte("#!/usr/bin/env bash\necho old\n")
+	oldStamped := stampedContent(fakeOld, prefix)
+	if err := os.WriteFile(dest, oldStamped, 0o700); err != nil {
+		t.Fatalf("seed old file: %v", err)
+	}
+
+	result, err := WriteHookScript(dest)
+	if err != nil {
+		t.Fatalf("WriteHookScript update: %v", err)
+	}
+	if result != WriteResultUpdated {
+		t.Errorf("result = %v, want Updated", result)
+	}
+}
+
+// WriteHookScript returns Conflict and writes a .new file when the user
+// modified the installed hook.
+func TestWriteHookScriptConflict(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "thlibo-rewrite.sh")
+
+	// First install.
+	if _, err := WriteHookScript(dest); err != nil {
+		t.Fatalf("initial install: %v", err)
+	}
+
+	// Simulate user edit: append a line. The stored hash is still the
+	// original embedded hash, but the on-disk content no longer matches.
+	data, _ := os.ReadFile(dest)
+	data = append(data, []byte("# user added this line\n")...)
+	if err := os.WriteFile(dest, data, 0o700); err != nil {
+		t.Fatalf("simulate user edit: %v", err)
+	}
+
+	// Now simulate a new embedded version by changing the on-disk stamp
+	// to a fake "old" hash so the installer thinks there's a newer version.
+	// We achieve this by replacing the SHA comment with a wrong hash.
+	modified := strings.ReplaceAll(string(data), hookContentHash(HookScript()), "deadbeef00000000000000000000000000000000000000000000000000000000")
+	if err := os.WriteFile(dest, []byte(modified), 0o700); err != nil {
+		t.Fatalf("patch stamp: %v", err)
+	}
+
+	result, err := WriteHookScript(dest)
+	if err != nil {
+		t.Fatalf("WriteHookScript conflict: %v", err)
+	}
+	if result != WriteResultConflict {
+		t.Errorf("result = %v, want Conflict", result)
+	}
+	// .new file must exist with the new content.
+	newPath := dest + ".new"
+	if _, err := os.Stat(newPath); err != nil {
+		t.Errorf(".new file not created: %v", err)
+	}
+	// Original file must be untouched (still contains user edit).
+	after, _ := os.ReadFile(dest)
+	if !strings.Contains(string(after), "# user added this line") {
+		t.Errorf("user edits clobbered on conflict; file = %q", after)
 	}
 }
 
@@ -252,23 +348,44 @@ func TestMergeSettingsFullIdempotent(t *testing.T) {
 	}
 }
 
-// v0.2 / #12: WriteHookScriptPS1 writes the PowerShell hook bytes
-// with an executable bit.
+// v0.2 / #12: WriteHookScriptPS1 writes the stamped PowerShell hook on
+// first install and returns WriteResultCreated.
 func TestWriteHookScriptPS1(t *testing.T) {
 	dir := t.TempDir()
 	dest := filepath.Join(dir, "thlibo-rewrite.ps1")
-	if err := WriteHookScriptPS1(dest); err != nil {
+	result, err := WriteHookScriptPS1(dest)
+	if err != nil {
 		t.Fatalf("WriteHookScriptPS1: %v", err)
+	}
+	if result != WriteResultCreated {
+		t.Errorf("first install: result = %v, want Created", result)
 	}
 	got, err := os.ReadFile(dest)
 	if err != nil {
 		t.Fatalf("read back: %v", err)
 	}
-	if !reflect.DeepEqual(got, HookScriptPS1()) {
-		t.Errorf("written PS1 differs from embedded")
+	want := stampedContent(HookScriptPS1(), "# thlibo-installed-sha: ")
+	if string(got) != string(want) {
+		t.Errorf("written PS1 differs from expected stamped content")
 	}
 	if !strings.Contains(string(got), "PowerShell") {
 		t.Errorf("embedded PS1 missing PowerShell keyword; wrong file?")
+	}
+}
+
+// WriteHookScriptPS1 is Unchanged on the second install with no embedded changes.
+func TestWriteHookScriptPS1Unchanged(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "thlibo-rewrite.ps1")
+	if _, err := WriteHookScriptPS1(dest); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	result, err := WriteHookScriptPS1(dest)
+	if err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+	if result != WriteResultUnchanged {
+		t.Errorf("result = %v, want Unchanged", result)
 	}
 }
 

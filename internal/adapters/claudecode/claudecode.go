@@ -21,7 +21,10 @@
 package claudecode
 
 import (
+	"bytes"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -46,39 +49,158 @@ func HookScript() []byte { return hookScript }
 // PowerShell tool instead of Bash.
 func HookScriptPS1() []byte { return hookScriptPS1 }
 
-// WriteHookScript writes the Bash hook script to path. See writeHookBytes
-// for the mode/permission details.
-func WriteHookScript(path string) error {
-	return writeHookBytes(path, hookScript)
-}
+// WriteResult is returned by WriteHookScript and WriteHookScriptPS1.
+type WriteResult int
 
-// WriteHookScriptPS1 writes the PowerShell hook script to path. Same
-// permission semantics as WriteHookScript; PowerShell ignores the
-// POSIX execute bit but respects the ACL-equivalent on Windows.
-func WriteHookScriptPS1(path string) error {
-	return writeHookBytes(path, hookScriptPS1)
-}
+const (
+	// WriteResultCreated means the file did not exist and was written fresh.
+	WriteResultCreated WriteResult = iota
+	// WriteResultUpdated means the file existed unchanged and was updated.
+	WriteResultUpdated
+	// WriteResultUnchanged means the installed version matches embedded; no write needed.
+	WriteResultUnchanged
+	// WriteResultConflict means the user modified the file; the new version
+	// was written to <path>.new and the original was not touched.
+	WriteResultConflict
+)
 
-// writeHookBytes writes b to path, creating parent directories as
-// needed. The file is created with a restrictive mode (0o600) and
-// then chmod'd to 0o700 so the owner can execute it. Group and world
-// have no access - this is user-scoped tooling. On Windows the execute
-// bit has no meaning; the file is still written with 0o600-equivalent
-// ACLs through Go's os.WriteFile.
-func writeHookBytes(path string, b []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return fmt.Errorf("claudecode: create hook dir: %w", err)
+func (r WriteResult) String() string {
+	switch r {
+	case WriteResultCreated:
+		return "created"
+	case WriteResultUpdated:
+		return "updated"
+	case WriteResultUnchanged:
+		return "unchanged"
+	case WriteResultConflict:
+		return "conflict"
 	}
-	// Two-step: WriteFile respects the gosec G306 guidance (0o600),
-	// then chmod adds the owner-execute bit needed for the hook to
-	// run. Group/other stay at 0 — nothing about this script is
-	// meant to be shared.
+	return "unknown"
+}
+
+// WriteHookScript writes the Bash hook script to path.
+// Returns WriteResultConflict (and writes to path+".new") if the user
+// has modified the installed file since the last thlibo install.
+func WriteHookScript(path string) (WriteResult, error) {
+	return writeHookBytes(path, hookScript, "# thlibo-installed-sha: ")
+}
+
+// WriteHookScriptPS1 writes the PowerShell hook script to path.
+// Same conflict semantics as WriteHookScript.
+func WriteHookScriptPS1(path string) (WriteResult, error) {
+	return writeHookBytes(path, hookScriptPS1, "# thlibo-installed-sha: ")
+}
+
+// hookContentHash returns the SHA-256 of b, hex-encoded.
+func hookContentHash(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// stampedContent returns b with a SHA-256 comment appended on the
+// second line (after the shebang / first line) so the installed file
+// is self-describing. The stamp is computed over the original b so
+// repeated installs produce stable content.
+func stampedContent(b []byte, prefix string) []byte {
+	hash := hookContentHash(b)
+	stamp := []byte(prefix + hash + "\n")
+
+	// Insert after the first line (shebang or first comment).
+	nl := bytes.IndexByte(b, '\n')
+	if nl < 0 {
+		return append(b, append([]byte("\n"), stamp...)...)
+	}
+	out := make([]byte, 0, len(b)+len(stamp))
+	out = append(out, b[:nl+1]...)
+	out = append(out, stamp...)
+	out = append(out, b[nl+1:]...)
+	return out
+}
+
+// extractInstalledHash reads the stamp comment from an on-disk hook
+// file and returns the stored hash. Returns "" if not found.
+func extractInstalledHash(data []byte, prefix string) string {
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		s := string(line)
+		if strings.HasPrefix(s, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(s, prefix))
+		}
+	}
+	return ""
+}
+
+// writeHookBytes is the shared implementation. It stamps the embedded
+// content with a SHA comment, then:
+//
+//   - File absent → write stamped content (created).
+//   - File present, installed hash matches embedded hash → no-op (unchanged).
+//   - File present, installed hash matches stored hash in file → overwrite
+//     with new stamped content (updated — user never edited it).
+//   - File present, stored hash != current file hash → user edited it;
+//     write new version to path+".new" and return conflict without
+//     touching the user's file.
+func writeHookBytes(path string, b []byte, prefix string) (WriteResult, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return WriteResultCreated, fmt.Errorf("claudecode: create hook dir: %w", err)
+	}
+
+	embeddedHash := hookContentHash(b)
+	stamped := stampedContent(b, prefix)
+
+	existing, err := os.ReadFile(path) // #nosec G304 -- path is installer-derived
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return WriteResultCreated, fmt.Errorf("claudecode: read existing hook: %w", err)
+		}
+		// File doesn't exist — write fresh.
+		return WriteResultCreated, commitHookFile(path, stamped)
+	}
+
+	// File exists. Check whether the embedded content changed at all.
+	storedHash := extractInstalledHash(existing, prefix)
+	if storedHash == embeddedHash {
+		return WriteResultUnchanged, nil // already up to date
+	}
+
+	// Embedded version is newer (or different). Check whether the user
+	// modified the on-disk file since it was installed. We detect this
+	// by removing the stamp line from the on-disk file and hashing the
+	// remainder — if it equals storedHash, the file is pristine.
+	withoutStamp := removeStampLine(existing, prefix)
+	currentHash := hookContentHash(withoutStamp)
+	if currentHash != storedHash {
+		// User edited the file — write new version alongside and warn.
+		newPath := path + ".new"
+		if err := commitHookFile(newPath, stamped); err != nil {
+			return WriteResultConflict, fmt.Errorf("claudecode: write %s: %w", newPath, err)
+		}
+		return WriteResultConflict, nil
+	}
+
+	// File is pristine (user never edited it) — safe to overwrite.
+	return WriteResultUpdated, commitHookFile(path, stamped)
+}
+
+// removeStampLine strips the stamp comment line from b so we can hash
+// the content without the stamp to compare against the stored hash.
+func removeStampLine(b []byte, prefix string) []byte {
+	var out []byte
+	for _, line := range bytes.Split(b, []byte("\n")) {
+		if strings.HasPrefix(string(line), prefix) {
+			continue
+		}
+		out = append(out, line...)
+		out = append(out, '\n')
+	}
+	// Trim trailing newline added by the loop.
+	return bytes.TrimSuffix(out, []byte("\n"))
+}
+
+func commitHookFile(path string, b []byte) error {
 	if err := os.WriteFile(path, b, 0o600); err != nil {
 		return fmt.Errorf("claudecode: write hook: %w", err)
 	}
-	// #nosec G302 -- owner-execute bit is required so the hook can
-	// run; gosec's default 0o600 ceiling doesn't fit executables.
-	// Group/other remain at 0, which is the point of G302.
+	// #nosec G302 -- owner-execute bit required; group/other stay 0.
 	if err := os.Chmod(path, 0o700); err != nil {
 		return fmt.Errorf("claudecode: chmod hook: %w", err)
 	}

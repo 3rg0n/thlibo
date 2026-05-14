@@ -168,17 +168,31 @@ func Run(argv []string) int {
 		return runDownloads(pullEngine, pullModel, allowUnpinned)
 	}
 
-	if err := claudecode.WriteHookScript(hookPath); err != nil {
+	shResult, err := claudecode.WriteHookScript(hookPath)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "install: write hook:", err)
 		return 5
 	}
-	fmt.Println("  wrote Bash hook script")
+	switch shResult {
+	case claudecode.WriteResultConflict:
+		fmt.Printf("  Bash hook: your edits preserved — new version written to %s.new\n", hookPath)
+		fmt.Println("             review and merge manually, then remove the .new file.")
+	default:
+		fmt.Printf("  Bash hook script: %s\n", shResult)
+	}
 
-	if err := claudecode.WriteHookScriptPS1(ps1HookPath); err != nil {
+	ps1Result, err := claudecode.WriteHookScriptPS1(ps1HookPath)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "install: write ps1 hook:", err)
 		return 5
 	}
-	fmt.Println("  wrote PowerShell hook script")
+	switch ps1Result {
+	case claudecode.WriteResultConflict:
+		fmt.Printf("  PowerShell hook: your edits preserved — new version written to %s.new\n", ps1HookPath)
+		fmt.Println("                   review and merge manually, then remove the .new file.")
+	default:
+		fmt.Printf("  PowerShell hook script: %s\n", ps1Result)
+	}
 
 	if err := claudecode.MergeSettingsFull(settingsPath, hookPath, ps1HookPath); err != nil {
 		fmt.Fprintln(os.Stderr, "install: merge settings:", err)

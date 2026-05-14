@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Hook scripts survive `thlibo install` across updates. `WriteHookScript`
+  and `WriteHookScriptPS1` now stamp the installed file with a SHA-256
+  comment (`# thlibo-installed-sha: <hash>`). On reinstall: if the
+  embedded version is unchanged the file is left untouched (Unchanged);
+  if the file is pristine (user never edited it) it is overwritten with
+  the new version (Updated); if the user modified the file the new
+  version is written alongside as `<path>.new` and the user's file is
+  preserved (Conflict). `thlibo install` prints a clear message for each
+  case. Closes #12.
+
 ### Fixed
 
 - LaunchAgent plist now sets `HOME` env var and passes explicit `-engine`/`-model`
