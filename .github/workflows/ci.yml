@@ -11,6 +11,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Force every JavaScript action in this workflow onto Node.js 24.
+# Node 20 is being removed from the runners on 2026-09-16 and was
+# already deprecation-warning-loud on our v0.2.0 release run. This
+# flag is GitHub's supported opt-in that makes Node 24 active before
+# the default flip on 2026-06-02 (the new default) and before the
+# v4/v5 action tags we SHA-pinned ship new major versions that
+# embed Node 24 natively. See
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     name: test (${{ matrix.os }}, Go ${{ matrix.go }})

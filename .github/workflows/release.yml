@@ -15,6 +15,11 @@ permissions:
   id-token: write  # Required by cosign keyless (OIDC to Fulcio).
   attestations: write  # Required to attach Sigstore attestations to the release.
 
+# Force every JavaScript action in this workflow onto Node.js 24.
+# See the note in ci.yml for context; same rationale applies here.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   # Download the GGUF once, compute its SHA, then reuse that hash
   # across every per-platform build. The GGUF itself is NOT

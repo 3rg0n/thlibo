@@ -17,6 +17,11 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Force every JavaScript action in this workflow onto Node.js 24.
+# See the note in ci.yml for context; same rationale applies here.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   deploy:
     environment:
