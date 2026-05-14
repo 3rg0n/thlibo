@@ -82,6 +82,33 @@ func TestWriteHookScriptUnchanged(t *testing.T) {
 	}
 }
 
+// WriteHookScript returns Updated when the file was written by a legacy
+// installer that didn't stamp it, and the content exactly matches the
+// current embedded bytes (no user edits).
+func TestWriteHookScriptLegacyUnstamped(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "thlibo-rewrite.sh")
+
+	// Write the raw embedded bytes with no stamp — mimics what the
+	// v0.2.0 installer wrote before stamping was introduced.
+	if err := os.WriteFile(dest, HookScript(), 0o700); err != nil {
+		t.Fatalf("seed legacy file: %v", err)
+	}
+
+	result, err := WriteHookScript(dest)
+	if err != nil {
+		t.Fatalf("WriteHookScript on legacy file: %v", err)
+	}
+	if result != WriteResultUpdated {
+		t.Errorf("legacy unstamped file: result = %v, want Updated (not Conflict)", result)
+	}
+	// After upgrade the file should have the stamp.
+	data, _ := os.ReadFile(dest)
+	if !strings.Contains(string(data), "# thlibo-installed-sha: ") {
+		t.Errorf("upgraded file missing SHA stamp")
+	}
+}
+
 // WriteHookScript returns Updated when the embedded content changed but the
 // user never edited the file. We simulate an older install by writing a
 // file stamped with a different (fake) hash.

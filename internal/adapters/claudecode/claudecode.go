@@ -188,6 +188,13 @@ func writeHookBytes(path string, b []byte, prefix string) (WriteResult, error) {
 		return WriteResultUnchanged, nil // already up to date
 	}
 
+	// Legacy install: no stamp in the file at all. Treat as pristine if
+	// the on-disk bytes match the embedded content exactly — this happens
+	// when an older thlibo version wrote the hook without stamping it.
+	if storedHash == "" && bytes.Equal(existing, b) {
+		return WriteResultUpdated, commitHookFile(path, stamped)
+	}
+
 	// Embedded version is newer (or different). Check whether the user
 	// modified the on-disk file since it was installed. We detect this
 	// by removing the stamp line from the on-disk file and hashing the

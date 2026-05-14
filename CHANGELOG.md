@@ -53,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Hook scripts written by an older installer (no SHA stamp) are now
+  recognised as pristine and upgraded cleanly instead of triggering a
+  spurious Conflict warning on first re-install. Closes #15.
 - macOS Gatekeeper no longer blocks thlibo/thlibod on first run.
   `install.sh` strips `com.apple.quarantine` from both binaries after
   extraction; `PullEngine` does the same for the llamafile engine after
