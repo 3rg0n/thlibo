@@ -1,0 +1,24 @@
+README.md
+  s_5811b7f24eccc0::t_d2a613211fdc33 104
+  s_5811b7f24eccc0::t_baec10fb762ed4 98
+scripts/install.ps1
+  s_5811b7f24eccc0::t_1996e64afefc7a 4,7
+docs/site/index.html
+  s_5811b7f24eccc0::t_5c02d2d7eef68a 566
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "55e86991ada1b7699c2d926d0cce38f3105fcb00",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
