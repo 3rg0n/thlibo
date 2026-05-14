@@ -1,10 +1,10 @@
 # thlibo one-line installer — Windows.
 #
 # Usage (PowerShell 5.1+ or PowerShell 7+):
-#   iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 #
 # Or pinned to a specific version:
-#   $env:THLIBO_VERSION='v0.1.0'; iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+#   $env:THLIBO_VERSION='v0.3.0'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 #
 # What it does:
 #   1. Downloads thlibo-windows-amd64.zip from the GitHub release.

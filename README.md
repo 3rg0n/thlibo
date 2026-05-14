@@ -95,13 +95,13 @@ curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.s
 ### One-liner (Windows PowerShell)
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
 Or pinned:
 
 ```powershell
-$env:THLIBO_VERSION='v0.1.0'; iwr -useb https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+$env:THLIBO_VERSION='v0.3.0'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
 Both installers:
