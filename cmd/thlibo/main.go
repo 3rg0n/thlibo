@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/3rg0n/thlibo/cmd/thlibo/casecmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/compresscmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/execcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/installcmd"
@@ -69,6 +70,8 @@ func main() {
 		os.Exit(uninstallcmd.Run(os.Args[2:]))
 	case "pull":
 		os.Exit(pullcmd.Run(os.Args[2:]))
+	case "case":
+		os.Exit(casecmd.Run(os.Args[2:]))
 	case "version", "-v", "--version":
 		fmt.Println(version.Tag)
 		os.Exit(0)
@@ -97,6 +100,10 @@ Usage:
                              scripts, unregister autostart. Pass
                              --purge to also delete ~/.thlibo.
   thlibo pull [name]         Download a GGUF model (default: gemma-4-e4b).
+  thlibo case <file>         Build a compressed case directory under
+                             ~/.thlibo/cases/ for a large log file.
+                             Invoked by the Read PreToolUse hook and
+                             by the /caselog skill.
   thlibo version             Print the build tag and exit.
   thlibo help                Show this message.
 

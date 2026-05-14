@@ -668,3 +668,138 @@ func TestMergeSettingsRejectsInvalidJSON(t *testing.T) {
 		t.Errorf("settings file was modified despite parse error: %q", raw)
 	}
 }
+
+// #25: MergeSettingsWithRead adds a Read matcher alongside Bash + PS.
+func TestMergeSettingsWithReadRegistersReadMatcher(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	bash := filepath.Join(dir, "thlibo-rewrite.sh")
+	ps1 := filepath.Join(dir, "thlibo-rewrite.ps1")
+	read := filepath.Join(dir, "thlibo-read.sh")
+	readPS1 := filepath.Join(dir, "thlibo-read.ps1")
+
+	if err := MergeSettingsWithRead(sp, bash, ps1, read, readPS1); err != nil {
+		t.Fatalf("MergeSettingsWithRead: %v", err)
+	}
+	var got map[string]any
+	raw, _ := os.ReadFile(sp)
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("parse: %v\n%s", err, raw)
+	}
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+	matchers := map[string]map[string]any{}
+	for _, g := range pre {
+		obj := g.(map[string]any)
+		matchers[obj["matcher"].(string)] = obj
+	}
+	if matchers["Read"] == nil {
+		t.Fatalf("Read matcher missing; got: %s", raw)
+	}
+	cmd := matchers["Read"]["hooks"].([]any)[0].(map[string]any)["command"].(string)
+	// Platform-dispatched: Windows gets ps1 runner, others get plain script.
+	if runtimeIsWindows() {
+		if !strings.Contains(cmd, "thlibo-read.ps1") {
+			t.Errorf("Windows should pick ps1 Read hook; got %q", cmd)
+		}
+	} else {
+		if !strings.Contains(cmd, "thlibo-read.sh") {
+			t.Errorf("non-Windows should pick bash Read hook; got %q", cmd)
+		}
+	}
+}
+
+// #25: RemoveHooks must drop Read-matcher entries as well as Exec ones.
+func TestRemoveHooksDropsReadEntries(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+
+	// Seed with a Read matcher in both forms + an unrelated hook.
+	root := map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "Read",
+					"hooks": []any{
+						map[string]any{"type": "command",
+							"command": filepath.Join(dir, "thlibo-read.sh")},
+					},
+				},
+				map[string]any{
+					"matcher": "Read",
+					"hooks": []any{
+						map[string]any{"type": "command",
+							"command": "powershell -File " + filepath.Join(dir, "thlibo-read.ps1")},
+					},
+				},
+				map[string]any{
+					"matcher": "Bash",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": "some-other-hook"},
+					},
+				},
+			},
+		},
+	}
+	raw, _ := json.MarshalIndent(root, "", "  ")
+	_ = os.WriteFile(sp, raw, 0o600)
+
+	if err := RemoveHooks(sp); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := os.ReadFile(sp)
+	var got map[string]any
+	_ = json.Unmarshal(out, &got)
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+	if len(pre) != 1 {
+		t.Fatalf("want 1 unrelated matcher left, got %d: %s", len(pre), out)
+	}
+	if pre[0].(map[string]any)["matcher"] != "Bash" {
+		t.Errorf("unrelated hook should survive, got %v", pre[0])
+	}
+}
+
+// #25: InstallCaselogSkill writes SKILL.md at skillsDir/caselog/SKILL.md
+// and is idempotent across reinstalls.
+func TestInstallCaselogSkill(t *testing.T) {
+	dir := t.TempDir()
+	result, err := InstallCaselogSkill(dir)
+	if err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if result != WriteResultCreated {
+		t.Errorf("first install = %s, want created", result)
+	}
+	target := filepath.Join(dir, "caselog", "SKILL.md")
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("SKILL.md not written: %v", err)
+	}
+
+	// Reinstall: unchanged (hash matches).
+	result2, err := InstallCaselogSkill(dir)
+	if err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	if result2 != WriteResultUnchanged {
+		t.Errorf("second install = %s, want unchanged", result2)
+	}
+
+	// User edit = conflict, new version goes to .new, original untouched.
+	userEdit := []byte("# user-modified\n\noverride\n")
+	if err := os.WriteFile(target, userEdit, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result3, err := InstallCaselogSkill(dir)
+	if err != nil {
+		t.Fatalf("third install: %v", err)
+	}
+	if result3 != WriteResultConflict {
+		t.Errorf("third install = %s, want conflict", result3)
+	}
+	got, _ := os.ReadFile(target)
+	if string(got) != string(userEdit) {
+		t.Errorf("conflict should preserve user edit; got %q", got)
+	}
+	if _, err := os.Stat(target + ".new"); err != nil {
+		t.Errorf("conflict should write .new: %v", err)
+	}
+}

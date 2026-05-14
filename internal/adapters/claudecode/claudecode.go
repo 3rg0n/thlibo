@@ -38,16 +38,31 @@ var hookScript []byte
 //go:embed hook.ps1
 var hookScriptPS1 []byte
 
-// HookScript returns the embedded Bash hook script bytes, unmodified.
-// Exposed so the installer can write it to disk and tests can
-// assert on its shape without running an install.
+//go:embed hook-read.sh
+var hookReadScript []byte
+
+//go:embed hook-read.ps1
+var hookReadScriptPS1 []byte
+
+// HookScript returns the embedded Bash Exec-hook script bytes,
+// unmodified. Exposed so the installer can write it to disk and
+// tests can assert on its shape without running an install.
 func HookScript() []byte { return hookScript }
 
-// HookScriptPS1 returns the embedded PowerShell hook script bytes,
-// unmodified. Companion to HookScript for Windows installs where
-// CLAUDE_CODE_USE_POWERSHELL_TOOL=1 routes tool calls through the
-// PowerShell tool instead of Bash.
+// HookScriptPS1 returns the embedded PowerShell Exec-hook script
+// bytes, unmodified. Companion to HookScript for Windows installs
+// where CLAUDE_CODE_USE_POWERSHELL_TOOL=1 routes tool calls through
+// the PowerShell tool instead of Bash.
 func HookScriptPS1() []byte { return hookScriptPS1 }
+
+// HookReadScript returns the embedded Bash PreToolUse hook for
+// the Read tool. Fired when Claude Code reads a large log-shaped
+// file; rewrites tool_input.file_path to a compressed case variant.
+func HookReadScript() []byte { return hookReadScript }
+
+// HookReadScriptPS1 returns the PowerShell equivalent for the Read
+// hook. Same semantics as HookReadScript.
+func HookReadScriptPS1() []byte { return hookReadScriptPS1 }
 
 // WriteResult is returned by WriteHookScript and WriteHookScriptPS1.
 type WriteResult int
@@ -89,6 +104,17 @@ func WriteHookScript(path string) (WriteResult, error) {
 // Same conflict semantics as WriteHookScript.
 func WriteHookScriptPS1(path string) (WriteResult, error) {
 	return writeHookBytes(path, hookScriptPS1, "# thlibo-installed-sha: ")
+}
+
+// WriteHookReadScript writes the Bash Read-tool hook to path, using
+// the same write-if-new / conflict-to-.new semantics as the Exec hook.
+func WriteHookReadScript(path string) (WriteResult, error) {
+	return writeHookBytes(path, hookReadScript, "# thlibo-installed-sha: ")
+}
+
+// WriteHookReadScriptPS1 writes the PowerShell Read-tool hook.
+func WriteHookReadScriptPS1(path string) (WriteResult, error) {
+	return writeHookBytes(path, hookReadScriptPS1, "# thlibo-installed-sha: ")
 }
 
 // hookContentHash returns the SHA-256 of b, hex-encoded.
@@ -220,9 +246,17 @@ type HookEntry struct {
 // installer doesn't pile up duplicate entries. Matching on a suffix
 // rather than the full path survives user-initiated moves.
 const (
-	hookMarker    = "thlibo-rewrite.sh"
-	hookMarkerPS1 = "thlibo-rewrite.ps1"
+	hookMarker        = "thlibo-rewrite.sh"
+	hookMarkerPS1     = "thlibo-rewrite.ps1"
+	hookMarkerRead    = "thlibo-read.sh"
+	hookMarkerReadPS1 = "thlibo-read.ps1"
 )
+
+// allHookMarkers is the set of filename suffixes that identify a
+// hook entry as "ours" for removal + shadow-detection purposes.
+func allHookMarkers() []string {
+	return []string{hookMarker, hookMarkerPS1, hookMarkerRead, hookMarkerReadPS1}
+}
 
 // MergeSettings loads settingsPath, adds a PreToolUse/Bash hook
 // pointing at bashHookPath, and writes the file back. Preserves every
@@ -235,18 +269,35 @@ func MergeSettings(settingsPath, hookPath string) error {
 	return MergeSettingsFull(settingsPath, hookPath, "")
 }
 
-// MergeSettingsFull loads settingsPath (creating an empty object if
-// the file doesn't exist), adds a PreToolUse hook entry for each
-// non-empty hook path, and writes the file back. bashHookPath is
-// registered under matcher "Bash"; ps1HookPath, if non-empty, is
-// registered under matcher "PowerShell" — which is the tool name
-// Claude Code uses when CLAUDE_CODE_USE_POWERSHELL_TOOL=1.
-// Preserves every other key and every other hook entry verbatim.
-//
-// Idempotent: calling it twice on the same settings file leaves at
-// most one thlibo hook entry per matcher. If settingsPath is invalid
-// JSON, returns an error without modifying anything.
+// MergeSettingsFull is the two-hook form: Bash + PowerShell
+// Exec-tool matchers. Kept so callers already using it don't break.
+// See MergeSettingsWithRead for the full four-matcher version that
+// also installs the Read-tool hooks.
 func MergeSettingsFull(settingsPath, bashHookPath, ps1HookPath string) error {
+	return MergeSettingsWithRead(settingsPath,
+		bashHookPath, ps1HookPath, "", "")
+}
+
+// MergeSettingsWithRead loads settingsPath (creating an empty object
+// if the file doesn't exist), adds a PreToolUse hook entry for each
+// non-empty hook path, and writes the file back.
+//
+//   - bashHookPath     -> matcher "Bash"       (Exec)
+//   - ps1HookPath      -> matcher "PowerShell" (Exec)
+//   - readHookPath     -> matcher "Read"       (file drop / read)
+//   - readPS1HookPath  -> matcher "Read"       (Windows variant; see below)
+//
+// Only one Read entry is installed per run. If both readHookPath and
+// readPS1HookPath are provided we pick the PowerShell wrapper on
+// Windows and the Bash wrapper elsewhere, which keeps the invocation
+// strategy consistent with the Exec hooks. Passing both is fine even
+// on a mixed multi-user share: the unused entry simply isn't
+// registered.
+//
+// Preserves every other key and every other hook entry verbatim.
+// Idempotent across reinstalls; each matcher holds at most one
+// thlibo entry.
+func MergeSettingsWithRead(settingsPath, bashHookPath, ps1HookPath, readHookPath, readPS1HookPath string) error {
 	var root map[string]any
 	buf, err := os.ReadFile(settingsPath) // #nosec G304 -- path is a thlibo config location chosen by the installer
 	switch {
@@ -270,6 +321,12 @@ func MergeSettingsFull(settingsPath, bashHookPath, ps1HookPath string) error {
 	if ps1HookPath != "" {
 		addPreToolUseHook(root, "PowerShell", ps1HookPath, hookMarkerPS1)
 	}
+	// Read matcher: prefer the PowerShell wrapper on Windows, Bash
+	// elsewhere. If only one is supplied, use it unconditionally.
+	readPathToUse, readMarker := pickReadHook(readHookPath, readPS1HookPath)
+	if readPathToUse != "" {
+		addPreToolUseHook(root, "Read", readPathToUse, readMarker)
+	}
 
 	encoded, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
@@ -282,6 +339,25 @@ func MergeSettingsFull(settingsPath, bashHookPath, ps1HookPath string) error {
 		return fmt.Errorf("claudecode: write %s: %w", settingsPath, err)
 	}
 	return nil
+}
+
+// pickReadHook returns the appropriate Read hook path + marker for
+// this host. Empty inputs are skipped. On Windows the PS1 variant
+// wins; elsewhere Bash wins. If only one is supplied it's used
+// regardless of host.
+func pickReadHook(bashHook, ps1Hook string) (path, marker string) {
+	onWindows := runtimeIsWindows()
+	switch {
+	case onWindows && ps1Hook != "":
+		return ps1Hook, hookMarkerReadPS1
+	case !onWindows && bashHook != "":
+		return bashHook, hookMarkerRead
+	case bashHook != "":
+		return bashHook, hookMarkerRead
+	case ps1Hook != "":
+		return ps1Hook, hookMarkerReadPS1
+	}
+	return "", ""
 }
 
 // RemoveHooks loads settingsPath and removes every thlibo-authored
@@ -352,7 +428,7 @@ func removePreToolUseHooks(root map[string]any) bool {
 			}
 			cmd, _ := hobj["command"].(string)
 			n := normalisePath(cmd)
-			if strings.Contains(n, hookMarker) || strings.Contains(n, hookMarkerPS1) {
+			if isThliboHookCommand(n) {
 				changed = true
 				continue // drop
 			}
@@ -374,6 +450,20 @@ func removePreToolUseHooks(root map[string]any) bool {
 		hooksObj["PreToolUse"] = outGroups
 	}
 	return changed
+}
+
+// isThliboHookCommand reports whether a (normalised, forward-slash)
+// command string points at any of our installed hook scripts —
+// Exec (Bash/PS1) or Read (Bash/PS1). Marker membership is a
+// substring check so a user-initiated move of the script file still
+// identifies it on the next install/uninstall cycle.
+func isThliboHookCommand(normalisedCmd string) bool {
+	for _, m := range allHookMarkers() {
+		if strings.Contains(normalisedCmd, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // addPreToolUseHook mutates root in-place. It walks/creates the

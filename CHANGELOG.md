@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `thlibo case <file>` subcommand and `/caselog` Claude Code skill +
+  PreToolUse Read-tool hook. Flow: when Claude's `Read` tool fires
+  on a log-shaped file over ~32 KB, the hook calls `thlibo case`
+  which writes `~/.thlibo/cases/<ts>-<hex>/{compressed.log,
+  summary.md, meta.json}` and rewrites `tool_input.file_path` to
+  the compressed variant. Claude sees the small version without
+  the user having to pre-process. Users can also invoke the
+  `/caselog` skill manually or run `thlibo case <file>` on the
+  CLI. Gated on extension (`.log|.ndjson|.txt|.out|.err|.trace|
+  .dump`), size (`THLIBO_READ_MIN_BYTES`, default 32 KiB), and
+  honours `$THLIBO_DISABLED`. Falls back silently on any error so
+  Claude always gets something to read. Includes
+  `thlibo case --prune <duration>` to garbage-collect old cases.
+  The skill SKILL.md is mirrored into
+  `~/.claude/skills/caselog/SKILL.md` by `thlibo install`, using
+  the same SHA-stamp / conflict-preservation semantics as hook
+  scripts.
 - Hook scripts survive `thlibo install` across updates. `WriteHookScript`
   and `WriteHookScriptPS1` now stamp the installed file with a SHA-256
   comment (`# thlibo-installed-sha: <hash>`). On reinstall: if the

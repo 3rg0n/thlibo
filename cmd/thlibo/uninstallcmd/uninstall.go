@@ -64,6 +64,10 @@ func Run(argv []string) int {
 	}
 	bashHookPath := filepath.Join(hookDir, "thlibo-rewrite.sh")
 	ps1HookPath := filepath.Join(hookDir, "thlibo-rewrite.ps1")
+	readHookPath := filepath.Join(hookDir, "thlibo-read.sh")
+	readPS1HookPath := filepath.Join(hookDir, "thlibo-read.ps1")
+	// ~/.claude/skills/caselog/ — installed by `thlibo install`.
+	skillDir := filepath.Join(filepath.Dir(settingsPath), "skills", "caselog")
 
 	fmt.Println("thlibo uninstall plan:")
 	fmt.Println("  remove hook entries from:", settingsPath)
@@ -88,14 +92,29 @@ func Run(argv []string) int {
 		fmt.Println("  removed hook entries from settings.json")
 	}
 
-	// 2. Delete hook scripts. Ignore os.IsNotExist - missing file
-	// is the desired state anyway.
-	for _, p := range []string{bashHookPath, ps1HookPath} {
+	// 2. Delete hook scripts (Exec + Read). Ignore os.IsNotExist -
+	// missing file is the desired state anyway. Also removes the
+	// ".new" conflict-preservation copies so uninstall leaves the
+	// hooks directory clean.
+	for _, p := range []string{
+		bashHookPath, ps1HookPath,
+		readHookPath, readPS1HookPath,
+		bashHookPath + ".new", ps1HookPath + ".new",
+		readHookPath + ".new", readPS1HookPath + ".new",
+	} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			fmt.Fprintln(os.Stderr, "uninstall: delete hook script:", err)
 		}
 	}
-	fmt.Println("  deleted hook scripts")
+	fmt.Println("  deleted hook scripts (Exec + Read)")
+
+	// 2b. Remove the /caselog skill directory. RemoveAll is a
+	// no-op if the dir doesn't exist.
+	if err := os.RemoveAll(skillDir); err != nil {
+		fmt.Fprintln(os.Stderr, "uninstall: remove /caselog skill:", err)
+	} else {
+		fmt.Println("  removed /caselog skill")
+	}
 
 	// 3. Unregister autostart. Platform-specific installer handles
 	// the launchctl / systemctl / Startup-folder details.

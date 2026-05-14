@@ -99,6 +99,13 @@ func Run(argv []string) int {
 	// - the user's Claude Code runtime will only invoke the matcher it
 	// actually uses, so an unused hook just sits on disk at ~32 KB.
 	ps1HookPath := filepath.Join(hookDir, "thlibo-rewrite.ps1")
+	// Read-tool hooks: Claude fires `Read` when the user drops a file
+	// into the window or types "read <path>". The hook script runs
+	// `thlibo case` on large log-shaped files and rewrites
+	// tool_input.file_path to the compressed variant so Claude sees
+	// a small version instead of the raw blob.
+	readHookPath := filepath.Join(hookDir, "thlibo-read.sh")
+	readPS1HookPath := filepath.Join(hookDir, "thlibo-read.ps1")
 
 	if daemonPath == "" {
 		daemonPath = defaultDaemonPath()
@@ -194,11 +201,54 @@ func Run(argv []string) int {
 		fmt.Printf("  PowerShell hook script: %s\n", ps1Result)
 	}
 
-	if err := claudecode.MergeSettingsFull(settingsPath, hookPath, ps1HookPath); err != nil {
+	// Read-tool hooks. Same conflict semantics as the Exec hooks.
+	readResult, err := claudecode.WriteHookReadScript(readHookPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "install: write read hook:", err)
+		return 5
+	}
+	switch readResult {
+	case claudecode.WriteResultConflict:
+		fmt.Printf("  Read hook (bash): your edits preserved — new version written to %s.new\n", readHookPath)
+	default:
+		fmt.Printf("  Read hook (bash): %s\n", readResult)
+	}
+
+	readPS1Result, err := claudecode.WriteHookReadScriptPS1(readPS1HookPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "install: write read ps1 hook:", err)
+		return 5
+	}
+	switch readPS1Result {
+	case claudecode.WriteResultConflict:
+		fmt.Printf("  Read hook (ps1):  your edits preserved — new version written to %s.new\n", readPS1HookPath)
+	default:
+		fmt.Printf("  Read hook (ps1):  %s\n", readPS1Result)
+	}
+
+	if err := claudecode.MergeSettingsWithRead(settingsPath,
+		hookPath, ps1HookPath, readHookPath, readPS1HookPath); err != nil {
 		fmt.Fprintln(os.Stderr, "install: merge settings:", err)
 		return 6
 	}
-	fmt.Println("  merged Claude Code settings.json (Bash + PowerShell matchers)")
+	fmt.Println("  merged Claude Code settings.json (Bash + PowerShell + Read matchers)")
+
+	// Mirror the /caselog skill into ~/.claude/skills/caselog/.
+	// Uses the same SHA-stamp / conflict semantics as the hooks so
+	// user edits survive reinstalls.
+	skillsDir := filepath.Join(filepath.Dir(settingsPath), "skills")
+	skillResult, err := claudecode.InstallCaselogSkill(skillsDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "install: write /caselog skill:", err)
+		return 6
+	}
+	switch skillResult {
+	case claudecode.WriteResultConflict:
+		target := filepath.Join(skillsDir, "caselog", "SKILL.md")
+		fmt.Printf("  /caselog skill: your edits preserved — new version at %s.new\n", target)
+	default:
+		fmt.Printf("  /caselog skill: %s\n", skillResult)
+	}
 
 	if !skipAutostart && autostart != nil {
 		// Allow an override so CI and the .test/ sandbox can register

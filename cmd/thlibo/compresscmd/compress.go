@@ -37,7 +37,7 @@ func Run(argv []string) int {
 		return 1
 	}
 
-	p, err := buildPipeline()
+	p, err := BuildPipeline()
 	if err != nil {
 		// No pipeline means no daemon client; still emit raw so
 		// the caller sees the original output rather than nothing.
@@ -51,10 +51,11 @@ func Run(argv []string) int {
 	return 0
 }
 
-// buildPipeline mirrors execcmd.defaultPipeline but is package-local
-// so compresscmd stays dependency-compatible with the rest of
-// cmd/thlibo without exposing execcmd internals.
-func buildPipeline() (*middleware.Pipeline, error) {
+// BuildPipeline constructs a middleware.Pipeline pointed at the
+// default daemon. Exported so sibling subcommands (casecmd, any
+// future compression-driven command) can reuse the same wiring
+// without duplicating the daemon-client dance.
+func BuildPipeline() (*middleware.Pipeline, error) {
 	userDir := os.Getenv("THLIBO_PROCESSORS_DIR")
 	if userDir == "" {
 		if home, err := os.UserHomeDir(); err == nil {
