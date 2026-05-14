@@ -1,0 +1,29 @@
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_0aa929f6fcbfa5 18-20
+  s_5811b7f24eccc0::t_a2192d9711a7a5 75
+  s_5811b7f24eccc0::t_b03768b8f55191 72,147
+  s_5811b7f24eccc0::t_f2139b0ccd8d6f 209
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_403e604e9fa0ef 14-22
+  s_5811b7f24eccc0::t_130e411ad1b094 48,110
+  s_5811b7f24eccc0::t_3dd3fa24a442f2 40,67
+  s_5811b7f24eccc0::t_d6246c3950bc55 38,65,125
+.github/workflows/pages.yml
+  s_5811b7f24eccc0::t_62e2106dd7a295 35,38,44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "b71d744bf2c96a04fb281698725fed6cb340f1f3",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
