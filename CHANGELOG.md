@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `stacktrace-filter` built-in (v0.5 stage 1)
+
+- New `processors/stacktrace-filter/` Python script processor.
+  Recognises Python `Traceback` blocks, Go `panic:` + goroutine
+  dumps, Rust `thread '...' panicked`, Java exceptions / `Caused
+  by:` chains, Node v8 stacks. Match regex anchors on the
+  format-distinguishing first line.
+- Compression strategy is **lossless for load-bearing parts**:
+  exception messages preserved verbatim, every distinct file:line
+  ref preserved, frame counts reported when frames are omitted.
+- Dedupes consecutive identical frames before slicing — a 50-deep
+  recursion of one frame collapses to "frame × 50" without
+  consuming the head/tail budget. Then keeps first 3 + last 3
+  frames + a "... N frames omitted ..." marker for the middle.
+- Real-world measurement: 50-frame Python `RecursionError` trace
+  goes from **2,360 → 261 bytes** (89% reduction) with the
+  exception class, message, file, and line number all preserved.
+- Bug fix: `processors/embed.go` `//go:embed` line was missing
+  the v0.4 `shorthand` processor (latent — `BuildPipeline()` only
+  found it via the user-mirrored copy at `~/.thlibo/processors/`,
+  not the embedded fallback). Added both `shorthand` and
+  `stacktrace-filter` and added a regression test
+  (`TestEmbeddedFSContainsAllBuiltins`) so future built-ins can't
+  silently miss the embed list.
+- Two pre-existing tests updated for the new built-in count
+  (5 → 7): `TestBuiltinsLoadedWithNoUserDir` named-list checks
+  and `TestBuiltinsLoadedWithMissingUserDir` count assert.
+- The C6 script-builtins integration test now also covers
+  `stacktrace-filter` via a 50-frame Python recursion fixture.
+
+Three more v0.5 stages tracked separately: pytest-filter,
+ndjson-filter, and the case-file orchestrator that composes
+the family filters per the post on
+"Optimize Tokens Before They Hit the Cloud".
+
 ### Added — `thlibo config` interactive setup (v0.4 stage 4, completes v0.4)
 
 - New `thlibo config` subcommand with four modes:

@@ -1,0 +1,13 @@
+name: stacktrace-filter
+type: script
+entry: run.py
+match: "(?m)^(Traceback \\(most recent call last\\):|panic: |goroutine \\d+ \\[|fatal runtime error:|thread '[^']+' panicked at|Exception in thread |\\s+at [\\w$.]+\\(.*\\.java:|^\\s*at [\\w$.<>]+\\s*\\(.*:\\d+\\)$)"
+description: >
+  Compresses language-agnostic stack traces (Python Traceback,
+  Go panic + goroutine dumps, Rust panic + backtrace, Java
+  exceptions, Node v8 stack). Preserves the inner exception
+  message and file:line refs verbatim; deduplicates identical
+  frames; keeps the first 3 + last 3 frames per trace and a
+  count of the omitted middle. Lossless for the load-bearing
+  parts (which file, which line, which exception) — only drops
+  duplication.

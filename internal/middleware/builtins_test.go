@@ -15,7 +15,12 @@ import (
 )
 
 // C4: with no user dir, the registry is populated from the embedded
-// built-ins. All 5 expected processors must be present.
+// built-ins. Update this list whenever a new built-in lands in
+// processors/ — keep it sorted to spot drift instantly.
+//
+// v0.1: cargo-filter, casefolder, compress, git-filter, npm-filter
+// v0.4: + shorthand
+// v0.5: + stacktrace-filter
 func TestBuiltinsLoadedWithNoUserDir(t *testing.T) {
 	reg, warnings, err := BuildRegistry("")
 	if err != nil {
@@ -24,7 +29,10 @@ func TestBuiltinsLoadedWithNoUserDir(t *testing.T) {
 	if len(warnings) > 0 {
 		t.Errorf("unexpected warnings: %v", warnings)
 	}
-	want := []string{"cargo-filter", "casefolder", "compress", "git-filter", "npm-filter"}
+	want := []string{
+		"cargo-filter", "casefolder", "compress", "git-filter",
+		"npm-filter", "shorthand", "stacktrace-filter",
+	}
 	for _, n := range want {
 		if reg.Get(n) == nil {
 			t.Errorf("builtin %q missing from registry", n)
@@ -44,8 +52,10 @@ func TestBuiltinsLoadedWithMissingUserDir(t *testing.T) {
 	if len(warnings) > 0 {
 		t.Errorf("unexpected warnings: %v", warnings)
 	}
-	if reg.Len() != 5 {
-		t.Errorf("registry has %d processors, want 5", reg.Len())
+	// Count must match the embedded set; see the named list in
+	// TestBuiltinsLoadedWithNoUserDir for what's expected.
+	if reg.Len() != 7 {
+		t.Errorf("registry has %d processors, want 7", reg.Len())
 	}
 }
 
@@ -117,6 +127,7 @@ func TestScriptBuiltinsC6(t *testing.T) {
 		{"git-filter", gitStatusFixture},
 		{"npm-filter", npmListFixture},
 		{"cargo-filter", cargoBuildFixture},
+		{"stacktrace-filter", pythonRecursionFixture},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -291,4 +302,33 @@ warning: unused variable: ` + "`" + `y` + "`" + `
    = note: ` + "`" + `#[warn(unused_variables)]` + "`" + ` on by default
 
 error: could not compile ` + "`" + `thlibo` + "`" + ` (bin "thlibo") due to 1 previous error
+`
+
+// 50-deep recursion-error trace. The filter should produce a
+// shorter output by dedupe + head/tail elision while preserving
+// the exception class, message, file, and line number.
+const pythonRecursionFixture = `Traceback (most recent call last):
+  File "/app/x.py", line 12, in <module>
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    f()
+  File "/app/x.py", line 5, in f
+    raise RecursionError("max depth")
+RecursionError: maximum recursion depth exceeded
 `
