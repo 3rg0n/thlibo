@@ -1,0 +1,45 @@
+processors/git-filter/processor.yaml
+  s_5811b7f24eccc0::t_f1cc7928becbfe 4
+internal/middleware/family_dispatch_test.go
+  s_5811b7f24eccc0::t_2d4e4441aa8ebb 1-98
+processors/pytest-filter/processor.yaml
+  s_5811b7f24eccc0::t_57de82df70deb2 1-13
+processors/embed.go
+  s_5811b7f24eccc0::t_e70a435d313598 20
+CHANGELOG.md
+  s_5811b7f24eccc0::t_10e8f57e714b0f 10-48
+processors/cargo-filter/processor.yaml
+  s_5811b7f24eccc0::t_2ed6abac061475 4
+processors/pytest-filter/run.py
+  s_5811b7f24eccc0::t_774fffb184067a 1-200
+internal/middleware/builtins_test.go
+  s_5811b7f24eccc0::t_a0d4ccdf9d05a2 310-340
+  s_5811b7f24eccc0::t_c3877b158ad90e 341-368
+  s_5811b7f24eccc0::t_3570e41a03bcd5 133
+  s_5811b7f24eccc0::t_f4155c162c7daf 23,34-35
+  s_5811b7f24eccc0::t_ddd53ad047bb00 58-59
+  s_5811b7f24eccc0::t_ff61c26a0d17ce 132
+processors/ndjson-filter/processor.yaml
+  s_5811b7f24eccc0::t_c6596ce13c459c 1-11
+internal/middleware/embed_test.go
+  s_5811b7f24eccc0::t_a6fed905f2ce31 32
+  s_5811b7f24eccc0::t_7231ca82aa7ef8 33
+processors/npm-filter/processor.yaml
+  s_5811b7f24eccc0::t_57fd8b3d420d78 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "b9e16aa294ce5a33d6fcebcac9a54d9692fee20b",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
