@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `thlibo config` interactive setup (v0.4 stage 4, completes v0.4)
+
+- New `thlibo config` subcommand with four modes:
+  - **interactive** (default) — Q&A walks each settings field,
+    shows current value, accepts empty line to keep it, validates
+    input, prints a diff, and asks to confirm before writing.
+    Type `q` at any prompt to abort. `--yes` skips the final
+    confirmation.
+  - `--show` — print active config + source file path.
+  - `--path` — print resolved config-file path (handy for
+    scripting).
+  - `--set key=value` — set one field non-interactively.
+    Supports the four flat keys: `auto_shorthand_on_write`,
+    `auto_shorthand_paths` (comma-separated globs),
+    `auto_shorthand_min_bytes`, `auto_shorthand_yaml_prose`.
+  - `--reset` — write `Defaults()` to the config file (with
+    a confirmation prompt unless `--yes`).
+- Config file gets a header comment so a user opening it later
+  can find the docs: `# thlibo config — managed by 'thlibo config'`.
+- 11 new tests covering interactive keep-current / toggle /
+  abort flows, `--set` for each field type + invalid inputs,
+  YAML round-trip via writeConfig→Load, `--show` output, diff
+  reporter accuracy.
+
+This completes the v0.4 shorthand feature series (stages 1-4).
+You can now uninstall the standalone `/shorthand` skill — `thlibo
+shorthand` is a strict superset, with a hard eval gate the skill
+can't enforce, plus optional auto-on-Write and YAML-aware modes
+the skill can't reach.
+
 ### Added — YAML-aware shorthand (v0.4 stage 3)
 
 - New `Engine.CompressYAML` walks the YAML AST and rewrites only

@@ -23,6 +23,7 @@ import (
 
 	"github.com/3rg0n/thlibo/cmd/thlibo/casecmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/compresscmd"
+	"github.com/3rg0n/thlibo/cmd/thlibo/configcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/execcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/installcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/pullcmd"
@@ -81,6 +82,8 @@ func main() {
 		// whether to rewrite, emits hookSpecificOutput JSON. Always
 		// exits 0 — never breaks Claude Code on failure.
 		os.Exit(shorthandcmd.RunWriteHook(os.Args[2:]))
+	case "config":
+		os.Exit(configcmd.Run(os.Args[2:]))
 	case "version", "-v", "--version":
 		fmt.Println(version.Tag)
 		os.Exit(0)
@@ -113,6 +116,9 @@ Usage:
                              ~/.thlibo/cases/ for a large log file.
                              Invoked by the Read PreToolUse hook and
                              by the /caselog skill.
+  thlibo config              Walk through ~/.thlibo/config.yaml
+                             interactively (or use --show, --path,
+                             --set k=v, --reset).
   thlibo shorthand <file>    Compress LLM-facing prose (SKILL.md,
                              CLAUDE.md, agents.md, system prompts)
                              into token-efficient shorthand. Eval
