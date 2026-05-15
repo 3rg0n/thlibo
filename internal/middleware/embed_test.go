@@ -29,6 +29,8 @@ func TestEmbeddedFSContainsAllBuiltins(t *testing.T) {
 		"shorthand",
 		// v0.5 — log-processing family
 		"stacktrace-filter",
+		"pytest-filter",
+		"ndjson-filter",
 	}
 	for _, name := range want {
 		if d := r.Get(name); d == nil {

@@ -1,7 +1,7 @@
 name: cargo-filter
 type: script
 entry: run.py
-match: "^(\\s*Compiling |\\s*Finished|\\s*Running|error(\\[E\\d+\\])?:|warning:|\\s*Downloaded |test result:|running \\d+ tests?$)"
+match: "(?m)^(\\s*Compiling |\\s*Finished|\\s*Running|error(\\[E\\d+\\])?:|warning:|\\s*Downloaded |test result:|running \\d+ tests?$)"
 commands:
   - cargo
 description: >

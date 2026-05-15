@@ -1,0 +1,11 @@
+name: ndjson-filter
+type: script
+entry: run.py
+match: "(?m)^\\{[^\\n]*\"(?:level|severity|msg|message|@timestamp|time|ts)\":[^\\n]*\\}\\s*$"
+description: >
+  Compresses NDJSON / structured-log streams (OpenTelemetry exports,
+  k8s pod logs, application JSON logs). Groups by (level, msg)
+  signature, deduplicates with a "× N" count multiplier, sorts
+  level descending so errors come first. Preserves every distinct
+  file path, error code, SHA, version string, and request ID
+  verbatim across the unique records.

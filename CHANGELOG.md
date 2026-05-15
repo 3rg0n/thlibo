@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `pytest-filter`, `ndjson-filter` + case-file orchestration (v0.5 stages 2-4)
+
+- New `processors/pytest-filter/` Python processor. Recognises
+  pytest output via `=== test session starts ===` etc. Drops the
+  env-info block (rootdir/configfile/plugins), drops the per-file
+  dot-progress lines, keeps the FAILURES + ERRORS sections
+  verbatim with their full tracebacks, keeps the short summary
+  ("N passed, M failed in X.Xs"). 643 → 481 bytes on a small
+  fixture; the win scales with project size.
+- New `processors/ndjson-filter/` Python processor. Parses each
+  line as JSON, groups by (level, msg), dedupes with a `_count`
+  field on duplicates, sorts errors first. Preserves every
+  distinct field of the first occurrence verbatim (host, query,
+  callsite, version, request_id, etc.) so no load-bearing data
+  is lost. **21,029 → 346 bytes (98.4%)** on a stream of 200
+  records with one error repeated 197 times. Synonym-aware:
+  level/severity/lvl, msg/message/body, OTel numeric severity.
+- **Case-file orchestrator (stage 4) ships as the existing
+  pipeline**, not as a new component. With the v0.5 family
+  filters now correctly registered, `thlibo case <file>` runs
+  through `casefile.Create → middleware.Pipeline.Process →
+  registry.MatchFastPath` and the right filter dispatches by
+  content shape — no router round-trip, no daemon needed for
+  the deterministic path. The "orchestration" the post named is
+  exactly what `MatchFastPath` does.
+- Latent bug fix: the `match` regexes on `git-filter`,
+  `npm-filter`, and `cargo-filter` used `^...` without `(?m)`,
+  so they only matched at start-of-input rather than start-of-
+  line. In practice this meant the fast-path was never firing
+  for npm/cargo (they only ran via the `commands` allow-list at
+  rewrite time). Added `(?m)` to all three. Also tightened
+  `npm-filter` to require tree-glyph chars on the package-name
+  alternation so it doesn't false-positive on plain bullet text.
+- New `internal/middleware/family_dispatch_test.go` regression:
+  TestFamilyDispatchByFastPath proves each of the 6 family
+  filters dispatches correctly for representative fixtures, and
+  TestUnknownContentFallsThrough proves plain prose returns nil
+  (would route to the daemon's compress).
+
 ### Added — `stacktrace-filter` built-in (v0.5 stage 1)
 
 - New `processors/stacktrace-filter/` Python script processor.

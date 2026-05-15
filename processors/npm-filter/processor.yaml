@@ -1,7 +1,7 @@
 name: npm-filter
 type: script
 entry: run.py
-match: "^(npm (warn|error|notice)|added \\d+ packages|removed \\d+ packages|# npm audit report|\\s+[a-z\\-0-9@/]+(@[0-9.]+)?\\s*$|npm ERR!)"
+match: "(?m)^(npm (warn|error|notice)|added \\d+ packages|removed \\d+ packages|# npm audit report|npm ERR!|[│├└]──\\s+\\S+@[0-9.]+)"
 commands:
   - npm
   - npx

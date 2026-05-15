@@ -1,0 +1,13 @@
+name: pytest-filter
+type: script
+entry: run.py
+match: "(?m)^(=+ test session starts =+|=+ FAILURES =+|=+ ERRORS =+|=+ short test summary info =+|collected \\d+ items?)"
+commands:
+  - pytest
+  - py.test
+description: >
+  Compresses pytest output. Keeps every FAILURES / ERRORS block
+  with its full traceback verbatim, plus the short summary line
+  ("N passed, M failed in X.Xs"). Drops the progress-dot stream,
+  per-test capture decorations, environment info, and warnings
+  about deprecated APIs the failing tests don't reference.

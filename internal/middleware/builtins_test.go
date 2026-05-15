@@ -20,7 +20,7 @@ import (
 //
 // v0.1: cargo-filter, casefolder, compress, git-filter, npm-filter
 // v0.4: + shorthand
-// v0.5: + stacktrace-filter
+// v0.5: + stacktrace-filter, pytest-filter, ndjson-filter
 func TestBuiltinsLoadedWithNoUserDir(t *testing.T) {
 	reg, warnings, err := BuildRegistry("")
 	if err != nil {
@@ -31,7 +31,8 @@ func TestBuiltinsLoadedWithNoUserDir(t *testing.T) {
 	}
 	want := []string{
 		"cargo-filter", "casefolder", "compress", "git-filter",
-		"npm-filter", "shorthand", "stacktrace-filter",
+		"ndjson-filter", "npm-filter", "pytest-filter", "shorthand",
+		"stacktrace-filter",
 	}
 	for _, n := range want {
 		if reg.Get(n) == nil {
@@ -54,8 +55,8 @@ func TestBuiltinsLoadedWithMissingUserDir(t *testing.T) {
 	}
 	// Count must match the embedded set; see the named list in
 	// TestBuiltinsLoadedWithNoUserDir for what's expected.
-	if reg.Len() != 7 {
-		t.Errorf("registry has %d processors, want 7", reg.Len())
+	if reg.Len() != 9 {
+		t.Errorf("registry has %d processors, want 9", reg.Len())
 	}
 }
 
@@ -128,6 +129,8 @@ func TestScriptBuiltinsC6(t *testing.T) {
 		{"npm-filter", npmListFixture},
 		{"cargo-filter", cargoBuildFixture},
 		{"stacktrace-filter", pythonRecursionFixture},
+		{"pytest-filter", pytestSessionFixture},
+		{"ndjson-filter", ndjsonRepeatedErrorFixture},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -302,6 +305,65 @@ warning: unused variable: ` + "`" + `y` + "`" + `
    = note: ` + "`" + `#[warn(unused_variables)]` + "`" + ` on by default
 
 error: could not compile ` + "`" + `thlibo` + "`" + ` (bin "thlibo") due to 1 previous error
+`
+
+// Pytest session with one failure. The filter should drop the
+// env-info block, drop the per-file dot-progress lines, and keep
+// the FAILURES + short summary blocks intact.
+const pytestSessionFixture = `============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.0.0, pluggy-1.4.0
+rootdir: /home/user/repo
+configfile: pyproject.toml
+plugins: anyio-4.0.0, asyncio-0.21.1
+collected 47 items
+
+tests/test_a.py ........                                                 [ 17%]
+tests/test_b.py ......F.                                                 [ 34%]
+tests/test_c.py ............                                             [ 60%]
+tests/test_d.py ............                                             [ 85%]
+tests/test_e.py .......                                                  [100%]
+
+=================================== FAILURES ===================================
+__________________________________ test_login _________________________________
+
+    def test_login():
+        result = login("user", "pass")
+>       assert result.status == 200
+E       assert 401 == 200
+E        +  where 401 = LoginResult(status=401).status
+
+tests/test_b.py:42: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_b.py::test_login - assert 401 == 200
+========================= 1 failed, 46 passed in 1.23s =========================
+`
+
+// 50 NDJSON records with one error repeated 47 times. Filter
+// should dedupe the duplicates with a _count multiplier and sort
+// errors first.
+const ndjsonRepeatedErrorFixture = `{"level":"info","msg":"service started","version":"v0.5.0","pid":12345}
+{"level":"warn","msg":"slow query","ms":230,"query":"SELECT * FROM users"}
+{"level":"warn","msg":"deprecated API","endpoint":"/v1/auth","callsite":"auth.go:42"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-0"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-1"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-2"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-3"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-4"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-5"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-6"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-7"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-8"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-9"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-10"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-11"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-12"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-13"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-14"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-15"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-16"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-17"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-18"}
+{"level":"error","msg":"connection refused","host":"db1.example.com:5432","request_id":"req-19"}
 `
 
 // 50-deep recursion-error trace. The filter should produce a

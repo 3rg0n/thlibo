@@ -1,7 +1,7 @@
 name: git-filter
 type: script
 entry: run.py
-match: "^(On branch |HEAD detached|Changes |Untracked files:|nothing to commit|diff --git|commit [0-9a-f]{7,40}$)"
+match: "(?m)^(On branch |HEAD detached|Changes |Untracked files:|nothing to commit|diff --git|commit [0-9a-f]{7,40}$)"
 commands:
   - git
 description: >
