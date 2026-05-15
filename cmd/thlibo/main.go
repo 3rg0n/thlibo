@@ -27,6 +27,7 @@ import (
 	"github.com/3rg0n/thlibo/cmd/thlibo/installcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/pullcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/rewritecmd"
+	"github.com/3rg0n/thlibo/cmd/thlibo/shorthandcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/uninstallcmd"
 	"github.com/3rg0n/thlibo/internal/logx"
 	"github.com/3rg0n/thlibo/internal/update"
@@ -72,6 +73,8 @@ func main() {
 		os.Exit(pullcmd.Run(os.Args[2:]))
 	case "case":
 		os.Exit(casecmd.Run(os.Args[2:]))
+	case "shorthand":
+		os.Exit(shorthandcmd.Run(os.Args[2:]))
 	case "version", "-v", "--version":
 		fmt.Println(version.Tag)
 		os.Exit(0)
@@ -104,6 +107,14 @@ Usage:
                              ~/.thlibo/cases/ for a large log file.
                              Invoked by the Read PreToolUse hook and
                              by the /caselog skill.
+  thlibo shorthand <file>    Compress LLM-facing prose (SKILL.md,
+                             CLAUDE.md, agents.md, system prompts)
+                             into token-efficient shorthand. Eval
+                             checklist gates: NEVER/MUST/DO NOT,
+                             code fences, frontmatter, URLs, paths,
+                             versions, thresholds preserved verbatim.
+                             Use --in-place to rewrite the file
+                             (.orig backup), --validate to gate CI.
   thlibo version             Print the build tag and exit.
   thlibo help                Show this message.
 

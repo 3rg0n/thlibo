@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `thlibo shorthand` (v0.4 stage 1)
+
+- `thlibo shorthand <file>` compresses LLM-facing prose (SKILL.md,
+  CLAUDE.md, agents.md, system prompts) into token-efficient
+  shorthand. Modes: stdout (default), `--in-place` (with `.orig`
+  backup), `--validate` (CI gate, exit 0/1), stdin via `-`.
+- New `internal/shorthand` engine + `Evaluate()` safety gate.
+  Fail-closed: if any of NEVER/MUST/SHALL/ALWAYS/DO NOT directives,
+  fenced code blocks, frontmatter keys, URLs, file paths, version
+  strings, or numeric thresholds don't survive the compression, the
+  original bytes are emitted instead. Better to over-emit the
+  original than silently drop a directive.
+- New embedded `shorthand` prompt processor at
+  `processors/shorthand/processor.md` with the full ruleset:
+  preserve-verbatim list, eight ordered compression rules, four
+  anti-patterns, output-format contract.
+- 16 unit tests covering happy path, already-shorthand sentinel,
+  backend errors, nil backend, and every eval-checklist failure
+  mode (directive, code fence, frontmatter, URL, version, numeric
+  threshold, file path, no-new-claims).
+- Stage 2 (auto-on-Write hook), stage 3 (YAML-aware compression for
+  `prompts/*.yaml`), and stage 4 (`thlibo config` interactive
+  setup) tracked separately for follow-up commits.
+
 ## [0.3.0] - 2026-05-14
 
 Feature-focused release building on v0.2's hardening foundation.
