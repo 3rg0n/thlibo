@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-15
+
+### Fixed
+
+- **#14**: `buildHookCommand` now wraps any `.ps1` hook path in
+  `powershell -NoProfile -ExecutionPolicy Bypass -File "<path>"`,
+  not just when `matcher == "PowerShell"`. The previous logic
+  left the v0.3 Read matcher and the v0.4 Write/Edit matchers
+  pointing at .ps1 paths directly on Windows; Claude Code's
+  hook runner shells through bash there, and bash exploded
+  trying to parse the PowerShell as shell on every invocation.
+  Re-running `thlibo install` rewrites settings.json with the
+  correct wrapper for all five matchers (Bash, PowerShell,
+  Read, Write, Edit). Two regression tests added covering
+  every matcher × {.sh, .ps1} combination.
+
 ## [0.5.0] - 2026-05-15
 
 Two feature series landed back-to-back: v0.4 (`thlibo shorthand`,
