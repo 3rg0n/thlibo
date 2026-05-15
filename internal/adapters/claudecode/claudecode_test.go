@@ -986,3 +986,63 @@ func TestInstallCaselogSkill(t *testing.T) {
 		t.Errorf("conflict should write .new: %v", err)
 	}
 }
+
+// Issue #14: every hook script ending in .ps1 must be registered
+// with the `powershell -NoProfile -ExecutionPolicy Bypass -File`
+// wrapper, regardless of which matcher (Bash / PowerShell / Read /
+// Write / Edit) it's registered under. Claude Code's hook runner
+// shells through bash on Windows; bash can't exec a PowerShell
+// script directly, so .ps1 paths handed in raw blow up with
+// "syntax error near unexpected token".
+//
+// Before the fix, only matcher == "PowerShell" got the wrapper.
+// Read + Write matchers on Windows pointed at .ps1 paths directly
+// and broke every Read tool call until the user manually removed
+// them from settings.json.
+func TestBuildHookCommandWrapsEveryPS1Path(t *testing.T) {
+	cases := []struct {
+		matcher string
+		path    string
+	}{
+		{"Bash", "C:/Users/x/.thlibo/hooks/thlibo-rewrite.ps1"},
+		{"PowerShell", "C:/Users/x/.thlibo/hooks/thlibo-rewrite.ps1"},
+		{"Read", "C:/Users/x/.thlibo/hooks/thlibo-read.ps1"},
+		{"Write", "C:/Users/x/.thlibo/hooks/thlibo-write.ps1"},
+		{"Edit", "C:/Users/x/.thlibo/hooks/thlibo-write.ps1"},
+	}
+	for _, tc := range cases {
+		got := buildHookCommand(tc.matcher, tc.path)
+		if !strings.Contains(got, "powershell -NoProfile -ExecutionPolicy Bypass -File") {
+			t.Errorf("%s matcher with .ps1 path: missing PowerShell wrapper:\n  got = %q",
+				tc.matcher, got)
+		}
+		if !strings.Contains(got, tc.path) {
+			t.Errorf("%s matcher: command must reference the script path %q:\n  got = %q",
+				tc.matcher, tc.path, got)
+		}
+	}
+}
+
+// Issue #14 (negative): .sh paths must NOT be wrapped in any
+// matcher. Bash hooks run as raw script paths.
+func TestBuildHookCommandPassesShPathsThrough(t *testing.T) {
+	cases := []struct {
+		matcher string
+		path    string
+	}{
+		{"Bash", "/home/u/.thlibo/hooks/thlibo-rewrite.sh"},
+		{"Read", "/home/u/.thlibo/hooks/thlibo-read.sh"},
+		{"Write", "/home/u/.thlibo/hooks/thlibo-write.sh"},
+		{"Edit", "/home/u/.thlibo/hooks/thlibo-write.sh"},
+	}
+	for _, tc := range cases {
+		got := buildHookCommand(tc.matcher, tc.path)
+		if strings.Contains(got, "powershell") {
+			t.Errorf("%s matcher with .sh path: should NOT wrap, got %q", tc.matcher, got)
+		}
+		if got != tc.path {
+			t.Errorf("%s matcher: bash hook should pass through unchanged; got %q want %q",
+				tc.matcher, got, tc.path)
+		}
+	}
+}

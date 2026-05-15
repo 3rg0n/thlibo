@@ -588,11 +588,25 @@ func addPreToolUseHook(root map[string]any, matcher, hookPath, markerSuffix stri
 // buildHookCommand returns the `command` string for a PreToolUse
 // entry. Bash hooks are invoked as the raw script path (Claude Code
 // runs them via `bash -c`). PowerShell hooks are invoked via
-// `powershell -ExecutionPolicy Bypass -File <path>` so systems where
-// the signed-script policy would block direct execution still work.
+// `powershell -NoProfile -ExecutionPolicy Bypass -File <path>` so
+// systems where the signed-script policy would block direct
+// execution still work, AND so Claude Code's bash-based hook runner
+// on Windows doesn't try to exec the .ps1 directly (which fails
+// with "syntax error near unexpected token").
+//
+// Wrap based on the script TYPE, not the matcher name. The previous
+// version only wrapped for matcher == "PowerShell", which left Read
+// and Write matchers pointing at .ps1 files directly — Claude Code's
+// hook runner shells those through bash on Windows and bash can't
+// exec PowerShell. Closes issue #14.
+//
+// The suffix check covers every matcher (Bash, PowerShell, Read,
+// Write, Edit) uniformly: .ps1 always gets the wrapper, anything
+// else (.sh, no extension) runs as-is.
 func buildHookCommand(matcher, hookPath string) string {
+	_ = matcher // retained for signature compatibility / future use
 	hookPath = normalisePath(hookPath)
-	if matcher == "PowerShell" {
+	if strings.HasSuffix(strings.ToLower(hookPath), ".ps1") {
 		return `powershell -NoProfile -ExecutionPolicy Bypass -File "` + hookPath + `"`
 	}
 	return hookPath
