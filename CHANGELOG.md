@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-15
+
+Two feature series landed back-to-back: v0.4 (`thlibo shorthand`,
+auto-on-Write hook, YAML-aware mode, `thlibo config`) and v0.5
+(four new family filters for the log-processing pattern). Built-in
+processor count went 5 → 9. Notable side-fix: a latent `^`-without-
+`(?m)` bug on git/npm/cargo filter regexes that meant they were
+silently never firing via the fast-path matcher.
+
 ### Added — `pytest-filter`, `ndjson-filter` + case-file orchestration (v0.5 stages 2-4)
 
 - New `processors/pytest-filter/` Python processor. Recognises
