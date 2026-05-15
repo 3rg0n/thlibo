@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — YAML-aware shorthand (v0.4 stage 3)
+
+- New `Engine.CompressYAML` walks the YAML AST and rewrites only
+  prose-shaped scalar values. Block-scalar style (`|` literal,
+  `>` folded) is always prose at ≥80 chars; plain/quoted scalars
+  must be ≥120 chars AND have ≥4 spaces (rules out
+  identifiers, paths, regex patterns, version strings).
+- Structural-key blocklist: `name`, `version`, `model`, `type`,
+  `match`, `allowed_tools` / `allowed-tools` / `allowedTools`,
+  `commands`, `command`, `entry`, `tools`, `id`, `uuid`, `sha`,
+  `hash` — even long values under these keys are NEVER rewritten
+  because they're identifiers, not prose.
+- Per-scalar eval gate: each rewritten value individually passes
+  through `Evaluate(original, compressed)`. Failed scalars revert
+  to the original; the rest of the document still benefits from
+  the safe rewrites.
+- Doc-level eval gate: after all scalars are rewritten, the
+  whole-document Compressed bytes pass through `Evaluate` once
+  more. A doc-level failure reverts the entire compression — the
+  user gets their original bytes back, never a partial rewrite.
+- New `IsYAMLContent` heuristic detects YAML by content shape so
+  the dispatch works even for files without `.yaml` extension
+  (or stdin).
+- `thlibo shorthand --yaml=auto|on|off` flag (default `auto`)
+  routes through the YAML walker. Auto detects via file extension
+  first, then content shape.
+- Write/Edit hook respects `auto_shorthand_yaml_prose` config
+  toggle (off by default — explicit opt-in because YAML walker
+  has more semantic risk than flat prose).
+- 6 new tests: IsYAMLContent heuristic, walker visits scalars
+  only, allowed_tools list preserved through lowering backend,
+  long description rewritten with eval pass, no-candidates =
+  AlreadyShorthand, scalar eval failure reverts that scalar
+  alone (other safe rewrites survive).
+
 ### Added — auto-on-Write hook (v0.4 stage 2)
 
 - New `thlibo shorthand-hook` internal subcommand. Drives the

@@ -11,8 +11,22 @@ import (
 	"path/filepath"
 	"time"
 
+	"strings"
+
 	"github.com/3rg0n/thlibo/internal/config"
+	"github.com/3rg0n/thlibo/internal/shorthand"
 )
+
+// looksLikeYAMLPath reports whether (filePath, body) suggest YAML
+// content. Used by the write hook to decide between the flat-prose
+// and YAML-aware paths. Extension takes priority because it's
+// cheaper than content sniffing.
+func looksLikeYAMLPath(filePath, body string) bool {
+	if strings.HasSuffix(filePath, ".yaml") || strings.HasSuffix(filePath, ".yml") {
+		return true
+	}
+	return shorthand.IsYAMLContent(body)
+}
 
 // RunWriteHook implements the `thlibo shorthand-hook` subcommand.
 // The Write/Edit PreToolUse hook scripts hand it the Claude Code
@@ -94,7 +108,19 @@ func RunWriteHook(argv []string) int {
 		return ExitOK
 	}
 
-	res, err := engine.Compress(context.Background(), body)
+	// YAML-aware path when the file extension or content suggests
+	// it AND the user has opted in (auto_shorthand_yaml_prose). The
+	// flat-prose path is the safe default; YAML mode requires an
+	// explicit toggle because the walker introduces semantic
+	// risk (we choose which scalars to rewrite vs preserve).
+	useYAML := cfg.AutoShorthandYAMLProse && looksLikeYAMLPath(env.ToolInput.FilePath, body)
+
+	var res *shorthand.Result
+	if useYAML {
+		res, err = engine.CompressYAML(context.Background(), body)
+	} else {
+		res, err = engine.Compress(context.Background(), body)
+	}
 	if err != nil || !res.Safe() || res.AlreadyShorthand {
 		// Any of: backend failed, eval failed, or input was already
 		// shorthand. In every case we leave the user's bytes alone.

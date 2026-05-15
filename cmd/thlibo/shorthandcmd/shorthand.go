@@ -58,11 +58,13 @@ func Run(argv []string) int {
 		validate bool
 		quiet    bool
 		noBackup bool
+		yamlMode string
 	)
 	fs.BoolVar(&inPlace, "in-place", false, "rewrite the file in place; original saved to <file>.orig")
 	fs.BoolVar(&validate, "validate", false, "run the eval checklist on the file's existing content; report and exit 0/1 without modifying")
 	fs.BoolVar(&quiet, "quiet", false, "suppress the reduction-summary line on stderr")
 	fs.BoolVar(&noBackup, "no-backup", false, "with --in-place, skip the .orig backup (use when you have version control)")
+	fs.StringVar(&yamlMode, "yaml", "auto", "YAML-aware mode: auto (detect), on (force), off (disable). Auto detects YAML by file extension and content shape.")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `thlibo shorthand — compress LLM-facing prose
 
@@ -132,7 +134,13 @@ Flags:
 		return ExitBackendDown
 	}
 
-	res, err := engine.Compress(context.Background(), string(raw))
+	useYAML := shouldUseYAMLMode(yamlMode, target, string(raw))
+	var res *shorthand.Result
+	if useYAML {
+		res, err = engine.CompressYAML(context.Background(), string(raw))
+	} else {
+		res, err = engine.Compress(context.Background(), string(raw))
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "thlibo shorthand: compression failed:", err)
 		return ExitBackendDown
@@ -187,6 +195,27 @@ Flags:
 		}
 	}
 	return ExitOK
+}
+
+// shouldUseYAMLMode decides whether to dispatch through the YAML-
+// aware walker. mode=on/off forces; mode=auto looks at the file
+// extension first (cheap signal), then the content shape (more
+// reliable but pays a SplitN). The content sniff catches files
+// without extensions and rules in stdin.
+func shouldUseYAMLMode(mode, path, content string) bool {
+	switch mode {
+	case "on":
+		return true
+	case "off":
+		return false
+	}
+	if path != "" && path != "-" {
+		switch {
+		case strings.HasSuffix(path, ".yaml"), strings.HasSuffix(path, ".yml"):
+			return true
+		}
+	}
+	return shorthand.IsYAMLContent(content)
 }
 
 // readInput slurps the file or stdin into a byte slice. "-" is the
