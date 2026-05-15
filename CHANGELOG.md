@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — auto-on-Write hook (v0.4 stage 2)
+
+- New `thlibo shorthand-hook` internal subcommand. Drives the
+  Write/Edit PreToolUse hook: reads tool envelope from stdin,
+  decides whether to rewrite, runs the shorthand engine, emits
+  `hookSpecificOutput` JSON Claude Code substitutes. Always
+  exits 0 — never breaks the AI client on failure.
+- New embedded hook scripts: `hook-write.sh` (~25 lines,
+  Bash) and `hook-write.ps1` (~22 lines, PowerShell). Same
+  shell-thin pattern as the other hooks; all decision logic
+  lives in the Go subcommand for testability.
+- `internal/config` package: loads `~/.thlibo/config.yaml`
+  (override via `$THLIBO_CONFIG`). `auto_shorthand_on_write`
+  defaults to **off** — opt-in only. `auto_shorthand_paths`
+  defaults to glob list `**/SKILL.md`, `**/CLAUDE.md`,
+  `**/AGENTS.md`, `**/agents.md`, `**/.claude/skills/**/*.md`,
+  `**/prompts/*.yaml`, `**/prompts/*.yml`. `auto_shorthand_min_bytes`
+  defaults to 500 (smaller files passthrough).
+- `claudecode.MergeSettingsAll` and `MergeHooks` struct: named-arg
+  superset of `MergeSettingsWithRead`, registers the Write/Edit
+  matchers (one script, two registrations — both tools land bytes
+  on disk). The legacy positional-arg merge functions remain as
+  thin wrappers.
+- Originals preserved at
+  `~/.thlibo/cases/shorthand/<sha-prefix>-<unix-ts>/{original,meta.json}`
+  so a bad eval can be recovered manually. The hook **never**
+  rewrites without a backup; if the backup write fails the new
+  content goes through anyway with a stderr warning, but in
+  practice the dir is readable and the backup lands.
+- Installer now writes the four new hook scripts (Write/Edit
+  Bash + PS1) and registers them via `MergeSettingsAll`. Output
+  reminds the user the auto-rewrite is OFF by default.
+- Uninstaller cleans up Write/Edit hook scripts + their `.new`
+  conflict copies.
+- 12 new tests across `internal/config` (defaults, env override,
+  malformed YAML, glob matching) and `internal/adapters/claudecode`
+  (Write+Edit registration, idempotence across multiple installs,
+  RemoveHooks dropping Write/Edit while preserving unrelated
+  user hooks).
+
 ### Added — `thlibo shorthand` (v0.4 stage 1)
 
 - `thlibo shorthand <file>` compresses LLM-facing prose (SKILL.md,

@@ -735,6 +735,162 @@ func TestMergeSettingsWithReadRegistersReadMatcher(t *testing.T) {
 	}
 }
 
+// v0.4 stage 2: MergeSettingsAll registers Write hooks against both
+// "Write" and "Edit" matchers, picking the platform-appropriate
+// script the same way Read does.
+func TestMergeSettingsAllRegistersWriteAndEditMatchers(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	bashWrite := filepath.Join(dir, "thlibo-write.sh")
+	ps1Write := filepath.Join(dir, "thlibo-write.ps1")
+
+	if err := MergeSettingsAll(sp, MergeHooks{
+		BashWriteHook: bashWrite,
+		PS1WriteHook:  ps1Write,
+	}); err != nil {
+		t.Fatalf("MergeSettingsAll: %v", err)
+	}
+
+	var got map[string]any
+	raw, _ := os.ReadFile(sp)
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("parse: %v\n%s", err, raw)
+	}
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+	matchers := map[string]map[string]any{}
+	for _, g := range pre {
+		obj := g.(map[string]any)
+		matchers[obj["matcher"].(string)] = obj
+	}
+	if matchers["Write"] == nil {
+		t.Errorf("Write matcher missing; got: %s", raw)
+	}
+	if matchers["Edit"] == nil {
+		t.Errorf("Edit matcher missing; got: %s", raw)
+	}
+	if matchers["Write"] != nil && matchers["Edit"] != nil {
+		// Both matchers should reference the same script — one
+		// physical file, two registrations.
+		wcmd := matchers["Write"]["hooks"].([]any)[0].(map[string]any)["command"].(string)
+		ecmd := matchers["Edit"]["hooks"].([]any)[0].(map[string]any)["command"].(string)
+		if wcmd != ecmd {
+			t.Errorf("Write and Edit should point at the same script; got %q vs %q", wcmd, ecmd)
+		}
+	}
+}
+
+// v0.4 stage 2: re-running MergeSettingsAll doesn't duplicate Write
+// or Edit entries. Same idempotence contract as the Bash matcher.
+func TestMergeSettingsAllWriteIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+	bashWrite := filepath.Join(dir, "thlibo-write.sh")
+	ps1Write := filepath.Join(dir, "thlibo-write.ps1")
+
+	for i := 0; i < 3; i++ {
+		if err := MergeSettingsAll(sp, MergeHooks{
+			BashWriteHook: bashWrite,
+			PS1WriteHook:  ps1Write,
+		}); err != nil {
+			t.Fatalf("pass %d: %v", i, err)
+		}
+	}
+
+	raw, _ := os.ReadFile(sp)
+	var got map[string]any
+	_ = json.Unmarshal(raw, &got)
+	pre := got["hooks"].(map[string]any)["PreToolUse"].([]any)
+
+	writeCount, editCount := 0, 0
+	for _, g := range pre {
+		obj := g.(map[string]any)
+		switch obj["matcher"].(string) {
+		case "Write":
+			writeCount += len(obj["hooks"].([]any))
+		case "Edit":
+			editCount += len(obj["hooks"].([]any))
+		}
+	}
+	if writeCount != 1 {
+		t.Errorf("Write hooks after 3 merges = %d, want 1", writeCount)
+	}
+	if editCount != 1 {
+		t.Errorf("Edit hooks after 3 merges = %d, want 1", editCount)
+	}
+}
+
+// v0.4 stage 2: RemoveHooks drops Write+Edit entries the same way
+// it drops Bash/PowerShell/Read.
+func TestRemoveHooksDropsWriteAndEdit(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "settings.json")
+
+	// Seed with both Write and Edit matchers pointing at thlibo
+	// scripts, plus an unrelated hook that must survive.
+	writeScript := filepath.Join(dir, "thlibo-write.sh")
+	root := map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "Write",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": writeScript},
+					},
+				},
+				map[string]any{
+					"matcher": "Edit",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": writeScript},
+						map[string]any{"type": "command", "command": "user-script.sh"},
+					},
+				},
+			},
+		},
+	}
+	raw, _ := json.MarshalIndent(root, "", "  ")
+	if err := os.WriteFile(sp, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveHooks(sp); err != nil {
+		t.Fatalf("RemoveHooks: %v", err)
+	}
+
+	out, _ := os.ReadFile(sp)
+	var got map[string]any
+	_ = json.Unmarshal(out, &got)
+	hooks := got["hooks"].(map[string]any)
+	pre, _ := hooks["PreToolUse"].([]any)
+
+	for _, g := range pre {
+		obj := g.(map[string]any)
+		hooksList, _ := obj["hooks"].([]any)
+		for _, h := range hooksList {
+			if obj["matcher"].(string) == "Edit" {
+				cmd := h.(map[string]any)["command"].(string)
+				if strings.Contains(cmd, "thlibo-write") {
+					t.Errorf("thlibo Edit entry survived RemoveHooks: %q", cmd)
+				}
+			}
+		}
+	}
+	// The unrelated user-script.sh on the Edit matcher must
+	// survive.
+	survived := false
+	for _, g := range pre {
+		obj := g.(map[string]any)
+		if obj["matcher"].(string) == "Edit" {
+			for _, h := range obj["hooks"].([]any) {
+				if h.(map[string]any)["command"].(string) == "user-script.sh" {
+					survived = true
+				}
+			}
+		}
+	}
+	if !survived {
+		t.Errorf("unrelated user-script.sh dropped: %s", out)
+	}
+}
+
 // #25: RemoveHooks must drop Read-matcher entries as well as Exec ones.
 func TestRemoveHooksDropsReadEntries(t *testing.T) {
 	dir := t.TempDir()

@@ -75,6 +75,12 @@ func main() {
 		os.Exit(casecmd.Run(os.Args[2:]))
 	case "shorthand":
 		os.Exit(shorthandcmd.Run(os.Args[2:]))
+	case "shorthand-hook":
+		// Internal subcommand invoked by the Write/Edit PreToolUse
+		// hook scripts. Reads the tool envelope from stdin, decides
+		// whether to rewrite, emits hookSpecificOutput JSON. Always
+		// exits 0 — never breaks Claude Code on failure.
+		os.Exit(shorthandcmd.RunWriteHook(os.Args[2:]))
 	case "version", "-v", "--version":
 		fmt.Println(version.Tag)
 		os.Exit(0)

@@ -106,6 +106,15 @@ func Run(argv []string) int {
 	// a small version instead of the raw blob.
 	readHookPath := filepath.Join(hookDir, "thlibo-read.sh")
 	readPS1HookPath := filepath.Join(hookDir, "thlibo-read.ps1")
+	// Write+Edit-tool hooks: when auto_shorthand_on_write is enabled
+	// in ~/.thlibo/config.yaml AND the target path matches the
+	// configured glob list, intercept the Write/Edit envelope and
+	// run the content through `thlibo shorthand` before the file
+	// hits disk. Off by default — installs the script regardless,
+	// but the runtime decision is config-gated. See
+	// internal/config/config.go for the schema.
+	writeHookPath := filepath.Join(hookDir, "thlibo-write.sh")
+	writePS1HookPath := filepath.Join(hookDir, "thlibo-write.ps1")
 
 	if daemonPath == "" {
 		daemonPath = defaultDaemonPath()
@@ -226,12 +235,46 @@ func Run(argv []string) int {
 		fmt.Printf("  Read hook (ps1):  %s\n", readPS1Result)
 	}
 
-	if err := claudecode.MergeSettingsWithRead(settingsPath,
-		hookPath, ps1HookPath, readHookPath, readPS1HookPath); err != nil {
+	// Write+Edit hooks. Installed but config-gated at runtime: a
+	// fresh install never auto-rewrites the user's files until they
+	// flip auto_shorthand_on_write to true in ~/.thlibo/config.yaml.
+	writeResult, err := claudecode.WriteHookWriteScript(writeHookPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "install: write write hook:", err)
+		return 5
+	}
+	switch writeResult {
+	case claudecode.WriteResultConflict:
+		fmt.Printf("  Write hook (bash): your edits preserved — new version written to %s.new\n", writeHookPath)
+	default:
+		fmt.Printf("  Write hook (bash): %s\n", writeResult)
+	}
+
+	writePS1Result, err := claudecode.WriteHookWriteScriptPS1(writePS1HookPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "install: write write ps1 hook:", err)
+		return 5
+	}
+	switch writePS1Result {
+	case claudecode.WriteResultConflict:
+		fmt.Printf("  Write hook (ps1):  your edits preserved — new version written to %s.new\n", writePS1HookPath)
+	default:
+		fmt.Printf("  Write hook (ps1):  %s\n", writePS1Result)
+	}
+
+	if err := claudecode.MergeSettingsAll(settingsPath, claudecode.MergeHooks{
+		BashExecHook:  hookPath,
+		PS1ExecHook:   ps1HookPath,
+		BashReadHook:  readHookPath,
+		PS1ReadHook:   readPS1HookPath,
+		BashWriteHook: writeHookPath,
+		PS1WriteHook:  writePS1HookPath,
+	}); err != nil {
 		fmt.Fprintln(os.Stderr, "install: merge settings:", err)
 		return 6
 	}
-	fmt.Println("  merged Claude Code settings.json (Bash + PowerShell + Read matchers)")
+	fmt.Println("  merged Claude Code settings.json (Bash + PowerShell + Read + Write/Edit matchers)")
+	fmt.Println("  Write/Edit auto-shorthand is OFF by default; enable in ~/.thlibo/config.yaml")
 
 	// Mirror the /caselog skill into ~/.claude/skills/caselog/.
 	// Uses the same SHA-stamp / conflict semantics as the hooks so

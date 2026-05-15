@@ -66,6 +66,8 @@ func Run(argv []string) int {
 	ps1HookPath := filepath.Join(hookDir, "thlibo-rewrite.ps1")
 	readHookPath := filepath.Join(hookDir, "thlibo-read.sh")
 	readPS1HookPath := filepath.Join(hookDir, "thlibo-read.ps1")
+	writeHookPath := filepath.Join(hookDir, "thlibo-write.sh")
+	writePS1HookPath := filepath.Join(hookDir, "thlibo-write.ps1")
 	// ~/.claude/skills/caselog/ — installed by `thlibo install`.
 	skillDir := filepath.Join(filepath.Dir(settingsPath), "skills", "caselog")
 
@@ -99,14 +101,16 @@ func Run(argv []string) int {
 	for _, p := range []string{
 		bashHookPath, ps1HookPath,
 		readHookPath, readPS1HookPath,
+		writeHookPath, writePS1HookPath,
 		bashHookPath + ".new", ps1HookPath + ".new",
 		readHookPath + ".new", readPS1HookPath + ".new",
+		writeHookPath + ".new", writePS1HookPath + ".new",
 	} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			fmt.Fprintln(os.Stderr, "uninstall: delete hook script:", err)
 		}
 	}
-	fmt.Println("  deleted hook scripts (Exec + Read)")
+	fmt.Println("  deleted hook scripts (Exec + Read + Write/Edit)")
 
 	// 2b. Remove the /caselog skill directory. RemoveAll is a
 	// no-op if the dir doesn't exist.

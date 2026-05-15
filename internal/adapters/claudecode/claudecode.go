@@ -44,6 +44,12 @@ var hookReadScript []byte
 //go:embed hook-read.ps1
 var hookReadScriptPS1 []byte
 
+//go:embed hook-write.sh
+var hookWriteScript []byte
+
+//go:embed hook-write.ps1
+var hookWriteScriptPS1 []byte
+
 // HookScript returns the embedded Bash Exec-hook script bytes,
 // unmodified. Exposed so the installer can write it to disk and
 // tests can assert on its shape without running an install.
@@ -115,6 +121,18 @@ func WriteHookReadScript(path string) (WriteResult, error) {
 // WriteHookReadScriptPS1 writes the PowerShell Read-tool hook.
 func WriteHookReadScriptPS1(path string) (WriteResult, error) {
 	return writeHookBytes(path, hookReadScriptPS1, "# thlibo-installed-sha: ")
+}
+
+// WriteHookWriteScript writes the Bash Write+Edit-tool hook to
+// path, using the same write-if-new / conflict-to-.new semantics
+// as every other hook script.
+func WriteHookWriteScript(path string) (WriteResult, error) {
+	return writeHookBytes(path, hookWriteScript, "# thlibo-installed-sha: ")
+}
+
+// WriteHookWriteScriptPS1 writes the PowerShell Write+Edit-tool hook.
+func WriteHookWriteScriptPS1(path string) (WriteResult, error) {
+	return writeHookBytes(path, hookWriteScriptPS1, "# thlibo-installed-sha: ")
 }
 
 // hookContentHash returns the SHA-256 of b, hex-encoded.
@@ -253,16 +271,22 @@ type HookEntry struct {
 // installer doesn't pile up duplicate entries. Matching on a suffix
 // rather than the full path survives user-initiated moves.
 const (
-	hookMarker        = "thlibo-rewrite.sh"
-	hookMarkerPS1     = "thlibo-rewrite.ps1"
-	hookMarkerRead    = "thlibo-read.sh"
-	hookMarkerReadPS1 = "thlibo-read.ps1"
+	hookMarker         = "thlibo-rewrite.sh"
+	hookMarkerPS1      = "thlibo-rewrite.ps1"
+	hookMarkerRead     = "thlibo-read.sh"
+	hookMarkerReadPS1  = "thlibo-read.ps1"
+	hookMarkerWrite    = "thlibo-write.sh"
+	hookMarkerWritePS1 = "thlibo-write.ps1"
 )
 
 // allHookMarkers is the set of filename suffixes that identify a
 // hook entry as "ours" for removal + shadow-detection purposes.
 func allHookMarkers() []string {
-	return []string{hookMarker, hookMarkerPS1, hookMarkerRead, hookMarkerReadPS1}
+	return []string{
+		hookMarker, hookMarkerPS1,
+		hookMarkerRead, hookMarkerReadPS1,
+		hookMarkerWrite, hookMarkerWritePS1,
+	}
 }
 
 // MergeSettings loads settingsPath, adds a PreToolUse/Bash hook
@@ -289,22 +313,42 @@ func MergeSettingsFull(settingsPath, bashHookPath, ps1HookPath string) error {
 // if the file doesn't exist), adds a PreToolUse hook entry for each
 // non-empty hook path, and writes the file back.
 //
-//   - bashHookPath     -> matcher "Bash"       (Exec)
-//   - ps1HookPath      -> matcher "PowerShell" (Exec)
-//   - readHookPath     -> matcher "Read"       (file drop / read)
-//   - readPS1HookPath  -> matcher "Read"       (Windows variant; see below)
-//
-// Only one Read entry is installed per run. If both readHookPath and
-// readPS1HookPath are provided we pick the PowerShell wrapper on
-// Windows and the Bash wrapper elsewhere, which keeps the invocation
-// strategy consistent with the Exec hooks. Passing both is fine even
-// on a mixed multi-user share: the unused entry simply isn't
-// registered.
-//
-// Preserves every other key and every other hook entry verbatim.
-// Idempotent across reinstalls; each matcher holds at most one
-// thlibo entry.
+// Kept as a thin wrapper around MergeSettingsAll for back-compat.
+// New callers should use MergeSettingsAll directly.
 func MergeSettingsWithRead(settingsPath, bashHookPath, ps1HookPath, readHookPath, readPS1HookPath string) error {
+	return MergeSettingsAll(settingsPath, MergeHooks{
+		BashExecHook:    bashHookPath,
+		PS1ExecHook:     ps1HookPath,
+		BashReadHook:    readHookPath,
+		PS1ReadHook:     readPS1HookPath,
+	})
+}
+
+// MergeHooks is the named-arg form for MergeSettingsAll. Empty
+// fields skip the corresponding matcher. Read and Write each
+// install one entry per host: PowerShell variant on Windows, Bash
+// elsewhere, falling back to whichever was supplied.
+type MergeHooks struct {
+	// Exec-tool hooks (Bash and PowerShell tools — both register).
+	BashExecHook string
+	PS1ExecHook  string
+
+	// Read-tool hooks (one entry per host).
+	BashReadHook string
+	PS1ReadHook  string
+
+	// Write-tool hooks (one entry per host, registered against
+	// the Write AND Edit matchers because both write to disk).
+	BashWriteHook string
+	PS1WriteHook  string
+}
+
+// MergeSettingsAll loads settingsPath, registers each hook the
+// caller provided, and writes the file back. Idempotent across
+// reinstalls. Preserves every unrelated key and every unrelated
+// hook entry. Failure to parse existing JSON is fatal — we never
+// clobber a settings file we can't safely read first.
+func MergeSettingsAll(settingsPath string, h MergeHooks) error {
 	var root map[string]any
 	buf, err := os.ReadFile(settingsPath) // #nosec G304 -- path is a thlibo config location chosen by the installer
 	switch {
@@ -322,17 +366,24 @@ func MergeSettingsWithRead(settingsPath, bashHookPath, ps1HookPath, readHookPath
 		return fmt.Errorf("claudecode: read %s: %w", settingsPath, err)
 	}
 
-	if bashHookPath != "" {
-		addPreToolUseHook(root, "Bash", bashHookPath, hookMarker)
+	if h.BashExecHook != "" {
+		addPreToolUseHook(root, "Bash", h.BashExecHook, hookMarker)
 	}
-	if ps1HookPath != "" {
-		addPreToolUseHook(root, "PowerShell", ps1HookPath, hookMarkerPS1)
+	if h.PS1ExecHook != "" {
+		addPreToolUseHook(root, "PowerShell", h.PS1ExecHook, hookMarkerPS1)
 	}
-	// Read matcher: prefer the PowerShell wrapper on Windows, Bash
-	// elsewhere. If only one is supplied, use it unconditionally.
-	readPathToUse, readMarker := pickReadHook(readHookPath, readPS1HookPath)
-	if readPathToUse != "" {
-		addPreToolUseHook(root, "Read", readPathToUse, readMarker)
+	if path, marker := pickPlatformHook(h.BashReadHook, h.PS1ReadHook,
+		hookMarkerRead, hookMarkerReadPS1); path != "" {
+		addPreToolUseHook(root, "Read", path, marker)
+	}
+	// Write hooks register against BOTH Write and Edit matchers —
+	// both tools land bytes on disk, both should round-trip
+	// shorthand the same way. Same physical script, two settings
+	// entries (Claude Code matches by tool name).
+	if path, marker := pickPlatformHook(h.BashWriteHook, h.PS1WriteHook,
+		hookMarkerWrite, hookMarkerWritePS1); path != "" {
+		addPreToolUseHook(root, "Write", path, marker)
+		addPreToolUseHook(root, "Edit", path, marker)
 	}
 
 	encoded, err := json.MarshalIndent(root, "", "  ")
@@ -348,24 +399,25 @@ func MergeSettingsWithRead(settingsPath, bashHookPath, ps1HookPath, readHookPath
 	return nil
 }
 
-// pickReadHook returns the appropriate Read hook path + marker for
-// this host. Empty inputs are skipped. On Windows the PS1 variant
-// wins; elsewhere Bash wins. If only one is supplied it's used
-// regardless of host.
-func pickReadHook(bashHook, ps1Hook string) (path, marker string) {
+// pickPlatformHook returns whichever of (bashPath, ps1Path) suits
+// this host plus the matching marker for cleanup recognition. The
+// Windows PowerShell variant wins on Windows, the Bash variant
+// wins elsewhere, and a single-supplied path is used regardless.
+func pickPlatformHook(bashPath, ps1Path, bashMarker, ps1Marker string) (path, marker string) {
 	onWindows := runtimeIsWindows()
 	switch {
-	case onWindows && ps1Hook != "":
-		return ps1Hook, hookMarkerReadPS1
-	case !onWindows && bashHook != "":
-		return bashHook, hookMarkerRead
-	case bashHook != "":
-		return bashHook, hookMarkerRead
-	case ps1Hook != "":
-		return ps1Hook, hookMarkerReadPS1
+	case onWindows && ps1Path != "":
+		return ps1Path, ps1Marker
+	case !onWindows && bashPath != "":
+		return bashPath, bashMarker
+	case bashPath != "":
+		return bashPath, bashMarker
+	case ps1Path != "":
+		return ps1Path, ps1Marker
 	}
 	return "", ""
 }
+
 
 // RemoveHooks loads settingsPath and removes every thlibo-authored
 // PreToolUse hook entry (recognised by the hookMarker / hookMarkerPS1
