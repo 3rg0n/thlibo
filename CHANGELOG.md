@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-16
+
+### Fixed
+
+- One-line installer (`install.sh` and `install.ps1`) now invokes
+  `thlibo install --pull-engine --pull-model`, not just
+  `--pull-model`. Previous behaviour left the user with a
+  configured daemon that couldn't actually serve inference: the
+  llamafile engine binary (~838 MB) was never downloaded, so
+  every Bash tool call silently fell back to passthrough. Local
+  test on Windows confirmed the engine now lands at
+  `%LOCALAPPDATA%\thlibo\bin\thlibo-engine.exe` (~878 MB) on a
+  fresh install, alongside the model GGUF in
+  `~/.thlibo/models/`. The skip-the-configure-step path
+  (`THLIBO_SKIP_INSTALL=1`) updated to reference the same flag
+  pair so the manual fallback matches.
+
 ## [0.5.1] - 2026-05-15
 
 ### Fixed

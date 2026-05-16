@@ -147,24 +147,31 @@ main() {
     say '    export PATH="$HOME/.local/bin:$PATH"'
   fi
 
-  # --- run `thlibo install --pull-model` -----------------------------
+  # --- run `thlibo install --pull-engine --pull-model` --------------
+  #
+  # Both the engine binary (~838 MB llamafile) and the model GGUF
+  # (~5 GB Gemma 4) are required for the daemon to actually serve
+  # inference. Without --pull-engine the daemon spawns successfully
+  # but every request falls back to silent passthrough — confusing
+  # for the user, no compression in practice. Pulling both up front
+  # matches the one-line installer's "it just works" promise.
   case "${THLIBO_SKIP_INSTALL:-0}" in
     1|true|yes|on)
       echo
       say "THLIBO_SKIP_INSTALL set — skipping configure step."
       say "To finish manually later, run:"
-      say "    $INSTALL_DIR/thlibo install --pull-model"
+      say "    $INSTALL_DIR/thlibo install --pull-engine --pull-model"
       ;;
     *)
       echo
-      say "running: $INSTALL_DIR/thlibo install --pull-model"
-      say "  (downloads the ~5 GB Gemma 4 model; skip by setting"
-      say "   THLIBO_SKIP_INSTALL=1 and re-running)"
+      say "running: $INSTALL_DIR/thlibo install --pull-engine --pull-model"
+      say "  (downloads ~838 MB engine + ~5 GB Gemma 4 model; skip by"
+      say "   setting THLIBO_SKIP_INSTALL=1 and re-running)"
       echo
       # Absolute path: PATH in this shell may not yet include
       # $INSTALL_DIR even if a future rc source will.
-      if ! "$INSTALL_DIR/thlibo" install --pull-model; then
-        die "\`thlibo install --pull-model\` failed; re-run it manually from a fresh shell to retry" 4
+      if ! "$INSTALL_DIR/thlibo" install --pull-engine --pull-model; then
+        die "\`thlibo install --pull-engine --pull-model\` failed; re-run it manually from a fresh shell to retry" 4
       fi
       echo
       say "thlibo installed. Start a new Claude Code session —"

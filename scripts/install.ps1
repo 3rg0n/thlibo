@@ -117,21 +117,28 @@ try {
         Say "$InstallDir already on User PATH."
     }
 
-    # --- run `thlibo install --pull-model` ---
+    # --- run `thlibo install --pull-engine --pull-model` ---
     # The bare binary is on disk but not yet resolvable in this
     # session's PATH (Environment changes land in HKCU, not in
     # $env:Path for already-running processes). Call through the
     # absolute path.
+    #
+    # Both --pull-engine (~838 MB llamafile) and --pull-model
+    # (~5 GB Gemma 4 GGUF) are required for the daemon to do
+    # anything — without the engine, thlibod can't serve inference
+    # and every Bash tool call falls back to silent passthrough.
+    # Pulling both up front matches what the user expects from a
+    # one-line installer.
     if ($env:THLIBO_SKIP_INSTALL -eq '1' -or
         $env:THLIBO_SKIP_INSTALL -eq 'true' -or
         $env:THLIBO_SKIP_INSTALL -eq 'yes') {
         Write-Host ''
         Say 'THLIBO_SKIP_INSTALL set — skipping configure step.'
         Say 'To finish manually later, run (from a fresh shell):'
-        Say '    thlibo install --pull-model'
+        Say '    thlibo install --pull-engine --pull-model'
     } else {
         Write-Host ''
-        Say 'running: thlibo install --pull-model (this downloads ~5 GB)'
+        Say 'running: thlibo install --pull-engine --pull-model (~838 MB engine + ~5 GB model)'
         Say 'set $env:THLIBO_SKIP_INSTALL=1 before re-running to skip.'
         Write-Host ''
         $thliboExe = Join-Path $InstallDir 'thlibo.exe'
@@ -140,10 +147,10 @@ try {
         }
         # Forward exit code so automation / CI can key on install
         # success the same way it keys on the download step.
-        & $thliboExe install --pull-model
+        & $thliboExe install --pull-engine --pull-model
         $code = $LASTEXITCODE
         if ($code -ne 0) {
-            Die "`"thlibo install --pull-model`" exited $code" $code
+            Die "`"thlibo install --pull-engine --pull-model`" exited $code" $code
         }
 
         Write-Host ''
