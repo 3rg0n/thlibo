@@ -1,0 +1,23 @@
+scripts/install.sh
+  s_5811b7f24eccc0::t_00872aac6ce93f 150-157,163,167-169,173-174
+CHANGELOG.md
+  s_5811b7f24eccc0::t_4a431434d6cb7f 10-26
+scripts/install.ps1
+  s_5811b7f24eccc0::t_a2ae4cdd2374b8 120,125-131,138,141,150,153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "a8278088a2c59e499c166ac37595604b18895737",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
