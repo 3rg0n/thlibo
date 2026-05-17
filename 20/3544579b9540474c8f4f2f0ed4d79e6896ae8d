@@ -1,0 +1,40 @@
+cmd/thlibo/shorthandcmd/shorthand_test.go
+  s_5811b7f24eccc0::t_596abc23da3a44 1-78
+processors/pytest-filter/run.py
+  s_5811b7f24eccc0::t_3b4d7c9f3598da 21-26
+processors/git-filter/run.py
+  s_5811b7f24eccc0::t_0d83fce95b9478 21-26
+processors/cargo-filter/run.py
+  s_5811b7f24eccc0::t_e511a031debd32 21-26
+CHANGELOG.md
+  s_5811b7f24eccc0::t_03466ebb405ce8 10-39
+processors/npm-filter/run.py
+  s_5811b7f24eccc0::t_b55d7b8e9d65b5 20-25
+processors/stacktrace-filter/run.py
+  s_5811b7f24eccc0::t_52cf172c85eb7d 29-34
+processors/ndjson-filter/run.py
+  s_5811b7f24eccc0::t_9a8edaaa462610 30-35
+cmd/thlibo/shorthandcmd/shorthand.go
+  s_5811b7f24eccc0::t_73fdd31920a5c4 131-140,151-152
+  s_5811b7f24eccc0::t_b5389bb8afa24d 245-270
+.gitignore
+  s_5811b7f24eccc0::t_18f0cafe3241b5 58
+README.md
+  s_5811b7f24eccc0::t_e8b8e2a144cb40 337-368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "203544579b9540474c8f4f2f0ed4d79e6896ae8d",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
