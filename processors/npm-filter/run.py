@@ -17,6 +17,12 @@ from __future__ import annotations
 import re
 import sys
 
+# Preserve LF on Windows: Python's default text-mode stdout translates
+# \n -> \r\n, which breaks byte-identity for callers that pipe this
+# script's output back through tools that compare bytes.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(newline="")
+
 
 TREE_GLYPH_RE = re.compile(r"^\s*[+\-`]+\s*(?:UNMET DEPENDENCY\s+)?(?P<name>.+?)\s*$")
 NPM_HEADER_RE = re.compile(r"^npm (error|ERR!|warn|WARN|notice)")

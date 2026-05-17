@@ -18,6 +18,12 @@ from __future__ import annotations
 import re
 import sys
 
+# Preserve LF on Windows: Python's default text-mode stdout translates
+# \n -> \r\n, which breaks byte-identity for callers that pipe this
+# script's output back through tools that compare bytes.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(newline="")
+
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 SECTION_RE = re.compile(r"^=+ (.+?) =+\s*$")

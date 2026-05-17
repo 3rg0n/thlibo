@@ -55,6 +55,7 @@ Thumbs.db
 .thlibo-test/
 /.test/
 /tmp/
+.tmp/
 
 # Local reference material (docs you've stashed for me to read)
 .references/

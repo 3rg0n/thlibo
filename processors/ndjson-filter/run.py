@@ -27,6 +27,12 @@ from __future__ import annotations
 import json
 import sys
 
+# Preserve LF on Windows: Python's default text-mode stdout translates
+# \n -> \r\n, which breaks byte-identity for callers that pipe this
+# script's output back through tools that compare bytes.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(newline="")
+
 # Severity ordering. Higher numbers come first in the output so
 # errors are easy to find. Aliases collapse onto the same rank.
 LEVEL_RANK = {

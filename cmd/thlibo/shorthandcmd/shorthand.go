@@ -128,10 +128,16 @@ Flags:
 		return ExitOK
 	}
 
-	engine, err := buildEngine()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "thlibo shorthand: backend unavailable:", err)
-		return ExitBackendDown
+	// Try to build the engine. If the daemon is unavailable, fall
+	// back to emitting the original bytes — same fail-closed
+	// contract as eval-fail and short-circuit. Empty stdout +
+	// non-zero exit on the unhappy path used to truncate files
+	// when wired into `thlibo shorthand --in-place foo.md` from a
+	// pre-commit hook with no daemon running.
+	engine, buildErr := buildEngine()
+	if buildErr != nil {
+		fmt.Fprintln(os.Stderr, "thlibo shorthand: backend unavailable; emitting original:", buildErr)
+		return emitOriginal(target, string(raw), inPlace, noBackup, quiet)
 	}
 
 	useYAML := shouldUseYAMLMode(yamlMode, target, string(raw))
@@ -142,8 +148,8 @@ Flags:
 		res, err = engine.Compress(context.Background(), string(raw))
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "thlibo shorthand: compression failed:", err)
-		return ExitBackendDown
+		fmt.Fprintln(os.Stderr, "thlibo shorthand: compression failed; emitting original:", err)
+		return emitOriginal(target, string(raw), inPlace, noBackup, quiet)
 	}
 
 	// Surface the eval failures (if any) on stderr so the user knows
@@ -234,6 +240,32 @@ func buildEngine() (*shorthand.Engine, error) {
 	client := &router.DaemonClient{Address: ipc.DefaultInferenceAddress()}
 	pr := &daemonBackend{client: client}
 	return &shorthand.Engine{Backend: pr}, nil
+}
+
+// emitOriginal honours the fail-closed contract: when the daemon
+// is unreachable or the compression run errors, the user gets the
+// original bytes back (stdout or in-place rewrite of identical
+// content) rather than an empty file. Callers print a stderr
+// warning explaining WHY they fell back before invoking this.
+//
+// In --in-place mode the file is left untouched (we'd be writing
+// the same bytes back; skipping the write avoids a bogus mtime
+// bump). Stdout mode emits the bytes directly.
+func emitOriginal(target, raw string, inPlace, _ bool, quiet bool) int {
+	if inPlace {
+		// File on disk is already the original bytes — nothing to
+		// write. Skip the .orig backup too; there's no new content
+		// to back up against.
+		if !quiet {
+			fmt.Fprintln(os.Stderr, "thlibo shorthand: --in-place no-op (original bytes preserved)")
+		}
+		return ExitOK
+	}
+	if _, err := io.WriteString(os.Stdout, raw); err != nil {
+		fmt.Fprintln(os.Stderr, "thlibo shorthand: stdout:", err)
+		return ExitWriteFailed
+	}
+	return ExitOK
 }
 
 // daemonBackend adapts the router.DaemonClient + shorthand processor

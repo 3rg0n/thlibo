@@ -18,6 +18,12 @@ from __future__ import annotations
 import re
 import sys
 
+# Preserve LF on Windows: Python's default text-mode stdout translates
+# \n -> \r\n, which breaks byte-identity for callers that pipe this
+# script's output back through tools that compare bytes.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(newline="")
+
 
 def compress(raw: str) -> str:
     lines = raw.splitlines()

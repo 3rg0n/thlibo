@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-05-17
+
+### Fixed
+
+- `thlibo shorthand <file>` now honours the documented fail-closed
+  contract on the backend-down path. Previously, when `thlibod`
+  wasn't reachable the command exited 5 with empty stdout — a
+  silent file-truncation hazard if the command was wired into a
+  pre-commit hook via `--in-place`. Both backend-build and
+  backend-run failures now route through a single `emitOriginal`
+  helper that writes the original bytes to stdout (or no-ops the
+  in-place rewrite, since the file already holds them) and exits
+  0 with a stderr explanation. Two regression tests cover
+  stdout-byte-identity and in-place mtime/size invariance.
+- Built-in Python processors (`git-filter`, `npm-filter`,
+  `cargo-filter`, `stacktrace-filter`, `pytest-filter`,
+  `ndjson-filter`) now call `sys.stdout.reconfigure(newline="")`
+  near the top of each script. Without this, Python 3's default
+  text-mode stdout on Windows translated `\n` → `\r\n`, which
+  broke byte-identity for callers that compared the script's
+  output to its input. Local pipe tests confirm LF survives
+  end-to-end through the rebuilt CLI on Windows.
+
+### Documentation
+
+- New "Output streams" section in `README.md` documenting the
+  stdout-vs-stderr split, with a worked warning against
+  `2>&1` merging (the background update-available banner is
+  diagnostic, not data).
+
 ## [0.5.2] - 2026-05-16
 
 ### Fixed

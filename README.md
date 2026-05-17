@@ -334,6 +334,38 @@ needs `thlibo` and `jq` on Claude Code's Bash PATH).
 
 ---
 
+## Output streams
+
+thlibo uses stdout and stderr separately and on purpose:
+
+- **stdout** — only the compressed (or pass-through) bytes the AI
+  client should consume. Always safe to capture.
+- **stderr** — diagnostics: reduction summaries, fallback reasons
+  ("backend unavailable; emitting original"), and the occasional
+  background update-available banner.
+
+Don't merge them with `2>&1` when feeding output to an AI client or
+to `thlibo` itself. The update banner and other stderr lines are
+human diagnostics, not data — merging them risks polluting the
+captured payload. Examples:
+
+```bash
+# Good: only the compressed payload reaches the AI.
+thlibo exec -- git diff HEAD~5 > diff.compressed
+
+# Good: keep stderr visible for the human in the terminal,
+# stdout clean for the pipe.
+thlibo exec -- npm install | other-tool
+
+# Avoid: merges human diagnostics into the data stream.
+thlibo exec -- git diff 2>&1 | other-tool
+```
+
+If you must capture stderr for debugging, route it to its own file
+(`2>thlibo.err`) instead of merging.
+
+---
+
 ## Disable without uninstalling
 
 Temporarily stop compressing without removing anything:
