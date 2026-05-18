@@ -514,7 +514,7 @@ html.no-js .reveal{ opacity:1; transform:none }
 
 <!-- masthead ................................................................ -->
 <header class="masthead">
-  <div class="mark"><b>θ</b>&nbsp;thlibo <span style="color:var(--ink-ghost)">·&nbsp;v0.2.0</span></div>
+  <div class="mark"><b>θ</b>&nbsp;thlibo <span style="color:var(--ink-ghost)">·&nbsp;v0.5.4</span></div>
   <nav>
     <a href="#demo">demo</a>
     <a href="#how">how it works</a>
@@ -569,8 +569,8 @@ html.no-js .reveal{ opacity:1; transform:none }
   </div>
 
   <p class="hero-meta">
-    <span>v <b>0.1.0</b></span>
-    <span>binary <b>~4&nbsp;MB</b></span>
+    <span>v <b>0.5.4</b></span>
+    <span>binary <b>~7&nbsp;MB</b></span>
     <span>model <b>5.1&nbsp;GB</b> (opt-in)</span>
     <span>hf tokens <b>none</b></span>
   </p>
@@ -762,9 +762,9 @@ html.no-js .reveal{ opacity:1; transform:none }
         </p>
 
         <ul class="local-list">
-          <li><span class="k">transport</span>unix socket / named pipe · never tcp*</li>
-          <li><span class="k">bind addr</span>127.0.0.1:47320 · loopback-only fallback</li>
-          <li><span class="k">acl</span>owner SID · mode 0660 group thlibo-users</li>
+          <li><span class="k">transport</span>unix socket / named pipe · loopback tcp fallback</li>
+          <li><span class="k">unix acl</span>0660 · group thlibo-users (or user-only)</li>
+          <li><span class="k">windows acl</span>pipe DACL · current user SID only</li>
           <li><span class="k">telemetry</span>none</li>
           <li><span class="k">model</span>unsloth/gemma-4-E4B-it · Apache-2.0</li>
           <li><span class="k">install</span>per-user · no sudo, no admin</li>
@@ -772,17 +772,17 @@ html.no-js .reveal{ opacity:1; transform:none }
       </div>
 
       <pre class="local-diagram" aria-label="IPC endpoints by platform">
-<span class="c-x"># IPC endpoints, by platform</span>
-<span class="c-k">linux  </span> <span class="c-p">/run/thlibo/infer.sock</span>
-<span class="c-k">darwin </span> <span class="c-p">/var/run/thlibo/infer.sock</span>
+<span class="c-x"># IPC endpoints, per platform</span>
+<span class="c-k">linux  </span> <span class="c-p">$XDG_RUNTIME_DIR/thlibo/infer.sock</span>
+<span class="c-k">darwin </span> <span class="c-p">$TMPDIR/thlibo/infer.sock</span>
 <span class="c-k">windows</span> <span class="c-p">\\.\pipe\thlibo-infer</span>
 
 <span class="c-x"># permissions</span>
-infer <span class="c-n">0660</span> group <span class="c-p">thlibo-users</span>
+infer <span class="c-n">0660</span> group <span class="c-p">thlibo-users</span> (or user-only)
 admin <span class="c-n">0600</span> owner only
 
 <span class="c-x"># single-instance lock</span>
-<span class="c-p">/run/thlibo/thlibod.lock</span>
+<span class="c-p">$XDG_RUNTIME_DIR/thlibo/thlibod.lock</span>
 
 <span class="c-x"># model, on disk</span>
 <span class="c-p">~/.thlibo/models/gemma-4-e4b-ud-q4-k-xl.gguf</span>
