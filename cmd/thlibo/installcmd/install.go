@@ -21,6 +21,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -171,6 +173,10 @@ func Run(argv []string) int {
 	}
 	if dryRun {
 		fmt.Println("  (dry-run: no changes applied)")
+		if hint := wslAPEInteropHint(); hint != "" {
+			fmt.Println()
+			fmt.Println(hint)
+		}
 		return 0
 	}
 
@@ -356,8 +362,61 @@ func Run(argv []string) int {
 		fmt.Println("  registered autostart via", autostart.Mechanism())
 	}
 
+	if hint := wslAPEInteropHint(); hint != "" {
+		fmt.Println()
+		fmt.Println(hint)
+	}
+
 	fmt.Println("thlibo install complete.")
 	return 0
+}
+
+// wslAPEInteropHint returns a non-empty advisory string when we detect
+// that we are running under WSL with the WSLInterop binfmt_misc handler
+// active. The llamafile engine is an APE / Cosmopolitan-Libc binary —
+// polyglot MZ + ELF — and WSL's binfmt_misc handler matches on the MZ
+// header at offset 0, so it grabs the engine and tries to launch it
+// through the Windows host instead of running it as a native ELF. The
+// daemon then dies with `error: APE is running on WIN32 inside WSL`.
+//
+// Returns empty on non-WSL and on WSL hosts where the handler has
+// already been disabled. The hint is informational only — `thlibo
+// install` does not (and should not) attempt the privileged write to
+// /proc/sys/fs/binfmt_misc/WSLInterop on the user's behalf.
+func wslAPEInteropHint() string {
+	if runtime.GOOS != "linux" {
+		return ""
+	}
+	if _, err := os.Stat("/proc/sys/fs/binfmt_misc/WSLInterop"); err != nil {
+		return ""
+	}
+	// Heuristic for WSL: /proc/version mentions "microsoft" or
+	// "WSL". Avoids false positives on bare-metal Linux that
+	// happens to have a WSLInterop entry from some other source.
+	v, err := os.ReadFile("/proc/version") // #nosec G304 -- /proc path, not user input
+	if err != nil {
+		return ""
+	}
+	lower := strings.ToLower(string(v))
+	if !strings.Contains(lower, "microsoft") && !strings.Contains(lower, "wsl") {
+		return ""
+	}
+	return strings.Join([]string{
+		"  WSL detected — one extra step before the daemon can run:",
+		"    The llamafile engine is a polyglot APE/Cosmopolitan binary",
+		"    (MZ header + ELF body) and WSL's binfmt_misc handler will",
+		"    intercept it as a Windows executable. Disable the handler",
+		"    (one-time per boot):",
+		"",
+		"      sudo sh -c 'echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop'",
+		"",
+		"    Or permanently in /etc/wsl.conf:",
+		"",
+		"      [interop]",
+		"      enabled = false",
+		"",
+		"    See https://wsl.dev/technical-documentation/interop/",
+	}, "\n")
 }
 
 // runDownloads handles the optional --pull-engine and --pull-model
