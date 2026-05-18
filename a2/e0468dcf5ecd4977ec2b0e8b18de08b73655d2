@@ -1,0 +1,29 @@
+internal/ipc/endpoint.go
+  s_5811b7f24eccc0::t_2f766cd9d16531 51,57,66,72,76-92
+CHANGELOG.md
+  s_5811b7f24eccc0::t_0d973f0743a3b2 33-89
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_bc5565f0f6845a 365-369,374-421
+  s_5811b7f24eccc0::t_4534a717691809 176-179
+  s_5811b7f24eccc0::t_0fa64e1bd4f5b1 24-25
+internal/install/autostart_linux.go
+  s_5811b7f24eccc0::t_5d0e4d91534153 117-118
+cmd/thlibod/main.go
+  s_5811b7f24eccc0::t_52ee7142d633cb 384-389,397-409,411
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "a2e0468dcf5ecd4977ec2b0e8b18de08b73655d2",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
