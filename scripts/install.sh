@@ -75,7 +75,10 @@ resolve_tag() {
   if [ -n "${GITHUB_TOKEN:-}" ]; then
     auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
   fi
-  curl -fsSL "${auth_args[@]}" "$RELEASES_API/latest" \
+  # ${auth_args[@]+"${auth_args[@]}"} expands to nothing when the array
+  # is empty — required on macOS bash 3.2 where set -u rejects
+  # "${auth_args[@]}" on an empty array ("unbound variable").
+  curl -fsSL ${auth_args[@]+"${auth_args[@]}"} "$RELEASES_API/latest" \
     | grep -oE '"tag_name":\s*"[^"]+"' \
     | head -n1 \
     | sed -E 's/.*"([^"]+)"$/\1/'
