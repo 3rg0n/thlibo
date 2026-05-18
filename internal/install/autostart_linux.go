@@ -114,6 +114,8 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=%%h/.thlibo
+RuntimeDirectory=thlibo
+RuntimeDirectoryMode=0700
 
 [Install]
 WantedBy=default.target

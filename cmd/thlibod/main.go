@@ -381,16 +381,34 @@ func looksLikeTCP(addr string) bool {
 }
 
 // defaultLockPath returns the v0.1 lock file path.
+//
+// On Linux the lock lives next to the sockets in $XDG_RUNTIME_DIR
+// (= /run/user/<uid>/thlibo); /run/thlibo is unwritable to a per-user
+// systemd service. On macOS we use $TMPDIR (per-user, always writable)
+// since /var/run is root-owned. On Windows the lock is just os.TempDir
+// — single-user-per-machine assumption holds.
 func defaultLockPath() string {
 	switch runtime.GOOS {
 	case "windows":
 		return filepath.Join(os.TempDir(), "thlibod.lock")
 	case "darwin":
-		// /var/run is root-owned; $TMPDIR is per-user and always writable.
 		return filepath.Join(os.TempDir(), "thlibo", "thlibod.lock")
 	default:
-		return "/run/thlibo/thlibod.lock"
+		return filepath.Join(linuxRuntimeDir(), "thlibod.lock")
 	}
+}
+
+// linuxRuntimeDir mirrors ipc.linuxRuntimeDir for the daemon's lock
+// path. Kept inline (not imported) so the daemon doesn't gain an
+// unrelated dependency on the ipc package just for one path helper.
+func linuxRuntimeDir() string {
+	if d := os.Getenv("XDG_RUNTIME_DIR"); d != "" {
+		return filepath.Join(d, "thlibo")
+	}
+	if h, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(h, ".thlibo", "run")
+	}
+	return filepath.Join(os.TempDir(), "thlibo")
 }
 
 // defaultModelPath returns the path to the default GGUF model

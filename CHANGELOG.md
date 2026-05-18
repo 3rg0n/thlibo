@@ -7,20 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Daemon no longer crash-loops when the LaunchAgent / systemd unit fires
-  before `thlibo install --pull-engine --pull-model` finishes downloading.
-  Two complementary fixes:
-  1. `thlibo install` now registers the autostart entry **after** all
-     downloads complete instead of before, so the first supervised start
-     always has engine and model on disk.
-  2. `thlibod` adds a preflight wait loop: if either file is missing at
-     startup it sleeps 30 s and retries for up to 5 minutes, logging a
-     `waiting_for_assets` entry. Hooks pass through unchanged during the
-     wait so the user sees no interruption. After 5 minutes it proceeds
-     and lets `daemon.Start` surface the real error.
-
 ### Architecture
 
 - ADR 0005: extract inference to a separate `inferd` service
@@ -43,6 +29,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shared `~/.local/share/models/` model store convention,
   positioning inferd's on-disk layout as the reference
   implementation.
+
+## [0.5.4] - 2026-05-18
+
+### Fixed
+
+- Linux: `thlibod` failed to start under systemd because it tried to
+  `mkdir /run/thlibo`, which is not writable from a per-user systemd
+  unit. Replaced the hard-coded `/run/thlibo` paths with a
+  `linuxRuntimeDir()` helper that prefers `$XDG_RUNTIME_DIR` (= the
+  systemd-managed `/run/user/<uid>`) and falls back to
+  `$HOME/.thlibo/run` for sessions without logind. The systemd unit
+  now also declares `RuntimeDirectory=thlibo` +
+  `RuntimeDirectoryMode=0700`, so systemd auto-creates the path with
+  the right perms before ExecStart, working alongside
+  `ProtectSystem=strict`. Confirmed end-to-end on Ubuntu 26.04 /
+  WSL2: daemon binds the lock file at
+  `/run/user/1000/thlibo/thlibod.lock` and the only remaining
+  failure mode is the (unrelated) WSL APE-engine issue documented
+  below. Sites changed: `internal/ipc/endpoint.go` (default infer +
+  admin socket), `cmd/thlibod/main.go` (default lock path),
+  `internal/install/autostart_linux.go` (systemd unit template).
+- Daemon no longer crash-loops when the LaunchAgent / systemd unit
+  fires before `thlibo install --pull-engine --pull-model` finishes
+  downloading. Two complementary fixes:
+  1. `thlibo install` now registers the autostart entry **after**
+     all downloads complete instead of before, so the first
+     supervised start always has engine and model on disk.
+  2. `thlibod` adds a preflight wait loop: if either file is
+     missing at startup it sleeps 30 s and retries for up to 5
+     minutes, logging a `waiting_for_assets` entry. Hooks pass
+     through unchanged during the wait so the user sees no
+     interruption. After 5 minutes it proceeds and lets
+     `daemon.Start` surface the real error.
+
+### Added
+
+- WSL detection in `thlibo install`: when running under WSL with
+  `/proc/sys/fs/binfmt_misc/WSLInterop` active, the installer now
+  prints a one-time advisory before exiting. The llamafile engine
+  is a polyglot APE/Cosmopolitan binary (MZ + ELF) and WSL's
+  binfmt_misc handler intercepts MZ-magic executables as Windows
+  binaries — so the daemon dies with `error: APE is running on
+  WIN32 inside WSL`. The advisory shows the documented escape
+  hatches: `sudo sh -c 'echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop'`
+  (per boot) or `[interop] enabled = false` in `/etc/wsl.conf`
+  (permanent). Hint also fires under `--dry-run`.
+
+### Known limitations
+
+- llamafile's `--host <unix-socket>` mode does not bind correctly
+  on the v0.10.1 engine we ship for Linux: the engine logs
+  `start: couldn't bind HTTP server socket, hostname: …` and
+  exits before health-check. The lock + RuntimeDirectory work
+  above is independent of this bug — the daemon now reaches the
+  engine-spawn step cleanly. The engine UDS-mode bug goes away in
+  v0.6.0 when inferd takes over inference (ADR 0005); not worth
+  patching the soon-to-be-deleted llamafile spawn path.
 
 ## [0.5.3] - 2026-05-17
 

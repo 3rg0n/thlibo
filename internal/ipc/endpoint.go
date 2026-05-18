@@ -48,13 +48,13 @@ type EndpointConfig struct {
 func DefaultInferenceAddress() string {
 	switch runtime.GOOS {
 	case "linux":
-		return "/run/thlibo/infer.sock"
+		return filepath.Join(linuxRuntimeDir(), "infer.sock")
 	case "darwin":
 		return filepath.Join(os.TempDir(), "thlibo", "infer.sock")
 	case "windows":
 		return `\\.\pipe\thlibo-infer`
 	default:
-		return "/run/thlibo/infer.sock"
+		return filepath.Join(linuxRuntimeDir(), "infer.sock")
 	}
 }
 
@@ -63,14 +63,31 @@ func DefaultInferenceAddress() string {
 func DefaultAdminAddress() string {
 	switch runtime.GOOS {
 	case "linux":
-		return "/run/thlibo/admin.sock"
+		return filepath.Join(linuxRuntimeDir(), "admin.sock")
 	case "darwin":
 		return filepath.Join(os.TempDir(), "thlibo", "admin.sock")
 	case "windows":
 		return `\\.\pipe\thlibo-admin`
 	default:
-		return "/run/thlibo/admin.sock"
+		return filepath.Join(linuxRuntimeDir(), "admin.sock")
 	}
+}
+
+// linuxRuntimeDir picks the per-user runtime directory for thlibo's
+// sockets and lock file on Linux. /run/thlibo is unwritable to a
+// non-root systemd --user service, so we use $XDG_RUNTIME_DIR (which
+// systemd-logind already provisions per session at /run/user/<uid>)
+// and fall back to $HOME/.thlibo/run when the env var is missing
+// (non-graphical sessions, containers without logind, etc.). The
+// daemon lifecycle creates this dir before binding the listener.
+func linuxRuntimeDir() string {
+	if d := os.Getenv("XDG_RUNTIME_DIR"); d != "" {
+		return filepath.Join(d, "thlibo")
+	}
+	if h, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(h, ".thlibo", "run")
+	}
+	return filepath.Join(os.TempDir(), "thlibo")
 }
 
 // DefaultTCPFallbackAddress is the spec's loopback-only fallback when
