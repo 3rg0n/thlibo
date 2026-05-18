@@ -1,0 +1,31 @@
+.plan/spec.issue.md
+  s_5811b7f24eccc0::t_7f3ff09b433f5d 1-394
+docs/adr/README.md
+  s_5811b7f24eccc0::t_7f3ff09b433f5d 9,12-13
+docs/adr/0002-one-warm-model-single-daemon.md
+  s_5811b7f24eccc0::t_7f3ff09b433f5d 3
+docs/adr/0005-extract-inference-to-inferd.md
+  s_5811b7f24eccc0::t_7f3ff09b433f5d 1-126
+CHANGELOG.md
+  s_5811b7f24eccc0::t_7f3ff09b433f5d 24-46
+docs/adr/0006-fail-open-during-inferd-bootstrap.md
+  s_5811b7f24eccc0::t_7f3ff09b433f5d 1-138
+docs/inferd-admin-protocol-v1.md
+  s_5811b7f24eccc0::t_7f3ff09b433f5d 1-323
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "e17267e37fb8c6b799e63001bf9a2e542636ea1a",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
