@@ -1,0 +1,21 @@
+docs/site/index.html
+  s_5811b7f24eccc0::t_1896f5fab37d88 517
+  s_5811b7f24eccc0::t_3c62a043779fb0 572-573
+  s_5811b7f24eccc0::t_94e26559ce53dd 765-767,775-777,781,785
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "bc854884862987eaed4da301af4ea0e1c2da4a5b",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
