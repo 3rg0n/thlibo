@@ -1,6 +1,6 @@
 # 0002. One warm model, single daemon
 
-- Status: accepted
+- Status: superseded by [0005](0005-extract-inference-to-inferd.md)
 - Date: 2026-04-15 (carried from spec v0.1)
 
 ## Context

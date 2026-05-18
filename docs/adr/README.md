@@ -6,9 +6,11 @@ implementation choices aren't.
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-compression-via-pretooluse-rewrite.md) | Compression via PreToolUse rewrite, not proxy or PATH shim | Accepted |
-| [0002](0002-one-warm-model-single-daemon.md) | One warm model, single daemon | Accepted |
+| [0002](0002-one-warm-model-single-daemon.md) | One warm model, single daemon | Superseded by [0005](0005-extract-inference-to-inferd.md) |
 | [0003](0003-per-user-autostart-not-system-service.md) | Per-user autostart, not a system service | Accepted |
 | [0004](0004-no-windows-shim.md) | No Windows shim binary — plain PATH installation | Accepted |
+| [0005](0005-extract-inference-to-inferd.md) | Extract inference to a separate `inferd` service | Accepted |
+| [0006](0006-fail-open-during-inferd-bootstrap.md) | Fail open during the inferd bootstrap window | Accepted |
 
 ## Writing a new ADR
 

@@ -21,6 +21,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      wait so the user sees no interruption. After 5 minutes it proceeds
      and lets `daemon.Start` surface the real error.
 
+### Architecture
+
+- ADR 0005: extract inference to a separate `inferd` service
+  (https://github.com/3rg0n/inferd). Thlibo becomes pure
+  middleware in v0.6+; inference daemon, llamafile spawner,
+  model download, and queue admission move to inferd.
+  Distribution: inferd is a sidecar binary fetched at
+  `thlibo install` time; thlibo imports inferd's Go client
+  module (`github.com/3rg0n/inferd/clients/go`) for the wire
+  protocol. Supersedes ADR 0002.
+- ADR 0006: fail open during the inferd bootstrap window. Thlibo
+  uses inferd protocol-v1 §6.3 passive readiness — connect-and-
+  retry against the inference socket, immediate passthrough on
+  connect failure. Admin socket reserved for `thlibo doctor`
+  progress UX; not consulted by the inference dispatch path.
+- New: `docs/inferd-admin-protocol-v1.md` vendors the inferd
+  admin-socket wire spec into this repo so thlibo's client code
+  can be reviewed against the contract without context-switching.
+- New: `.plan/spec.issue.md` drafts the upstream proposal for a
+  shared `~/.local/share/models/` model store convention,
+  positioning inferd's on-disk layout as the reference
+  implementation.
+
 ## [0.5.3] - 2026-05-17
 
 ### Fixed
