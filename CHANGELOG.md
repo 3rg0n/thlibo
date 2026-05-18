@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Daemon no longer crash-loops when the LaunchAgent / systemd unit fires
+  before `thlibo install --pull-engine --pull-model` finishes downloading.
+  Two complementary fixes:
+  1. `thlibo install` now registers the autostart entry **after** all
+     downloads complete instead of before, so the first supervised start
+     always has engine and model on disk.
+  2. `thlibod` adds a preflight wait loop: if either file is missing at
+     startup it sleeps 30 s and retries for up to 5 minutes, logging a
+     `waiting_for_assets` entry. Hooks pass through unchanged during the
+     wait so the user sees no interruption. After 5 minutes it proceeds
+     and lets `daemon.Start` surface the real error.
+
 ## [0.5.3] - 2026-05-17
 
 ### Fixed

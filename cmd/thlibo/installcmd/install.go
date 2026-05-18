@@ -181,7 +181,11 @@ func Run(argv []string) int {
 	fmt.Println("  mirrored built-in processors")
 
 	if skipHook {
-		return runDownloads(pullEngine, pullModel, allowUnpinned)
+		code := runDownloads(pullEngine, pullModel, allowUnpinned)
+		if code == 0 {
+			fmt.Println("thlibo install complete.")
+		}
+		return code
 	}
 
 	shResult, err := claudecode.WriteHookScript(hookPath)
@@ -293,37 +297,6 @@ func Run(argv []string) int {
 		fmt.Printf("  /caselog skill: %s\n", skillResult)
 	}
 
-	if !skipAutostart && autostart != nil {
-		// Allow an override so CI and the .test/ sandbox can register
-		// an autostart entry under an isolated name without touching
-		// the user's real autostart list.
-		name := os.Getenv("THLIBO_AUTOSTART_NAME")
-		if name == "" {
-			name = "cisco.thlibo.daemon"
-		}
-		// Always pass explicit -engine and -model so the daemon doesn't
-		// have to resolve paths from HOME at runtime. LaunchAgents on
-		// macOS run with a stripped environment where HOME may be unset.
-		// See issue #11.
-		resolvedEngine := enginePath
-		if resolvedEngine == "" {
-			resolvedEngine = filepath.Join(install.EngineDir(), install.EngineName())
-		}
-		resolvedModel := filepath.Join(install.ModelsDir(), install.DefaultModel.Filename)
-		var args []string
-		args = append(args, "-engine", resolvedEngine, "-model", resolvedModel)
-		spec := install.AutostartSpec{
-			Name:       name,
-			DaemonPath: daemonPath,
-			Args:       args,
-		}
-		if err := autostart.Install(spec); err != nil {
-			fmt.Fprintln(os.Stderr, "install: autostart:", err)
-			return 7
-		}
-		fmt.Println("  registered autostart via", autostart.Mechanism())
-	}
-
 	if installCodex {
 		cp := codexHooksPath
 		if cp == "" {
@@ -350,7 +323,41 @@ func Run(argv []string) int {
 		fmt.Printf("  wrote Codex hook + merged %s + enabled codex_hooks in %s\n", cp, cfgPath)
 	}
 
-	return runDownloads(pullEngine, pullModel, allowUnpinned)
+	// Downloads first, autostart registration after. The LaunchAgent /
+	// systemd unit / startup-folder entry will fire as soon as it is
+	// registered; if the engine or model files don't exist yet the
+	// daemon exits immediately and enters a crash loop. Registering
+	// after the downloads ensures the first supervised start succeeds.
+	if code := runDownloads(pullEngine, pullModel, allowUnpinned); code != 0 {
+		return code
+	}
+
+	if !skipAutostart && autostart != nil {
+		name := os.Getenv("THLIBO_AUTOSTART_NAME")
+		if name == "" {
+			name = "cisco.thlibo.daemon"
+		}
+		resolvedEngine := enginePath
+		if resolvedEngine == "" {
+			resolvedEngine = filepath.Join(install.EngineDir(), install.EngineName())
+		}
+		resolvedModel := filepath.Join(install.ModelsDir(), install.DefaultModel.Filename)
+		var args []string
+		args = append(args, "-engine", resolvedEngine, "-model", resolvedModel)
+		spec := install.AutostartSpec{
+			Name:       name,
+			DaemonPath: daemonPath,
+			Args:       args,
+		}
+		if err := autostart.Install(spec); err != nil {
+			fmt.Fprintln(os.Stderr, "install: autostart:", err)
+			return 7
+		}
+		fmt.Println("  registered autostart via", autostart.Mechanism())
+	}
+
+	fmt.Println("thlibo install complete.")
+	return 0
 }
 
 // runDownloads handles the optional --pull-engine and --pull-model
@@ -383,7 +390,6 @@ func runDownloads(pullEngine, pullModel, allowUnpinned bool) int {
 		fmt.Println("  model downloaded to", install.ModelsDir())
 	}
 
-	fmt.Println("thlibo install complete.")
 	return 0
 }
 

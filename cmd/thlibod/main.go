@@ -111,6 +111,17 @@ func runConsole(argv []string) int {
 	}
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+
+	// Preflight: wait for engine and model files to appear on disk.
+	// The LaunchAgent / systemd unit fires as soon as it is registered,
+	// which may be before `thlibo install --pull-engine --pull-model`
+	// has finished downloading. Rather than crash-looping we sleep in
+	// 30-second increments (up to 5 minutes total) so the daemon comes
+	// up automatically once the installer finishes. The hook still
+	// passes all tool calls through unchanged during this window, so
+	// the user sees no interruption.
+	waitForFiles(bootLog, f.enginePath, f.modelPath)
+
 	bootLog.Info("starting",
 		logx.Str("engine", f.enginePath),
 		logx.Str("model", f.modelPath),
@@ -153,6 +164,45 @@ func runConsole(argv []string) int {
 	bootLog.Info("stopped_cleanly")
 	log.Printf("stopped cleanly")
 	return exitOK
+}
+
+const (
+	preflightInterval = 30 * time.Second
+	preflightTimeout  = 5 * time.Minute
+)
+
+// waitForFiles blocks until both engine and model files exist on disk,
+// sleeping preflightInterval between checks. Returns immediately if both
+// are already present. Logs a waiting message on the first missing check
+// so the operator knows why the daemon hasn't started yet.
+// After preflightTimeout it gives up and lets daemon.Start fail normally.
+func waitForFiles(log *logx.Logger, enginePath, modelPath string) {
+	deadline := time.Now().Add(preflightTimeout)
+	logged := false
+	for {
+		engineOK := fileExists(enginePath)
+		modelOK := fileExists(modelPath)
+		if engineOK && modelOK {
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		if !logged {
+			log.Info("waiting_for_assets",
+				logx.Str("engine", enginePath),
+				logx.Str("model", modelPath),
+				logx.Str("engine_present", fmt.Sprintf("%v", engineOK)),
+				logx.Str("model_present", fmt.Sprintf("%v", modelOK)))
+			logged = true
+		}
+		time.Sleep(preflightInterval)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func parseFlags(argv []string) (*flags, error) {
