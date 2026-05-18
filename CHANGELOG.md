@@ -85,7 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   above is independent of this bug — the daemon now reaches the
   engine-spawn step cleanly. The engine UDS-mode bug goes away in
   v0.6.0 when inferd takes over inference (ADR 0005); not worth
-  patching the soon-to-be-deleted llamafile spawn path.
+  patching the soon-to-be-deleted llamafile spawn path. Filed
+  upstream as [mozilla-ai/llamafile#971](https://github.com/mozilla-ai/llamafile/issues/971).
 
 ## [0.5.3] - 2026-05-17
 
