@@ -1,0 +1,26 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_fc8400ffaad2ca 66-101
+internal/install/migrate_v05.go
+  s_5811b7f24eccc0::t_34cabda994a158 1-337
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_8bdf9354b5636f 135-168
+internal/install/migrate_v05_test.go
+  s_5811b7f24eccc0::t_08f76da66b86f1 1-11,15-21,23-186
+  s_5811b7f24eccc0::t_0bb9e4928fab71 12-14,22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.10",
+  "base_commit_sha": "29b7a4df720c3e50582d12a20016e8111c06b11d",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
