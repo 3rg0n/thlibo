@@ -132,6 +132,40 @@ func Run(argv []string) int {
 		return 0
 	}
 
+	// v0.5.x → v0.6.0 exorcism. Idempotent: safe on a fresh
+	// install (no-op) and on already-migrated installs (also
+	// no-op). Reports its own actions so the user sees what
+	// changed.
+	if mr, err := install.MigrateFromV05(); err != nil {
+		fmt.Fprintln(os.Stderr, "install: migrate v0.5:", err)
+		// Non-fatal: keep going. A failed migration shouldn't
+		// brick a fresh install on the same box.
+	} else if mr.HasWork() {
+		fmt.Println("  migrated v0.5.x install:")
+		if mr.StoppedAutostart {
+			fmt.Println("    - stopped + removed v0.5 daemon autostart")
+		}
+		if mr.RemovedDaemonBin {
+			fmt.Println("    - removed thlibod binary")
+		}
+		if mr.RemovedEngineBin {
+			fmt.Println("    - removed thlibo-engine (llamafile) binary")
+		}
+		if mr.ModelMovedFrom != "" {
+			fmt.Printf("    - moved model %s\n               -> %s\n",
+				mr.ModelMovedFrom, mr.ModelMovedTo)
+		}
+		if mr.RemovedModelsDir {
+			fmt.Println("    - cleaned up empty ~/.thlibo/models/")
+		}
+		if mr.RemovedLogsDir {
+			fmt.Println("    - removed daemon log dir ~/.thlibo/logs/")
+		}
+		for _, n := range mr.Notes {
+			fmt.Println("    - note:", n)
+		}
+	}
+
 	if err := install.MirrorBuiltins(processorsDir); err != nil {
 		fmt.Fprintln(os.Stderr, "install: mirror processors:", err)
 		return 4

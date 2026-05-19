@@ -63,16 +63,42 @@ which thlibo dials over its frozen NDJSON protocol-v1 wire.
 
 ### Migration from v0.5.x
 
-- Existing v0.5.x installs have a daemon and a model that the
-  v0.6.0 thlibo binary doesn't manage. Run inferd's installer to
-  pick up the model + engine; then re-run `thlibo install` to
-  refresh hooks + settings against the new wire protocol.
-- The 5 GB Gemma 4 GGUF at `~/.thlibo/models/gemma-4-e4b-ud-q4-k-xl.gguf`
-  can be symlinked or moved to inferd's model store
-  (`~/.local/share/inferd/models/` per inferd's config). Same
-  pinned SHA — no redownload needed.
-- Existing `~/.claude/settings.json` hook entries keep working;
-  re-running `thlibo install` is idempotent.
+`thlibo install` now auto-detects v0.5.x installs and migrates
+them in place. Idempotent: safe on fresh installs (no-op) and
+on already-migrated hosts (also no-op). On detection it:
+
+- Stops + disables the v0.5 daemon autostart unit:
+  - Linux: `systemctl --user stop/disable cisco.thlibo.daemon.service`,
+    removes the unit file
+  - macOS: `launchctl bootout` + removes `cisco.thlibo.daemon.plist`
+  - Windows: removes `cisco.thlibo.daemon.cmd` from `Startup\`
+- Deletes the dead binaries: `thlibod` and `thlibo-engine` (the
+  ~878 MB APE llamafile)
+- **Moves the model** from `~/.thlibo/models/<name>.gguf` to the
+  shared model store at the platform's standard data dir:
+  - Linux: `${XDG_DATA_HOME:-$HOME/.local/share}/models/`
+  - macOS: `~/Library/Application Support/models/`
+  - Windows: `%LOCALAPPDATA%\models\`
+
+  No redownload required. Atomic `rename(2)` on same-filesystem
+  moves; falls back to copy + delete for cross-filesystem.
+- Cleans up `~/.thlibo/{models,logs,run}/` (daemon-only state)
+- Preserves `~/.thlibo/{processors,hooks,config.yaml,state}/` —
+  still load-bearing in v0.6
+
+Verified end-to-end on Ubuntu 26.04 / WSL2 against a real v0.5.4
+install: 5.1 GB GGUF moved cleanly, all daemon artefacts gone,
+processors / hooks / settings.json untouched. Second run shows
+no migration block (idempotent).
+
+Existing `~/.claude/settings.json` hook entries keep working
+through the upgrade — re-running `thlibo install` refreshes them
+to current SHA-stamped versions.
+
+The shared model store at `~/.local/share/models/` (and
+equivalents) is where inferd should also look for the GGUF —
+follows the cross-tool model-store convention drafted in
+`.plan/spec.issue.md`.
 
 ## [0.5.4] - 2026-05-18
 
