@@ -7,28 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Architecture
+## [0.6.0] - 2026-05-19
 
-- ADR 0005: extract inference to a separate `inferd` service
-  (https://github.com/3rg0n/inferd). Thlibo becomes pure
-  middleware in v0.6+; inference daemon, llamafile spawner,
-  model download, and queue admission move to inferd.
-  Distribution: inferd is a sidecar binary fetched at
-  `thlibo install` time; thlibo imports inferd's Go client
-  module (`github.com/3rg0n/inferd/clients/go`) for the wire
-  protocol. Supersedes ADR 0002.
-- ADR 0006: fail open during the inferd bootstrap window. Thlibo
-  uses inferd protocol-v1 §6.3 passive readiness — connect-and-
-  retry against the inference socket, immediate passthrough on
-  connect failure. Admin socket reserved for `thlibo doctor`
-  progress UX; not consulted by the inference dispatch path.
-- New: `docs/inferd-admin-protocol-v1.md` vendors the inferd
-  admin-socket wire spec into this repo so thlibo's client code
-  can be reviewed against the contract without context-switching.
-- New: `.plan/spec.issue.md` drafts the upstream proposal for a
-  shared `~/.local/share/models/` model store convention,
-  positioning inferd's on-disk layout as the reference
-  implementation.
+The inferd extraction is real. Thlibo is now pure middleware: hooks,
+processors, settings.json merge, registry, router. Inference moved
+to the separate [inferd](https://github.com/3rg0n/inferd) project,
+which thlibo dials over its frozen NDJSON protocol-v1 wire.
+
+### Removed
+
+- `cmd/thlibod/` — embedded inference daemon. Inferd owns this now.
+- `internal/daemon/` — engine supervisor, llamafile spawner, lock,
+  server-side peer-cred, lifecycle.
+- `internal/queue/` — single-active admission queue (inferd manages
+  its own).
+- `internal/ipc/` — NDJSON wire types, endpoint, peer-cred client.
+  Replaced by import of `github.com/3rg0n/inferd/clients/go`.
+- `internal/install/{model,engine}.go` — model GGUF + llamafile
+  binary download. Inferd handles model bootstrap.
+- `cmd/thlibo/pullcmd/` — `thlibo pull` removed. Run `inferd pull`
+  instead. The `pull` subcommand now prints a deprecation message
+  pointing at inferd.
+- Install flags `--pull-engine`, `--pull-model`, `--allow-unpinned`,
+  `--engine-path`, `--daemon-path`, `--skip-autostart` — gone with
+  the daemon they configured. Inferd's installer registers inferd's
+  own autostart entry.
+
+### Added
+
+- `internal/inferdcli/` — thin wrapper around the inferd Go client
+  exposing the connection-per-call `Post(ctx, Request) -> (string, error)`
+  shape thlibo's hot path uses. Implements **passive readiness**
+  per ADR 0006: connect-and-retry against the inference socket;
+  connect failure surfaces as `ErrBackendNotReady` and the caller
+  passes the original bytes through. Six unit tests cover stream
+  collapse, done-frame fallback, error frame surfacing, refused-
+  connect detection, TCP-shape detection, and transient-error
+  classification across Linux / macOS / Windows error wording.
+
+### Changed
+
+- `internal/router/`, `internal/middleware/`, `cmd/thlibo/{execcmd,
+  compresscmd,shorthandcmd}` — all rewired from the old
+  `internal/router.DaemonClient` to `internal/inferdcli.Client`.
+  The Gemma-native tool-call routing logic, GBNF grammar building,
+  unknown-name fallback, and prompt sanitization all carried over
+  unchanged; only the wire transport swapped.
+- Default endpoint paths now point at inferd's locations:
+  `$XDG_RUNTIME_DIR/inferd/infer.sock` (Linux),
+  `$TMPDIR/inferd/infer.sock` (macOS), `\\.\pipe\inferd-infer`
+  (Windows). Match the protocol-v1 spec inferd publishes.
+- `thlibo install` is now middleware-only: hooks, processors,
+  settings.json merge, optional Codex hook. The autostart
+  registration moved to inferd's installer.
+
+### Migration from v0.5.x
+
+- Existing v0.5.x installs have a daemon and a model that the
+  v0.6.0 thlibo binary doesn't manage. Run inferd's installer to
+  pick up the model + engine; then re-run `thlibo install` to
+  refresh hooks + settings against the new wire protocol.
+- The 5 GB Gemma 4 GGUF at `~/.thlibo/models/gemma-4-e4b-ud-q4-k-xl.gguf`
+  can be symlinked or moved to inferd's model store
+  (`~/.local/share/inferd/models/` per inferd's config). Same
+  pinned SHA — no redownload needed.
+- Existing `~/.claude/settings.json` hook entries keep working;
+  re-running `thlibo install` is idempotent.
 
 ## [0.5.4] - 2026-05-18
 

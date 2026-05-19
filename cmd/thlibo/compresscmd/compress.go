@@ -18,7 +18,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/3rg0n/thlibo/internal/ipc"
+	"github.com/3rg0n/thlibo/internal/inferdcli"
 	"github.com/3rg0n/thlibo/internal/middleware"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/router"
@@ -69,8 +69,8 @@ func BuildPipeline() (*middleware.Pipeline, error) {
 		return nil, err
 	}
 
-	client := &router.DaemonClient{
-		Address: ipc.DefaultInferenceAddress(),
+	client := &inferdcli.Client{
+		Address: inferdcli.DefaultInferenceAddress(),
 	}
 	promptRunner := &middleware.PromptRunner{Client: client}
 

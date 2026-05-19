@@ -26,7 +26,6 @@ import (
 	"github.com/3rg0n/thlibo/cmd/thlibo/configcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/execcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/installcmd"
-	"github.com/3rg0n/thlibo/cmd/thlibo/pullcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/rewritecmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/shorthandcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/uninstallcmd"
@@ -71,7 +70,10 @@ func main() {
 	case "uninstall":
 		os.Exit(uninstallcmd.Run(os.Args[2:]))
 	case "pull":
-		os.Exit(pullcmd.Run(os.Args[2:]))
+		fmt.Fprintln(os.Stderr, "thlibo: `thlibo pull` was removed in v0.6.0.")
+		fmt.Fprintln(os.Stderr, "        Model + engine downloads are now inferd's responsibility.")
+		fmt.Fprintln(os.Stderr, "        Run `inferd pull` (after `thlibo install` has fetched inferd) instead.")
+		os.Exit(2)
 	case "case":
 		os.Exit(casecmd.Run(os.Args[2:]))
 	case "shorthand":

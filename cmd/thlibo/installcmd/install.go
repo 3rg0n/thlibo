@@ -15,16 +15,12 @@
 package installcmd
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/3rg0n/thlibo/internal/adapters/claudecode"
 	"github.com/3rg0n/thlibo/internal/adapters/codex"
@@ -39,9 +35,11 @@ import (
 //	--hook-dir         Override ~/.thlibo/hooks.
 //	--settings         Override ~/.claude/settings.json.
 //	--skip-hook        Mirror processors only; don't touch settings.
-//	--skip-autostart   Mirror + hook only; don't register autostart.
-//	--daemon-path X    Path to thlibod for autostart (default: <this
-//	                   binary's dir>/thlibod[.exe]).
+//
+// v0.6.0 note: model + engine downloads moved to inferd. Run
+// `inferd install` (or whatever inferd's installer is named) to
+// fetch + register the inference daemon. Thlibo install only sets
+// up the middleware: hooks, processors, settings.json merge.
 func Run(argv []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	var (
@@ -50,24 +48,12 @@ func Run(argv []string) int {
 		hookDir       string
 		settingsPath  string
 		skipHook      bool
-		skipAutostart bool
-		daemonPath    string
 	)
 	fs.BoolVar(&dryRun, "dry-run", false, "report planned actions without applying them")
 	fs.StringVar(&processorsDir, "processors-dir", "", "override processors dir (default: ~/.thlibo/processors)")
 	fs.StringVar(&hookDir, "hook-dir", "", "override hook dir (default: ~/.thlibo/hooks)")
 	fs.StringVar(&settingsPath, "settings", "", "override Claude Code settings path (default: ~/.claude/settings.json)")
 	fs.BoolVar(&skipHook, "skip-hook", false, "skip installing the Claude Code hook")
-	fs.BoolVar(&skipAutostart, "skip-autostart", false, "skip registering the daemon for autostart")
-	fs.StringVar(&daemonPath, "daemon-path", "", "thlibod path for autostart (default: alongside this binary)")
-	var enginePath string
-	fs.StringVar(&enginePath, "engine-path", "", "llamafile/engine path passed to thlibod -engine (default: next to thlibod)")
-	var pullModel bool
-	var pullEngine bool
-	var allowUnpinned bool
-	fs.BoolVar(&pullModel, "pull-model", false, "download the default GGUF as part of install (~5 GB)")
-	fs.BoolVar(&pullEngine, "pull-engine", false, "download the llamafile engine binary as part of install (~838 MB)")
-	fs.BoolVar(&allowUnpinned, "allow-unpinned", false, "allow --pull-model/--pull-engine to download without a pinned SHA (bootstrap only)")
 	var installCodex bool
 	var codexHooksPath string
 	fs.BoolVar(&installCodex, "codex", false, "also install the Codex CLI hook (advisory until Codex lands updatedInput support)")
@@ -118,24 +104,6 @@ func Run(argv []string) int {
 	writeHookPath := filepath.Join(hookDir, "thlibo-write.sh")
 	writePS1HookPath := filepath.Join(hookDir, "thlibo-write.ps1")
 
-	if daemonPath == "" {
-		daemonPath = defaultDaemonPath()
-	}
-
-	// Autostart installer is optional: on unsupported OSes we print
-	// a manual-start hint instead of failing the whole install.
-	var autostart install.Installer
-	if !skipAutostart {
-		a, err := install.NewInstaller()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "install: autostart unsupported:", err)
-			fmt.Fprintln(os.Stderr, "install: continuing without autostart; run thlibod manually.")
-			skipAutostart = true
-		} else {
-			autostart = a
-		}
-	}
-
 	fmt.Println("thlibo install plan:")
 	fmt.Println("  processors dir:", processorsDir)
 	fmt.Println("  hook script:   ", hookPath)
@@ -143,11 +111,6 @@ func Run(argv []string) int {
 		fmt.Println("  settings file: ", settingsPath)
 	} else {
 		fmt.Println("  settings file:  (skipped)")
-	}
-	if !skipAutostart && autostart != nil {
-		fmt.Printf("  autostart:      %s (daemon: %s)\n", autostart.Mechanism(), daemonPath)
-	} else {
-		fmt.Println("  autostart:      (skipped)")
 	}
 	if installCodex {
 		cp := codexHooksPath
@@ -158,19 +121,8 @@ func Run(argv []string) int {
 	} else {
 		fmt.Println("  codex hooks:    (skipped; use --codex to install)")
 	}
-	if pullEngine {
-		fmt.Printf("  engine:         llamafile v%s -> %s\n",
-			install.DefaultEngine.Version, install.EngineDir())
-	} else {
-		fmt.Println("  engine:         (not downloaded — thlibod will fail without it)")
-		fmt.Println("                  run `thlibo install --pull-engine` to download (~838 MB)")
-	}
-	if pullModel {
-		fmt.Printf("  model:          %s -> %s\n",
-			install.DefaultModel.Name, install.ModelsDir())
-	} else {
-		fmt.Println("  model:          (not downloaded; run `thlibo pull` separately)")
-	}
+	fmt.Println("  inferd:         not managed by this installer in v0.6.0;")
+	fmt.Println("                  install separately from https://github.com/3rg0n/inferd")
 	if dryRun {
 		fmt.Println("  (dry-run: no changes applied)")
 		if hint := wslAPEInteropHint(); hint != "" {
@@ -187,11 +139,8 @@ func Run(argv []string) int {
 	fmt.Println("  mirrored built-in processors")
 
 	if skipHook {
-		code := runDownloads(pullEngine, pullModel, allowUnpinned)
-		if code == 0 {
-			fmt.Println("thlibo install complete.")
-		}
-		return code
+		fmt.Println("thlibo install complete.")
+		return 0
 	}
 
 	shResult, err := claudecode.WriteHookScript(hookPath)
@@ -329,38 +278,9 @@ func Run(argv []string) int {
 		fmt.Printf("  wrote Codex hook + merged %s + enabled codex_hooks in %s\n", cp, cfgPath)
 	}
 
-	// Downloads first, autostart registration after. The LaunchAgent /
-	// systemd unit / startup-folder entry will fire as soon as it is
-	// registered; if the engine or model files don't exist yet the
-	// daemon exits immediately and enters a crash loop. Registering
-	// after the downloads ensures the first supervised start succeeds.
-	if code := runDownloads(pullEngine, pullModel, allowUnpinned); code != 0 {
-		return code
-	}
-
-	if !skipAutostart && autostart != nil {
-		name := os.Getenv("THLIBO_AUTOSTART_NAME")
-		if name == "" {
-			name = "cisco.thlibo.daemon"
-		}
-		resolvedEngine := enginePath
-		if resolvedEngine == "" {
-			resolvedEngine = filepath.Join(install.EngineDir(), install.EngineName())
-		}
-		resolvedModel := filepath.Join(install.ModelsDir(), install.DefaultModel.Filename)
-		var args []string
-		args = append(args, "-engine", resolvedEngine, "-model", resolvedModel)
-		spec := install.AutostartSpec{
-			Name:       name,
-			DaemonPath: daemonPath,
-			Args:       args,
-		}
-		if err := autostart.Install(spec); err != nil {
-			fmt.Fprintln(os.Stderr, "install: autostart:", err)
-			return 7
-		}
-		fmt.Println("  registered autostart via", autostart.Mechanism())
-	}
+	// v0.6.0: model + engine download + autostart all moved to inferd.
+	// Thlibo install is now middleware-only; the inferd daemon must be
+	// installed and started separately via inferd's own installer.
 
 	if hint := wslAPEInteropHint(); hint != "" {
 		fmt.Println()
@@ -419,93 +339,3 @@ func wslAPEInteropHint() string {
 	}, "\n")
 }
 
-// runDownloads handles the optional --pull-engine and --pull-model
-// steps. Called both from the normal path and from the --skip-hook
-// early-return path so download flags are always honoured.
-func runDownloads(pullEngine, pullModel, allowUnpinned bool) int {
-	if pullEngine {
-		fmt.Println("  downloading engine (this may take a while)...")
-		engineDest, err := install.PullEngine(contextCancellableOnSignal(), install.DefaultEngine, install.PullOptions{
-			AllowUnpinned: allowUnpinned,
-			Progress:      installProgress(),
-		})
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "install: pull engine:", err)
-			return 10
-		}
-		fmt.Println("\n  engine downloaded to", engineDest)
-	}
-
-	if pullModel {
-		fmt.Println("  downloading model (this may take a while)...")
-		_, err := install.Pull(contextCancellableOnSignal(), install.DefaultModel, install.PullOptions{
-			AllowUnpinned: allowUnpinned,
-			Progress:      installProgress(),
-		})
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "install: pull model:", err)
-			return 8
-		}
-		fmt.Println("  model downloaded to", install.ModelsDir())
-	}
-
-	return 0
-}
-
-// contextCancellableOnSignal returns a background context that is
-// cancelled on SIGINT/SIGTERM so Ctrl-C during `thlibo install
-// --pull-model` aborts the download cleanly.
-func contextCancellableOnSignal() context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		cancel()
-	}()
-	return ctx
-}
-
-// installProgress returns a simple progress printer that writes
-// updates to stderr on one carriage-returned line.
-func installProgress() install.ProgressFunc {
-	start := time.Now()
-	return func(written, total int64) {
-		pct := "  ?"
-		if total > 0 {
-			pct = fmt.Sprintf("%3d%%", int((written*100)/total))
-		}
-		elapsed := time.Since(start).Seconds()
-		var speed string
-		if elapsed > 0 {
-			speed = fmt.Sprintf(" %.1f MiB/s", float64(written)/elapsed/(1<<20))
-		}
-		fmt.Fprintf(os.Stderr, "\r  model: %s %.1f MiB%s      ",
-			pct, float64(written)/(1<<20), speed)
-	}
-}
-
-// defaultDaemonPath picks the thlibod binary next to the running
-// thlibo executable. This matches what the release bundle lays
-// out: thlibo + thlibod side by side in <install-dir>/bin.
-func defaultDaemonPath() string {
-	self, err := os.Executable()
-	if err != nil {
-		return "thlibod"
-	}
-	dir := filepath.Dir(self)
-	name := "thlibod"
-	if runtimeIsWindows() {
-		name += ".exe"
-	}
-	return filepath.Join(dir, name)
-}
-
-// runtimeIsWindows wraps runtime.GOOS so the installcmd test file
-// can override it (future cross-platform test harness). Currently
-// just a thin wrapper; no tests need the seam yet.
-func runtimeIsWindows() bool {
-	return osPathSep == '\\'
-}
-
-const osPathSep = os.PathSeparator
