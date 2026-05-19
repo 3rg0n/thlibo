@@ -1,0 +1,61 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_1b0754df82201f 10-75
+internal/inferdcli/addr.go
+  s_5811b7f24eccc0::t_e5ab3120fa416e 1-60
+cmd/thlibo/shorthandcmd/shorthand.go
+  s_5811b7f24eccc0::t_3e72b831e26974 236,240
+  s_5811b7f24eccc0::t_31ed5936f504a3 271,274,276,296-300,303-304,306-307,312,316-318
+  s_5811b7f24eccc0::t_560c5b6d5f2da5 36,38
+internal/router/router.go
+  s_5811b7f24eccc0::t_57832077875517 102-104
+  s_5811b7f24eccc0::t_7cbbb260b324fe 86
+  s_5811b7f24eccc0::t_47746b79b2eaff 45,54,67
+  s_5811b7f24eccc0::t_72412635f962f2 17-18
+  s_5811b7f24eccc0::t_1d7ac2d12396b7 1-16,19-44,46-53,55-66,68-85,87-101,105-235,239,241-258,260-270,272-280
+  s_5811b7f24eccc0::t_941671f4449633 236-238,240,259,271
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_1b7ad180ab6578 124-125
+  s_5811b7f24eccc0::t_f7da9838f11364 38-42
+  s_5811b7f24eccc0::t_8ec5db1dd53b11 142-143
+  s_5811b7f24eccc0::t_ee6cd8355e038f 281-283
+internal/inferdcli/dial_windows.go
+  s_5811b7f24eccc0::t_d34238d60f4409 1-66
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_94681c880b90e4 20-21
+  s_5811b7f24eccc0::t_cbedf9ec2d6966 165-167,169,172-173,178,185,187-189,207
+cmd/thlibo/compresscmd/compress.go
+  s_5811b7f24eccc0::t_0a5ca498acc790 72-73
+  s_5811b7f24eccc0::t_6619c762476858 21
+internal/router/router_test.go
+  s_5811b7f24eccc0::t_a4c0ea44bd39ee 1-157
+cmd/thlibo/execcmd/pipeline.go
+  s_5811b7f24eccc0::t_95bda5b8b61d44 4,9,19-20,22
+internal/inferdcli/inferdcli.go
+  s_5811b7f24eccc0::t_6a596a4a1c5921 168-169
+  s_5811b7f24eccc0::t_38d85c84c7bed3 1-167,170-182
+internal/inferdcli/inferdcli_test.go
+  s_5811b7f24eccc0::t_08f9bb7963130c 1-187
+cmd/thlibo/execcmd/exec.go
+  s_5811b7f24eccc0::t_0da467b1b747f0 233
+  s_5811b7f24eccc0::t_baf983f7ddade5 33
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_9031e1d0de293f 73-76
+internal/inferdcli/dial_unix.go
+  s_5811b7f24eccc0::t_af4d613971dfa6 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.10",
+  "base_commit_sha": "586de44f0f8da3cbdc79bd4043b7ced3688d9eef",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
