@@ -70,6 +70,28 @@ const (
 	// inferd's release.yml at any v* tag.
 	cosignIdentityRegexp = `^https://github\.com/3rg0n/inferd/\.github/workflows/release\.ya?ml@refs/tags/v.+$`
 	cosignIssuer         = "https://token.actions.githubusercontent.com"
+
+	// MinInferdVersion is the oldest inferd build thlibo will
+	// probe-then-delegate to. Older binaries are treated as
+	// not-installed and trigger a fresh install of the latest
+	// release.
+	//
+	// Floor history:
+	//   - v0.1.13: first build with the temp-copy-free model loader
+	//     (inferd commit 1fe99d4 / inferd#6). On hosts where /tmp is
+	//     small (WSL2 default tmpfs is half RAM) and ProtectHome= is
+	//     set, every earlier version's llamacpp init crashes with
+	//     ENOSPC or EROFS during the GGUF verification copy.
+	//   - v0.1.14: macOS install-launchagent.sh now writes
+	//     --backend llamacpp + --model-path into ProgramArguments
+	//     (inferd#9 / inferd#8). Earlier launchagents bound a mock
+	//     daemon — every macOS user got canned tokens with no
+	//     warning. The daemon binary itself is also v0.1.14, so an
+	//     in-place binary upgrade alone isn't enough; the install
+	//     script has to re-run to rewrite the plist. Forcing the
+	//     fresh-install branch (which calls inferd's installer)
+	//     does both at once.
+	MinInferdVersion = "v0.1.14"
 )
 
 // InferdInstallSpec captures what the installer needs to know.
@@ -152,16 +174,29 @@ func InstallInferd(spec InferdInstallSpec, opts PullOptions) (InferdInstallResul
 
 	// 2. Probe: is the inferd-daemon binary already on disk?
 	if binPath := findInstalledInferdBinary(); binPath != "" {
-		if err := startInstalledInferd(binPath, &r); err != nil {
+		// Don't delegate to a known-bad version. Older inferds
+		// shipped a llamacpp loader that copy-verifies the GGUF
+		// through $TMPDIR; on small-/tmp + ProtectHome= hosts
+		// (WSL is the canonical case) that crashes the daemon
+		// before it ever serves a request. Treat such binaries as
+		// "not installed" and fall through to the fresh-install
+		// branch, which fetches a current release.
+		v := readBinaryVersion(binPath)
+		if v != "" && versionIsOlder(v, MinInferdVersion) {
 			r.Notes = append(r.Notes,
-				fmt.Sprintf("found %s but couldn't start it: %v", binPath, err))
-			r.Notes = append(r.Notes,
-				"start inferd manually (systemctl / launchctl / sc) before re-running thlibo install")
+				fmt.Sprintf("found inferd %s at %s but it's older than the minimum supported %s; upgrading", v, binPath, MinInferdVersion))
+		} else {
+			if err := startInstalledInferd(binPath, &r); err != nil {
+				r.Notes = append(r.Notes,
+					fmt.Sprintf("found %s but couldn't start it: %v", binPath, err))
+				r.Notes = append(r.Notes,
+					"start inferd manually (systemctl / launchctl / sc) before re-running thlibo install")
+				return r, nil
+			}
+			r.StartedExisting = true
+			r.ResolvedVersion = v
 			return r, nil
 		}
-		r.StartedExisting = true
-		r.ResolvedVersion = readBinaryVersion(binPath)
-		return r, nil
 	}
 
 	// 3. Fresh install: download the tarball + run inferd's installer.
@@ -384,6 +419,56 @@ func startInstalledInferd(binPath string, r *InferdInstallResult) error {
 		return fmt.Errorf("inferd: 'sc.exe start inferd-daemon' failed; run inferd's install.ps1 elevated")
 	}
 	return fmt.Errorf("inferd: don't know how to start on %s", runtime.GOOS)
+}
+
+// versionIsOlder reports whether got < want. Both arguments may carry
+// a leading 'v' or none. Each is parsed as up to four dot-separated
+// numeric components; any non-numeric suffix on a component (e.g. a
+// "-rc1" trailer) is dropped before comparison. Empty `got` returns
+// false — we'd rather under-flag than spuriously upgrade a binary the
+// caller couldn't fingerprint.
+func versionIsOlder(got, want string) bool {
+	if strings.TrimSpace(got) == "" {
+		return false
+	}
+	g := parseSemverTuple(got)
+	w := parseSemverTuple(want)
+	for i := 0; i < 4; i++ {
+		if g[i] < w[i] {
+			return true
+		}
+		if g[i] > w[i] {
+			return false
+		}
+	}
+	return false
+}
+
+// parseSemverTuple turns "v0.1.13" / "0.1.13" / "0.1.13-rc1" into
+// [0,1,13,0]. Components that fail to parse become zero so a malformed
+// string doesn't accidentally compare older than a valid one.
+func parseSemverTuple(s string) [4]int {
+	var out [4]int
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "v")
+	parts := strings.SplitN(s, ".", 4)
+	for i := 0; i < len(out) && i < len(parts); i++ {
+		p := parts[i]
+		// Strip any "-rc1" / "+build" trailer.
+		if cut := strings.IndexAny(p, "-+"); cut >= 0 {
+			p = p[:cut]
+		}
+		n := 0
+		for _, c := range p {
+			if c < '0' || c > '9' {
+				n = 0
+				break
+			}
+			n = n*10 + int(c-'0')
+		}
+		out[i] = n
+	}
+	return out
 }
 
 // readBinaryVersion shells the binary with --version and returns the
