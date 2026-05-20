@@ -765,7 +765,7 @@ func extractTarGz(src, dst string) error {
 			if err != nil {
 				return fmt.Errorf("inferd: create %s: %w", dstPath, err)
 			}
-			if _, err := io.Copy(out, io.LimitReader(tr, 200<<20)); err != nil { // #nosec G110
+			if _, err := io.Copy(out, io.LimitReader(tr, 200<<20)); err != nil { // #nosec G110 // nosemgrep: go.lang.security.decompression_bomb.potential-dos-via-decompression-bomb -- io.LimitReader caps each member at 200 MiB
 				_ = out.Close()
 				return fmt.Errorf("inferd: copy %s: %w", dstPath, err)
 			}
@@ -810,7 +810,7 @@ func extractZip(src, dst string) error {
 			_ = in.Close()
 			return fmt.Errorf("inferd: create %s: %w", dstPath, err)
 		}
-		if _, err := io.Copy(out, io.LimitReader(in, 200<<20)); err != nil { // #nosec G110
+		if _, err := io.Copy(out, io.LimitReader(in, 200<<20)); err != nil { // #nosec G110 // nosemgrep: go.lang.security.decompression_bomb.potential-dos-via-decompression-bomb -- io.LimitReader caps each member at 200 MiB
 			_ = in.Close()
 			_ = out.Close()
 			return fmt.Errorf("inferd: copy %s: %w", dstPath, err)
