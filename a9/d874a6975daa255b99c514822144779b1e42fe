@@ -1,0 +1,29 @@
+docs/adr/0007-pdf-to-markdown.md
+  s_5811b7f24eccc0::t_0ece7443fb3931 174-175,177-185
+  s_5811b7f24eccc0::t_3f3e8a572c04bc 199-211
+  s_5811b7f24eccc0::t_0b27a17e4f3d51 75-111,114-115
+processors/pdf-to-md/run.py
+  s_5811b7f24eccc0::t_0e656e13d2e681 26,29-34,36,50,52
+  s_5811b7f24eccc0::t_2c6df7b9f3d694 74-110
+  s_5811b7f24eccc0::t_9c467cc86dd632 291
+  s_5811b7f24eccc0::t_22ab9a919f777a 35,37-42
+  s_5811b7f24eccc0::t_95e3cbf9fe1699 43-49,51
+CHANGELOG.md
+  s_5811b7f24eccc0::t_91d8f4f7eec961 15-33,37-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "a9d874a6975daa255b99c514822144779b1e42fe",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
