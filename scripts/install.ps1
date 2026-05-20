@@ -4,18 +4,17 @@
 #   irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 #
 # Or pinned to a specific version:
-#   $env:THLIBO_VERSION='v0.3.0'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+#   $env:THLIBO_VERSION='v0.6.0'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 #
 # What it does:
 #   1. Downloads thlibo-windows-amd64.zip from the GitHub release.
 #   2. Verifies SHA-256 against SHA256SUMS in the same release.
-#   3. Extracts thlibo.exe + thlibod.exe + thlibo-engine.exe into
-#      %LOCALAPPDATA%\thlibo\bin.
+#   3. Extracts thlibo.exe into %LOCALAPPDATA%\thlibo\bin.
 #   4. Adds that directory to the User PATH (via the Registry) so a
 #      fresh shell finds the binary. No admin required.
-#   5. Runs `thlibo install --pull-model` to write Claude Code hooks,
-#      mirror processors, register autostart, and download the ~5 GB
-#      Gemma 4 model. Skip with $env:THLIBO_SKIP_INSTALL=1.
+#   5. Runs `thlibo install` to write Claude Code hooks, mirror
+#      processors, and probe-or-install the inferd sidecar (which
+#      handles the model download). Skip with $env:THLIBO_SKIP_INSTALL=1.
 #
 # What it does NOT do (on purpose):
 #   - Touch the Machine PATH or any admin-only registry. This is a
@@ -83,18 +82,17 @@ try {
         $actual   = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash.ToLower()
         if ($expected -ne $actual) { Die "SHA mismatch: expected=$expected actual=$actual" 3 }
 
-        # Extract into a temp folder, then move the two exes to the
-        # final location. Avoids partial state if something goes wrong
+        # Extract into a temp folder, then move the exe to the final
+        # location. Avoids partial state if something goes wrong
         # halfway through extraction.
         $extractRoot = Join-Path $tmp 'extract'
         Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force
-        # Layout in the zip: thlibo-windows-amd64/bin/{thlibo.exe,thlibod.exe}
+        # Layout in the zip: thlibo-windows-amd64/bin/thlibo.exe
         $srcBin = Join-Path $extractRoot 'thlibo-windows-amd64\bin'
         if (-not (Test-Path $srcBin)) { Die "unexpected archive layout: $srcBin missing" 3 }
 
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         Copy-Item -Force (Join-Path $srcBin 'thlibo.exe')  (Join-Path $InstallDir 'thlibo.exe')
-        Copy-Item -Force (Join-Path $srcBin 'thlibod.exe') (Join-Path $InstallDir 'thlibod.exe')
 
         Say "installed thlibo $tag → $InstallDir"
     } finally {
@@ -117,29 +115,29 @@ try {
         Say "$InstallDir already on User PATH."
     }
 
-    # --- run `thlibo install --pull-engine --pull-model` ---
+    # --- run `thlibo install` ---
     # The bare binary is on disk but not yet resolvable in this
     # session's PATH (Environment changes land in HKCU, not in
     # $env:Path for already-running processes). Call through the
     # absolute path.
     #
-    # Both --pull-engine (~838 MB llamafile) and --pull-model
-    # (~5 GB Gemma 4 GGUF) are required for the daemon to do
-    # anything — without the engine, thlibod can't serve inference
-    # and every Bash tool call falls back to silent passthrough.
-    # Pulling both up front matches what the user expects from a
-    # one-line installer.
+    # `thlibo install` writes Claude Code hooks, mirrors processors,
+    # and probe-or-installs the inferd sidecar. Inferd handles the
+    # ~5 GB model download on its first run; thlibo no longer pulls
+    # the model itself.
     if ($env:THLIBO_SKIP_INSTALL -eq '1' -or
         $env:THLIBO_SKIP_INSTALL -eq 'true' -or
         $env:THLIBO_SKIP_INSTALL -eq 'yes') {
         Write-Host ''
         Say 'THLIBO_SKIP_INSTALL set — skipping configure step.'
         Say 'To finish manually later, run (from a fresh shell):'
-        Say '    thlibo install --pull-engine --pull-model'
+        Say '    thlibo install'
     } else {
         Write-Host ''
-        Say 'running: thlibo install --pull-engine --pull-model (~838 MB engine + ~5 GB model)'
-        Say 'set $env:THLIBO_SKIP_INSTALL=1 before re-running to skip.'
+        Say 'running: thlibo install'
+        Say '  (writes Claude Code hooks, mirrors processors,'
+        Say '   probe-or-installs the inferd sidecar; inferd then'
+        Say '   downloads the ~5 GB Gemma 4 model on first request)'
         Write-Host ''
         $thliboExe = Join-Path $InstallDir 'thlibo.exe'
         if (-not (Test-Path $thliboExe)) {
@@ -147,10 +145,10 @@ try {
         }
         # Forward exit code so automation / CI can key on install
         # success the same way it keys on the download step.
-        & $thliboExe install --pull-engine --pull-model
+        & $thliboExe install
         $code = $LASTEXITCODE
         if ($code -ne 0) {
-            Die "`"thlibo install --pull-engine --pull-model`" exited $code" $code
+            Die "`"thlibo install`" exited $code" $code
         }
 
         Write-Host ''

@@ -6,17 +6,16 @@
 #
 # Or pinned to a specific version:
 #   curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh \
-#     | THLIBO_VERSION=v0.3.0 bash
+#     | THLIBO_VERSION=v0.6.0 bash
 #
 # What it does:
 #   1. Detects OS + architecture (linux/amd64, linux/arm64, darwin/arm64).
 #   2. Downloads the matching tarball from the GitHub release.
 #   3. Verifies SHA-256 against SHA256SUMS in the release.
-#   4. Extracts `thlibo`, `thlibod`, and `thlibo-engine` into
-#      ~/.local/bin (creating it).
-#   5. Runs `thlibo install --pull-model` to wire Claude Code hooks,
-#      register the daemon for autostart, and download the ~5 GB
-#      Gemma 4 model. Skip with THLIBO_SKIP_INSTALL=1.
+#   4. Extracts `thlibo` into ~/.local/bin (creating it).
+#   5. Runs `thlibo install` to wire Claude Code hooks, mirror
+#      processors, and probe-or-install the inferd sidecar (which
+#      handles the model download). Skip with THLIBO_SKIP_INSTALL=1.
 #
 # What it does NOT do (on purpose):
 #   - Modify your shell rc. If ~/.local/bin isn't already on PATH it
@@ -125,16 +124,14 @@ main() {
   mkdir -p "$INSTALL_DIR"
   say "extracting into $INSTALL_DIR..."
   tar -xzf "$tmp/$asset" -C "$tmp"
-  # Tarball layout: thlibo-<plat>/bin/{thlibo,thlibod}
+  # Tarball layout: thlibo-<plat>/bin/thlibo
   local extracted="$tmp/thlibo-${platform}"
   install -m 755 "$extracted/bin/thlibo"  "$INSTALL_DIR/thlibo"
-  install -m 755 "$extracted/bin/thlibod" "$INSTALL_DIR/thlibod"
 
   # macOS Gatekeeper quarantines binaries downloaded from the internet.
   # Strip the flag so they run without a system "blocked" dialog.
   if [ "$(uname -s)" = "Darwin" ]; then
     xattr -d com.apple.quarantine "$INSTALL_DIR/thlibo"  2>/dev/null || true
-    xattr -d com.apple.quarantine "$INSTALL_DIR/thlibod" 2>/dev/null || true
   fi
 
   say "installed thlibo $tag → $INSTALL_DIR"
@@ -150,31 +147,30 @@ main() {
     say '    export PATH="$HOME/.local/bin:$PATH"'
   fi
 
-  # --- run `thlibo install --pull-engine --pull-model` --------------
+  # --- run `thlibo install` ---------------------------------------
   #
-  # Both the engine binary (~838 MB llamafile) and the model GGUF
-  # (~5 GB Gemma 4) are required for the daemon to actually serve
-  # inference. Without --pull-engine the daemon spawns successfully
-  # but every request falls back to silent passthrough — confusing
-  # for the user, no compression in practice. Pulling both up front
-  # matches the one-line installer's "it just works" promise.
+  # `thlibo install` writes Claude Code hooks, mirrors processors,
+  # and probe-or-installs the inferd sidecar. Inferd handles the
+  # ~5 GB Gemma 4 model download on first inference request;
+  # thlibo no longer ships the engine or pulls the model itself.
   case "${THLIBO_SKIP_INSTALL:-0}" in
     1|true|yes|on)
       echo
       say "THLIBO_SKIP_INSTALL set — skipping configure step."
       say "To finish manually later, run:"
-      say "    $INSTALL_DIR/thlibo install --pull-engine --pull-model"
+      say "    $INSTALL_DIR/thlibo install"
       ;;
     *)
       echo
-      say "running: $INSTALL_DIR/thlibo install --pull-engine --pull-model"
-      say "  (downloads ~838 MB engine + ~5 GB Gemma 4 model; skip by"
-      say "   setting THLIBO_SKIP_INSTALL=1 and re-running)"
+      say "running: $INSTALL_DIR/thlibo install"
+      say "  (writes Claude Code hooks, mirrors processors,"
+      say "   probe-or-installs the inferd sidecar; inferd then"
+      say "   downloads the ~5 GB Gemma 4 model on first request)"
       echo
       # Absolute path: PATH in this shell may not yet include
       # $INSTALL_DIR even if a future rc source will.
-      if ! "$INSTALL_DIR/thlibo" install --pull-engine --pull-model; then
-        die "\`thlibo install --pull-engine --pull-model\` failed; re-run it manually from a fresh shell to retry" 4
+      if ! "$INSTALL_DIR/thlibo" install; then
+        die "\`thlibo install\` failed; re-run it manually from a fresh shell to retry" 4
       fi
       echo
       say "thlibo installed. Start a new Claude Code session —"
