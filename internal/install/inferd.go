@@ -76,15 +76,22 @@ const (
 	// not-installed and trigger a fresh install of the latest
 	// release.
 	//
-	// v0.1.13 was the first build with the temp-copy-free model
-	// loader (inferd commit 1fe99d4 / issue #6). On hosts where
-	// /tmp is small (WSL2 default tmpfs is half RAM) and ProtectHome=
-	// is set, every earlier version's llamacpp init crashes with
-	// ENOSPC or EROFS during the GGUF verification copy. There is no
-	// systemd-side workaround that works under stock --user
-	// hardening, so the only reliable fix is to run a build that
-	// doesn't do the copy.
-	MinInferdVersion = "v0.1.13"
+	// Floor history:
+	//   - v0.1.13: first build with the temp-copy-free model loader
+	//     (inferd commit 1fe99d4 / inferd#6). On hosts where /tmp is
+	//     small (WSL2 default tmpfs is half RAM) and ProtectHome= is
+	//     set, every earlier version's llamacpp init crashes with
+	//     ENOSPC or EROFS during the GGUF verification copy.
+	//   - v0.1.14: macOS install-launchagent.sh now writes
+	//     --backend llamacpp + --model-path into ProgramArguments
+	//     (inferd#9 / inferd#8). Earlier launchagents bound a mock
+	//     daemon — every macOS user got canned tokens with no
+	//     warning. The daemon binary itself is also v0.1.14, so an
+	//     in-place binary upgrade alone isn't enough; the install
+	//     script has to re-run to rewrite the plist. Forcing the
+	//     fresh-install branch (which calls inferd's installer)
+	//     does both at once.
+	MinInferdVersion = "v0.1.14"
 )
 
 // InferdInstallSpec captures what the installer needs to know.

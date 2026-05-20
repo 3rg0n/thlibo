@@ -41,3 +41,18 @@ func TestParseSemverTuple_Garbage(t *testing.T) {
 		t.Errorf("parseSemverTuple(empty) = %v, want [0 0 0 0]", got)
 	}
 }
+
+// TestMinInferdVersion_Floor pins the active floor so a careless
+// constant edit fails fast. Bumping the floor is a deliberate act
+// (covered by the doc comment in inferd.go); the constant should not
+// drift via copy-paste of test fixtures.
+func TestMinInferdVersion_Floor(t *testing.T) {
+	const want = "v0.1.14"
+	if MinInferdVersion != want {
+		t.Errorf("MinInferdVersion = %q, want %q (update both the constant's doc comment and this test if intentional)", MinInferdVersion, want)
+	}
+	// And the constant must still parse cleanly through the comparator.
+	if versionIsOlder(MinInferdVersion, MinInferdVersion) {
+		t.Errorf("MinInferdVersion compares older than itself; parser broken")
+	}
+}
