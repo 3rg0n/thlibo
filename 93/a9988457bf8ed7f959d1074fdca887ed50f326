@@ -1,0 +1,24 @@
+go.mod
+  s_5811b7f24eccc0::t_2e21443d3a82ad 11
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_02a8d25333f626 589-594,596-598,600-608,614-620,626-636,640-649,652,658-679
+  s_5811b7f24eccc0::t_af9c9ca107fc0a 733-738
+internal/install/inferd_mac_plist_test.go
+  s_5811b7f24eccc0::t_56ff060f2bb30b 11-15,17,25,27,29-31,39,46,48,53,55,76-78,80-81,83-88,93-127,129-134,136-137,141,143,148-155,161-166,168,170-178,180-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "93a9988457bf8ed7f959d1074fdca887ed50f326",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
