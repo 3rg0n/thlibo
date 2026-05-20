@@ -1,0 +1,21 @@
+internal/adapters/claudecode/hook-read.sh
+  s_5811b7f24eccc0::t_cdfcf5efa0f7f9 37-39,42,46-56
+internal/adapters/claudecode/hook-read.ps1
+  s_5811b7f24eccc0::t_d17a637cb30c70 33-34,36,39-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "c65836ecd519cf823683aefee5d8b915725ef9b3",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
