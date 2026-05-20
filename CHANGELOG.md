@@ -30,14 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   subsections promoted to markdown headings), a 19-page MIME-info
   spec (146 KB → 35 KB), a USENIX academic paper (351 KB →
   7.5 KB), and a generated table fixture.
-- Adds `pypdf` + `pdfplumber` to thlibo's Python processor
-  dependencies; install via
+- Adds `pypdf` (BSD-3) + `pdfplumber` (MIT) to thlibo's Python
+  processor dependencies; install via
   `pip install -r ~/.thlibo/processors/pdf-to-md/requirements.txt`
   after `thlibo install` mirrors the processor. See
-  [ADR 0007](docs/adr/0007-pdf-to-markdown.md) for the rationale,
-  including why we chose pypdf+pdfplumber over pdfcpu, pdf.js,
-  pymupdf, markitdown, and marker (the last with a "drop into
-  ~/.thlibo/processors/ if you want it" pattern documented).
+  [ADR 0007](docs/adr/0007-pdf-to-markdown.md) for the full
+  library shootout — thlibo's dep tree is permissively-licensed
+  end-to-end (MIT / BSD / Apache); copyleft-licensed tools in
+  this space (pymupdf, marker) are excluded entirely, including
+  from any opt-in user-recipe documentation.
 
 ## [0.6.0] - 2026-05-19
 

@@ -158,16 +158,11 @@ inferd's wire supports image payloads.
 
 **Reversible if needed:**
 
-- Swapping `pypdf` for `pymupdf` later is a single-file change
-  (the entry script) if pypdf's text quality turns out worse. We
-  avoided pymupdf's AGPL license today; if Mozilla relicenses or
-  we get clearance to ship AGPL deps, the better text quality
-  could be worth it.
-- Swapping `pdfplumber` for `marker` or `markitdown` (the
-  Microsoft tool) is a similar single-file change. We avoided
-  markitdown today because it bundles too much (Office doc
-  handling we don't want), but the text-extraction core is
-  swappable.
+- Swapping `pdfplumber` for `markitdown` (the Microsoft tool) is
+  a single-file change in the entry script. We avoided markitdown
+  today because it bundles too much (Office doc handling we don't
+  want), but the text-extraction core is swappable inside our
+  permissively-licensed posture.
 
 ## Implementation order
 
@@ -193,18 +188,23 @@ Gemma-4-OCR insight collapsed v0.8 + v0.9):
 - pdf.js: https://mozilla.github.io/pdf.js/ (MIT; rejected for CLI
   due to Node runtime weight)
 - markitdown: https://github.com/microsoft/markitdown (MIT; rejected
-  for bundling unrelated Office handlers)
-- pymupdf: https://github.com/pymupdf/PyMuPDF (AGPL; rejected for
-  license posture)
-- marker: https://github.com/datalab-to/marker (35 k stars,
-  state-of-the-art quality including math + forms; rejected as a
-  built-in for two reasons: GPL-3.0 license is incompatible with
-  thlibo's MIT distribution posture, and the runtime needs PyTorch
-  + transformer model weights which is multi-GB versus pypdf's
-  ~5 MB. Worth documenting as a "drop in marker as a user
-  processor at `~/.thlibo/processors/pdf-to-md/` if you want
-  top-tier quality and accept the GPL" recipe in the README — the
-  GPL then lives in the user's home dir, not thlibo's binary.)
+  for bundling unrelated Office handlers — the text-extraction
+  core is swappable later if useful)
+
+### Considered and excluded for license posture
+
+thlibo ships under MIT and we keep the dependency tree
+permissively licensed end-to-end. Tools below are notable in this
+space but excluded from both the built-in path and any
+documented user-recipe — we don't surface installation paths for
+copyleft deps even as opt-in, because doing so puts us in the
+position of recommending license obligations users may not want.
+Listed here for completeness so future readers don't think we
+missed them:
+
+- pymupdf (AGPL-3.0)
+- marker (GPL-3.0; also multi-GB ML runtime, separate concern)
+- mupdf-based forks more generally (the upstream is AGPL)
 - Gemma 4 vision/OCR: https://ai.google.dev/gemma/docs/capabilities/vision
   (the model inferd already loads for compression is multimodal-
   capable; v0.8 PDF OCR + chart description rides this once
