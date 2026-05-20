@@ -1,0 +1,28 @@
+internal/install/inferd_pipe_windows.go
+  s_5811b7f24eccc0::t_ea5141def28bff 1-67
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_936b72af8a046f 4-5,7,9-35,43,50,62,75,77-79,83,85-118,131-132,140-167,178-182,184-252,254-269,271-278,280-281,283-315,317-321,323-325,327-373,375,377-378,380-426,428-478,480-481,483-490,526-527,571,600-601,664,818
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_e1967463072aee 351-366,368,370-380,387
+  s_5811b7f24eccc0::t_7dcde8e2fb6453 189,191
+go.mod
+  s_5811b7f24eccc0::t_1660dbe9e52732 11
+internal/install/inferd_pipe_unix.go
+  s_5811b7f24eccc0::t_04c4d8a46675bd 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "68b0ecff48645ede2477feb617892a311c8a7345",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
