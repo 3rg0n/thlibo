@@ -325,6 +325,7 @@ func findInstalledInferdBinary() string {
 	}
 
 	for _, c := range candidates {
+		// #nosec G703 -- c is built from constant subpath + os.UserHomeDir / $LOCALAPPDATA; not user input
 		if info, err := os.Stat(c); err == nil && !info.IsDir() {
 			return c
 		}
@@ -427,10 +428,10 @@ func runInferdInstaller(extractDir string, r *InferdInstallResult) error {
 		// be a path that survives extractDir cleanup.
 		home, _ := os.UserHomeDir()
 		stableBin := filepath.Join(home, ".local", "bin", inferdBinName())
-		if err := os.MkdirAll(filepath.Dir(stableBin), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(stableBin), 0o750); err != nil {
 			return fmt.Errorf("inferd: create %s: %w", filepath.Dir(stableBin), err)
 		}
-		if err := copyFile(bin, stableBin, 0o755); err != nil {
+		if err := copyFile(bin, stableBin, 0o750); err != nil {
 			return err
 		}
 		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
@@ -454,15 +455,15 @@ func runInferdInstaller(extractDir string, r *InferdInstallResult) error {
 		home, _ := os.UserHomeDir()
 		bin := filepath.Join(extractDir, inferdBinName())
 		stableBin := filepath.Join(home, ".local", "bin", inferdBinName())
-		if err := os.MkdirAll(filepath.Dir(stableBin), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(stableBin), 0o750); err != nil {
 			return fmt.Errorf("inferd: create %s: %w", filepath.Dir(stableBin), err)
 		}
-		if err := copyFile(bin, stableBin, 0o755); err != nil {
+		if err := copyFile(bin, stableBin, 0o750); err != nil {
 			return err
 		}
 		unitSrc := filepath.Join(extractDir, "packaging", "inferd.service")
 		unitDst := filepath.Join(home, ".config", "systemd", "user", "inferd.service")
-		if err := os.MkdirAll(filepath.Dir(unitDst), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(unitDst), 0o750); err != nil {
 			return fmt.Errorf("inferd: create unit dir: %w", err)
 		}
 		if err := copyFile(unitSrc, unitDst, 0o644); err != nil {
@@ -503,13 +504,14 @@ func runInferdInstaller(extractDir string, r *InferdInstallResult) error {
 		stableDir := filepath.Join(appData, "inferd", "bin")
 		stableBin := filepath.Join(stableDir, inferdBinName())
 		stableScript := filepath.Join(appData, "inferd", "install.ps1")
-		if err := os.MkdirAll(stableDir, 0o755); err != nil {
+		// #nosec G703 -- stableDir is %LOCALAPPDATA% + literal subpath; not user input
+		if err := os.MkdirAll(stableDir, 0o750); err != nil {
 			return fmt.Errorf("inferd: create %s: %w", stableDir, err)
 		}
-		if err := copyFile(bin, stableBin, 0o755); err != nil {
+		if err := copyFile(bin, stableBin, 0o750); err != nil {
 			return err
 		}
-		if err := copyFile(script, stableScript, 0o755); err != nil {
+		if err := copyFile(script, stableScript, 0o750); err != nil {
 			return err
 		}
 
@@ -610,7 +612,7 @@ func pullInferd(version string, opts PullOptions) (string, error) {
 	}
 
 	extractDir := filepath.Join(tmpDir, "extracted")
-	if err := os.MkdirAll(extractDir, 0o755); err != nil {
+	if err := os.MkdirAll(extractDir, 0o750); err != nil {
 		return "", fmt.Errorf("inferd: create extract dir: %w", err)
 	}
 	if strings.HasSuffix(asset, ".zip") {
@@ -752,14 +754,14 @@ func extractTarGz(src, dst string) error {
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(dstPath, 0o755); err != nil {
+			if err := os.MkdirAll(dstPath, 0o750); err != nil {
 				return fmt.Errorf("inferd: mkdir %s: %w", dstPath, err)
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
 				return fmt.Errorf("inferd: mkdir %s: %w", filepath.Dir(dstPath), err)
 			}
-			out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o777) // #nosec G304
+			out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o777) // #nosec G115,G304,G703 -- mode masked with 0o777 (9 bits, safe uint32 conversion); dstPath is post-safeJoin inside our MkdirTemp
 			if err != nil {
 				return fmt.Errorf("inferd: create %s: %w", dstPath, err)
 			}
@@ -791,12 +793,12 @@ func extractZip(src, dst string) error {
 			return err
 		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(dstPath, 0o755); err != nil {
+			if err := os.MkdirAll(dstPath, 0o750); err != nil {
 				return fmt.Errorf("inferd: mkdir %s: %w", dstPath, err)
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
 			return fmt.Errorf("inferd: mkdir %s: %w", filepath.Dir(dstPath), err)
 		}
 		in, err := f.Open()
@@ -851,17 +853,22 @@ func safeJoin(base, rel string) (string, error) {
 	return full, nil
 }
 
-// copyFile copies src to dst with mode.
+// copyFile copies src to dst with mode. Both src and dst are
+// caller-controlled paths inside our own extraction tree
+// (MkdirTemp + safeJoin) or our resolved install dirs ($HOME-
+// rooted); neither is user-supplied input. gosec's taint analysis
+// can't follow this through, hence the per-call-site G703 + G304
+// annotations on the file ops below.
 func copyFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src) // #nosec G304 -- caller-controlled paths inside our extraction tree
+	in, err := os.Open(src) // #nosec G304,G703 -- src is post-safeJoin path inside our MkdirTemp
 	if err != nil {
 		return fmt.Errorf("inferd: open %s: %w", src, err)
 	}
 	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil { // #nosec G703 -- dst is from spec.BinaryDir / spec.UnitDir, $HOME-rooted constants
 		return fmt.Errorf("inferd: mkdir %s: %w", filepath.Dir(dst), err)
 	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) // #nosec G304
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) // #nosec G304,G703 -- dst as above
 	if err != nil {
 		return fmt.Errorf("inferd: create %s: %w", dst, err)
 	}

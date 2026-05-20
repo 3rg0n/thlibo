@@ -23,7 +23,7 @@ func openWindowsPipe(ctx context.Context, addr string) (net.Conn, error) {
 		deadline = d
 	}
 	for {
-		f, err := os.OpenFile(addr, os.O_RDWR, 0)
+		f, err := os.OpenFile(addr, os.O_RDWR, 0) // #nosec G304 -- addr is the inferd admin pipe path from defaultInferdAdminAddr, a compile-time platform constant; not user input
 		if err == nil {
 			return &winPipeConn{File: f}, nil
 		}

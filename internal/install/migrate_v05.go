@@ -237,9 +237,11 @@ func stopV05Autostart() (string, bool) {
 		}
 		shim := filepath.Join(startup, "Microsoft", "Windows", "Start Menu", "Programs",
 			"Startup", "cisco.thlibo.daemon.cmd")
+		// #nosec G703 -- shim is %APPDATA% + literal subpath; not user input
 		if _, err := os.Stat(shim); err != nil {
 			return "", false
 		}
+		// #nosec G703 -- shim as above
 		if err := os.Remove(shim); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return "could not remove " + shim + ": " + err.Error(), false
 		}
@@ -275,13 +277,20 @@ func engineBinPaths(home string) []string {
 
 // tryRemove deletes path if it exists. Returns (removed, error).
 // "Not exist" is not an error.
+//
+// All callers pass paths derived from os.UserHomeDir + literal
+// subpaths (see callers in MigrateFromV05); none are user input.
+// gosec's taint analysis can't follow that through; hence the
+// G703 annotations on the file ops below.
 func tryRemove(path string) (bool, error) {
+	// #nosec G703 -- caller-controlled $HOME-rooted path
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
 		return false, err
 	}
+	// #nosec G703 -- path as above
 	if err := os.Remove(path); err != nil {
 		return false, err
 	}
@@ -304,7 +313,7 @@ func alreadyAtNew(oldPath, newPath string) bool {
 // they're on different filesystems (rename(2) returns EXDEV).
 // Creates the destination's parent dir if missing.
 func moveAcrossFS(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return fmt.Errorf("create dest dir: %w", err)
 	}
 	if err := os.Rename(src, dst); err == nil {

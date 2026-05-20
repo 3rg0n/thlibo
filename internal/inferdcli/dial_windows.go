@@ -22,7 +22,7 @@ func dialNative(ctx context.Context, addr string) (net.Conn, error) {
 		deadline = d
 	}
 	for {
-		f, err := os.OpenFile(addr, os.O_RDWR, 0)
+		f, err := os.OpenFile(addr, os.O_RDWR, 0) // #nosec G304 -- addr is an inferd pipe path from DefaultInferenceAddress, a compile-time platform constant; not user input
 		if err == nil {
 			return &pipeConn{File: f}, nil
 		}
