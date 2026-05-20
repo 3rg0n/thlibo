@@ -1,0 +1,21 @@
+internal/install/inferd_version_test.go
+  s_5811b7f24eccc0::t_f3fcc7d712b0cf 44-58
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_936115187b1e7d 79-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "bf97fc320cdf8bd9d1c6e88d2a0d5a8cd37e0b2c",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
