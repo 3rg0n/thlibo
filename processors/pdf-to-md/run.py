@@ -23,7 +23,33 @@ the point on binary input.
 from __future__ import annotations
 
 import io
+import re
 import sys
+
+# Promote lines that look like section headings into markdown
+# headings. We use a numeric-prefix heuristic rather than font-size
+# analysis because most structured documents (PRDs, specs, RFCs)
+# use "1. Foo" / "2.1 Bar" / "3.2.1 Baz" numbering. Gets ~80% of
+# real PDFs structurally readable without per-document tuning.
+#
+# Constraints, derived from running on real PRDs:
+#   - Numeric prefix only (1., 1.1, 1.1.1 — up to 4 levels deep).
+#   - Length cap of 60 chars in the title body. Real section
+#     headings rarely run longer; numbered list items routinely do.
+#   - No internal periods in the title body. Numbered list items
+#     ("1. Foo. Bar.") are full prose with sentence punctuation;
+#     section headings ("1. Executive Summary") are not. This
+#     filters out the most common false positive.
+#   - Title body must START with an UPPERCASE letter. Filters the
+#     most common false positive: when pdfplumber merges table cells
+#     into a single text line ("03 the ATC dashboard, so that I..."
+#     where 03 was a US-ID prefix in a user-story table).
+#   - Section number prefix can't have leading zeros. Real headings
+#     are "1." not "01."; "01" / "02" / "03" patterns appear in
+#     user-story IDs and other ID-shaped table content.
+_HEADING_RE = re.compile(
+    r"^(?P<dots>[1-9]\d*(?:\.\d+){0,3})\.?\s+(?P<text>[A-Z][^.\n]{0,59})$"
+)
 
 # Preserve LF on Windows: Python's default text-mode stdout
 # translates \n -> \r\n which corrupts byte-identity for downstream
@@ -43,6 +69,43 @@ def emit_error(msg: str, raw: bytes) -> None:
     preview = raw[:32]
     hexdump = " ".join(f"{b:02x}" for b in preview)
     sys.stdout.write(f"<!-- first 32 bytes: {hexdump} -->\n")
+
+
+def promote_headings(text: str) -> str:
+    """Walk the page's extracted text and promote numbered-section
+    lines to markdown headings. Each line is examined independently;
+    non-matching lines pass through unchanged.
+
+    Heading depth follows the numeric prefix:
+      "1. Foo"        -> "## 1. Foo"     (top level inside the page)
+      "1.1 Bar"       -> "### 1.1 Bar"
+      "1.1.1 Baz"     -> "#### 1.1.1 Baz"
+
+    The page already has a "## Page N" wrapper, so we start at H2 for
+    top-level numbered sections — this means the toplevel-page and
+    the toplevel-section land at the same depth in the output. That
+    looks slightly redundant when they're adjacent but reads
+    correctly when section content follows.
+    """
+    if not text:
+        return text
+    out_lines: list[str] = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            out_lines.append(line)
+            continue
+        m = _HEADING_RE.match(stripped)
+        if not m:
+            out_lines.append(line)
+            continue
+        # Depth = number of dots in the numeric prefix + 2 (so "1." is
+        # H2, "1.1" is H3, ...). Cap at H6 even though _HEADING_RE
+        # only matches up to 4 levels.
+        dots = m.group("dots")
+        depth = min(2 + dots.count("."), 6)
+        out_lines.append(f"{'#' * depth} {stripped}")
+    return "\n".join(out_lines)
 
 
 def page_strategy(text: str, has_images: bool) -> str:
@@ -225,7 +288,7 @@ def main() -> int:
             strategy = page_strategy(text, has_images)
             block: list[str] = [f"## Page {i}"]
             if strategy == "text":
-                block.append(text.strip())
+                block.append(promote_headings(text.strip()))
                 if tables:
                     for j, t in enumerate(tables, start=1):
                         rendered = render_table(t)

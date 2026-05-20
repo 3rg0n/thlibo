@@ -12,18 +12,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `pdf-to-md` script processor. Converts a PDF (born-digital,
   text-based) into GitHub-flavored markdown: TOC reconstructed
   from the PDF outline, per-page rendering, tables emitted as
-  GHFM tables. Image surfacing is placeholder-only in v0.7
-  (`[image: page N — vision not yet supported]`); OCR for scanned
-  PDFs lands in v0.8 (pytesseract); model-driven image
-  descriptions land in v0.9 (requires inferd vision endpoint).
-  Triggered by the fast-path regex `^%PDF-`. Verified end-to-end
-  on a USENIX academic paper (351 KB → 7.5 KB in 0.6 s) and on a
-  generated table fixture (cleanly extracted as markdown table).
-  Adds `pypdf` + `pdfplumber` to thlibo's Python processor
+  GHFM tables, numbered section headings promoted to `##`/`###`
+  via a tightened heuristic (numeric prefix + uppercase title +
+  no internal periods + length cap, to avoid falsely promoting
+  numbered list items or table cells).
+- Image surfacing is placeholder-only in v0.7
+  (`[image: page N — vision not yet supported]`). v0.8 will
+  collapse OCR (scanned pages) and chart-description (image-only
+  pages) into a single feature: render the page as an image and
+  send it to inferd's multimodal Gemma 4 with a transcription or
+  chart-description prompt — both paths use the same wire
+  endpoint, only the prompt differs. Gated on inferd exposing
+  image payloads over its NDJSON wire (in flight).
+- Triggered by the fast-path regex `^%PDF-`. Verified end-to-end
+  on a 29-page Cisco PRD (327 KB → 70 KB in 1.2 s, 6 tables
+  cleanly rendered as GHFM tables, 11 top-level sections + 10
+  subsections promoted to markdown headings), a 19-page MIME-info
+  spec (146 KB → 35 KB), a USENIX academic paper (351 KB →
+  7.5 KB), and a generated table fixture.
+- Adds `pypdf` + `pdfplumber` to thlibo's Python processor
   dependencies; install via
   `pip install -r ~/.thlibo/processors/pdf-to-md/requirements.txt`
   after `thlibo install` mirrors the processor. See
-  [ADR 0007](docs/adr/0007-pdf-to-markdown.md) for the rationale.
+  [ADR 0007](docs/adr/0007-pdf-to-markdown.md) for the rationale,
+  including why we chose pypdf+pdfplumber over pdfcpu, pdf.js,
+  pymupdf, markitdown, and marker (the last with a "drop into
+  ~/.thlibo/processors/ if you want it" pattern documented).
 
 ## [0.6.0] - 2026-05-19
 

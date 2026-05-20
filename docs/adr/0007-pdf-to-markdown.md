@@ -72,16 +72,47 @@ gets classified by `pdfplumber.extract_text()` output:
   surface as `[image: <filename> on page N]` placeholder. ~80 % of
   real-world PDFs land here (technical docs, papers, manuals,
   contracts).
-- Empty / gibberish text + non-empty `page.images` → flag for OCR
-  in v0.8 (pytesseract). Output `[scanned page N — OCR not yet
-  supported]` until then.
-- Mostly-empty text + images that look chart-shaped → flag for
-  vision in v0.9 (requires inferd vision endpoint, currently
-  text-only). Output `[chart on page N — vision not yet supported]`
-  until then.
+- Empty / gibberish text + non-empty `page.images` → scanned page
+  placeholder. Output `[scanned page N — OCR not yet supported]`.
+- Mostly-empty text + images that look chart-shaped → chart
+  placeholder. Output `[chart on page N — vision not yet
+  supported]`.
+
+The inferred next step was to add `pytesseract` for scanned-page
+OCR (v0.8) and a separate vision-model path for chart description
+(v0.9). That staging changed when we learned **Gemma 4 itself
+handles OCR via its vision capability** — the model that inferd
+already loads for compression can do both. Per Google's developer
+docs:
+
+```python
+messages = [
+    {"role": "user", "content": [
+        {"type": "image", "url": img_url},
+        {"type": "text", "text": "What does the sign say?"}
+    ]}
+]
+output = vqa_pipe(messages, ...)
+```
+
+That collapses v0.8 OCR and v0.9 chart-description into a single
+feature: send the page-rendered-as-image to inferd via a
+multimodal `Request.Messages`, get back text. **One feature ship,
+not two.** It's gated on inferd exposing image content over its
+NDJSON wire — currently `inferd.Message` is text-only `{Role,
+Content}`. inferd is working on that.
+
+Updated rollout:
+
+- **v0.7**: text + tables, no model. The 80 % case. (This release.)
+- **v0.8**: scanned + chart pages get sent to inferd's multimodal
+  Gemma 4 with a "transcribe this page" or "describe this chart"
+  prompt. Both paths use the same wire endpoint; the prompt is
+  what differs. Requires inferd's vision IPC to ship.
 
 This staged rollout lets v0.7 ship the most-common path with zero
-inferd dependency. OCR and vision are additive.
+inferd dependency. The OCR + vision merger is additive once
+inferd's wire supports image payloads.
 
 ## Consequences
 
@@ -140,19 +171,18 @@ inferd dependency. OCR and vision are additive.
 
 ## Implementation order
 
-The processor lands in three releases:
+The processor lands in two releases (down from three after the
+Gemma-4-OCR insight collapsed v0.8 + v0.9):
 
-- **v0.7.0** (next): text + tables. No OCR, no vision. The 80 %
-  case. ~150 lines of Python + the yaml descriptor + the case-file
-  glue + the `thlibo pdf` subcommand. Tests against a fixture set
-  of representative PDFs (born-digital prose, two-column academic,
-  table-heavy spec, scanned PDF-as-placeholder).
-- **v0.8.0**: OCR for scanned pages via `pytesseract`. Detection
-  per-page; users without `tesseract` installed get a clear error
-  message pointing at install instructions for their platform.
-- **v0.9.0**: vision-model image descriptions via inferd's vision
-  endpoint. Requires inferd protocol updates — separate ADR + RFC
-  in inferd.
+- **v0.7.0** (next): text + tables + numeric heading promotion.
+  No OCR, no vision. The 80 % case. Pure-Python deterministic
+  path; no inferd dependency. Verified end-to-end against a real
+  29-page Cisco PRD and a 19-page MIME-info spec.
+- **v0.8.0**: scanned + chart pages render as images and get sent
+  to inferd's multimodal Gemma 4 with a transcription / chart-
+  description prompt. Both paths share the same wire endpoint;
+  only the prompt differs. Gated on inferd exposing image payloads
+  over its NDJSON wire (in flight).
 
 ## References
 
@@ -166,6 +196,19 @@ The processor lands in three releases:
   for bundling unrelated Office handlers)
 - pymupdf: https://github.com/pymupdf/PyMuPDF (AGPL; rejected for
   license posture)
+- marker: https://github.com/datalab-to/marker (35 k stars,
+  state-of-the-art quality including math + forms; rejected as a
+  built-in for two reasons: GPL-3.0 license is incompatible with
+  thlibo's MIT distribution posture, and the runtime needs PyTorch
+  + transformer model weights which is multi-GB versus pypdf's
+  ~5 MB. Worth documenting as a "drop in marker as a user
+  processor at `~/.thlibo/processors/pdf-to-md/` if you want
+  top-tier quality and accept the GPL" recipe in the README — the
+  GPL then lives in the user's home dir, not thlibo's binary.)
+- Gemma 4 vision/OCR: https://ai.google.dev/gemma/docs/capabilities/vision
+  (the model inferd already loads for compression is multimodal-
+  capable; v0.8 PDF OCR + chart description rides this once
+  inferd exposes image payloads over its wire)
 - Existing case-file pipeline: `internal/casefile/`
 - Existing Python processors as reference shape:
   `processors/git-filter/`, `processors/pytest-filter/`,
