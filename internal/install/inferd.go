@@ -586,76 +586,97 @@ func installPlatformUnit(spec InferdInstallSpec, extractDir string, r *InferdIns
 	return nil
 }
 
-// copyMacPlistWithFixes patches inferd's bundled v0.1.9 plist on the
-// way to ~/Library/LaunchAgents/. Three classes of substitution:
+// copyMacPlistWithFixes performs the install-time substitution that
+// inferd's v0.1.11+ plist template requires. The shipped plist uses
+// three placeholders that launchd does NOT expand at load time
+// (Mac confirmed empirically — $TMPDIR, ${HOME}, ~ all arrive
+// literally in ProgramArguments / EnvironmentVariables / *Path
+// keys). The bundled README documents an equivalent sed pipeline:
 //
-//   - Replace literal "USERNAME_HERE" with the real username (the
-//     basename of $HOME). launchd does not expand $HOME inside
-//     <string> elements; the unsubstituted template makes launchd
-//     fail with EX_CONFIG (78) on bootstrap.
-//   - Replace "/usr/local/bin/inferd-daemon" with the actual binary
-//     path the installer dropped at spec.BinaryDir.
-//   - Replace the daemon's --lock and --uds paths in
-//     ProgramArguments from
-//     "/Users/USERNAME_HERE/Library/Application Support/inferd/..."
-//     to "$TMPDIR/inferd/..." (which launchd does expand from the
-//     daemon's session env). This matches what thlibo's inferdcli
-//     dials by default — without this, the daemon binds a socket
-//     at one path and the client looks for it at another.
+//	sed -e "s|__HOME__|$HOME|g" \
+//	    -e "s|__TMPDIR__|$(getconf DARWIN_USER_TEMP_DIR)|g" \
+//	    -e "s|__BIN__|/usr/local/bin/inferd-daemon|g"
 //
-// Tracked upstream as https://github.com/3rg0n/inferd/issues/N
-// (filed alongside this code). Once inferd ships a corrected
-// template this whole helper can be replaced with the original
-// copyFile call.
+// The plist already references the right semantics (admin socket
+// on $TMPDIR, no Application-Support paths, --admin-addr present).
+// This helper just resolves the placeholders for thlibo's install
+// site.
+//
+// Inferd's release artifact promised an install-launchagent.sh
+// helper that would do this for us, but it isn't bundled in the
+// v0.1.11 tarball. Filed back upstream; meanwhile we do the
+// substitution ourselves.
 func copyMacPlistWithFixes(src, dst string, spec InferdInstallSpec, r *InferdInstallResult) error {
 	raw, err := os.ReadFile(src) // #nosec G304 -- src is under our temp extract dir
 	if err != nil {
 		return fmt.Errorf("inferd: read plist: %w", err)
 	}
-	out := string(raw)
+	body := string(raw)
 
-	// 1. Username substitution. We use the basename of $HOME
-	//    rather than `id -un` to avoid shelling out for a value
-	//    we already know.
+	// Defend against a stale plist still using the v0.1.9 USERNAME_HERE
+	// scheme: log a clear note and bail out.
+	if strings.Contains(body, "USERNAME_HERE") {
+		return fmt.Errorf("inferd: plist still uses v0.1.9 USERNAME_HERE scheme; bump the inferd pin")
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("inferd: resolve home: %w", err)
 	}
-	username := filepath.Base(home)
-	if username == "" || username == "/" || username == "." {
-		return fmt.Errorf("inferd: cannot resolve username from home dir %q", home)
-	}
-	out = strings.ReplaceAll(out, "USERNAME_HERE", username)
 
-	// 2. Binary path. Inferd's template hardcodes /usr/local/bin
-	//    but we install at spec.BinaryDir.
+	// __TMPDIR__ resolves to per-user temp dir WITH a trailing
+	// slash, because the plist template's paths read
+	// "__TMPDIR__inferd/..." with no separator between placeholder
+	// and "inferd". inferd's README uses
+	// $(getconf DARWIN_USER_TEMP_DIR) which returns
+	// "/var/folders/<hash>/T/" — already trailing-slashed. We
+	// match that by appending os.PathSeparator if not present.
+	tmpdir := os.TempDir()
+	if !strings.HasSuffix(tmpdir, string(os.PathSeparator)) {
+		tmpdir += string(os.PathSeparator)
+	}
+
 	wantBinary := filepath.Join(spec.BinaryDir, inferdBinName())
-	out = strings.ReplaceAll(out, "/usr/local/bin/inferd-daemon", wantBinary)
 
-	// 3. Socket + lock paths. Move them out of
-	//    ~/Library/Application Support/inferd/ (where the bundled
-	//    template puts them) into $TMPDIR/inferd/ (where thlibo
-	//    looks). launchd expands $TMPDIR per-session, matching
-	//    what `os.TempDir()` returns inside the inferd-daemon
-	//    process — same path on both sides.
-	libraryAppSupport := filepath.Join(home, "Library", "Application Support", "inferd")
-	out = strings.ReplaceAll(out, libraryAppSupport+"/inferd.lock", "$TMPDIR/inferd/inferd.lock")
-	out = strings.ReplaceAll(out, libraryAppSupport+"/infer.sock", "$TMPDIR/inferd/infer.sock")
+	body = strings.ReplaceAll(body, "__BIN__", wantBinary)
+	body = strings.ReplaceAll(body, "__HOME__", home)
+	body = strings.ReplaceAll(body, "__TMPDIR__", tmpdir)
 
-	// 4. The bundled v0.1.9 plist also omits --admin-addr entirely.
-	//    Without it the admin socket never binds and `thlibo
-	//    doctor` can't read lifecycle events. We can't easily
-	//    inject XML mid-document with a regex, so we record a
-	//    note and leave the plist as-is. Fix is upstream.
-	if !strings.Contains(out, "--admin-addr") {
-		r.Notes = append(r.Notes,
-			"inferd v0.1.9 plist omits --admin-addr; admin socket will not bind on macOS until inferd ships a fix")
+	// Sanity check: any leftover placeholder means we missed a
+	// rename inferd added in a later release. Better to fail loud
+	// than ship a broken plist.
+	if rem := findLeftoverPlaceholder(body); rem != "" {
+		return fmt.Errorf("inferd: plist contains unresolved placeholder %q after substitution; bump inferd pin or extend copyMacPlistWithFixes", rem)
 	}
 
-	if err := os.WriteFile(dst, []byte(out), 0o644); err != nil { // #nosec G306 -- launchd reads this
+	if err := os.WriteFile(dst, []byte(body), 0o644); err != nil { // #nosec G306 -- launchd reads this
 		return fmt.Errorf("inferd: write plist: %w", err)
 	}
 	return nil
+}
+
+// findLeftoverPlaceholder returns the first __FOO__ token still
+// present in body, or "" if none. We use a simple two-step scan
+// rather than a regex to keep the dependency surface small.
+func findLeftoverPlaceholder(body string) string {
+	idx := strings.Index(body, "__")
+	if idx < 0 {
+		return ""
+	}
+	tail := body[idx+2:]
+	end := strings.Index(tail, "__")
+	if end < 0 {
+		return ""
+	}
+	// __FOO__ — must be uppercase + underscores only between the
+	// markers, otherwise it's a coincidence in user content.
+	token := tail[:end]
+	for _, r := range token {
+		if !((r >= 'A' && r <= 'Z') || r == '_') {
+			return ""
+		}
+	}
+	return "__" + token + "__"
 }
 
 // writeBackendDropin writes a small systemd override that flips the
@@ -709,6 +730,12 @@ ExecStart=%%h/.local/bin/inferd-daemon \
 	dropinPath := filepath.Join(spec.DropinDir, "thlibo.conf")
 	if existing, err := os.ReadFile(dropinPath); err == nil { // #nosec G304 -- our own write path
 		if string(existing) == content {
+			// Idempotent path: drop-in already matches. Still
+			// update the result so the install report says
+			// "llamacpp + model-path" instead of the default
+			// "mock + empty" placeholder.
+			r.BackendConfigured = "llamacpp"
+			r.ModelPath = spec.ModelPath
 			return true, nil
 		}
 	}
