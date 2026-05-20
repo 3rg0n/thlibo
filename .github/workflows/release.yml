@@ -134,16 +134,18 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      # Keyless signing via Sigstore. Each .sig and .pem lands next
-      # to the file it signs; Fulcio issues a short-lived cert bound
-      # to this workflow's OIDC identity (3rg0n/thlibo/.../release.yml
-      # @ the release tag) and Rekor records the signature in the
-      # transparency log. Consumers verify with:
+      # Keyless signing via Sigstore. A `.cosign-bundle` (the v3
+      # bundle format containing both signature and certificate)
+      # lands next to each file. Fulcio issues a short-lived cert
+      # bound to this workflow's OIDC identity
+      # (3rg0n/thlibo/.../release.yml @ the release tag) and Rekor
+      # records the signature in the transparency log. Consumers
+      # verify with:
       #
       #   cosign verify-blob \
       #     --certificate-identity "https://github.com/3rg0n/thlibo/.github/workflows/release.yml@refs/tags/<TAG>" \
       #     --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-      #     --signature file.tar.gz.sig --certificate file.tar.gz.pem \
+      #     --bundle file.tar.gz.cosign-bundle \
       #     file.tar.gz
       #
       # See THREAT_MODEL.md finding #27.
@@ -156,8 +158,7 @@ jobs:
             [ -f "$f" ] || continue
             echo "Signing $f"
             cosign sign-blob --yes \
-              --output-signature "$f.sig" \
-              --output-certificate "$f.pem" \
+              --bundle "$f.cosign-bundle" \
               "$f"
           done
           ls -la
@@ -170,8 +171,7 @@ jobs:
             dist/thlibo-*.zip
             dist/SHA256SUMS
             dist/thlibo-sbom.cdx.json
-            dist/*.sig
-            dist/*.pem
+            dist/*.cosign-bundle
           generate_release_notes: true
           draft: false
           body: |
@@ -200,8 +200,7 @@ jobs:
                     "https://github.com/3rg0n/thlibo/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}" \
                   --certificate-oidc-issuer \
                     "https://token.actions.githubusercontent.com" \
-                  --signature thlibo-linux-amd64.tar.gz.sig \
-                  --certificate thlibo-linux-amd64.tar.gz.pem \
+                  --bundle thlibo-linux-amd64.tar.gz.cosign-bundle \
                   thlibo-linux-amd64.tar.gz
 
             The transparency-log entry is automatically published to
