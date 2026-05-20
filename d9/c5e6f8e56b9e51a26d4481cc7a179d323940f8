@@ -1,0 +1,40 @@
+processors/pdf-to-md/run.py
+  s_5811b7f24eccc0::t_6a8ab488e2b67f 168-176,182-185
+  s_5811b7f24eccc0::t_3d39ef3a4b3304 164-167,177-181,186-188,191-193
+  s_5811b7f24eccc0::t_399b50fe6cd77b 1-163,189-190,194-264
+processors/pdf-to-md/requirements.txt
+  s_5811b7f24eccc0::t_ca8d91a24a4a75 1-2
+processors/pdf-to-md/processor.yaml
+  s_5811b7f24eccc0::t_74ccb75f593637 1-18
+CHANGELOG.md
+  s_5811b7f24eccc0::t_5e6bc34e8ffd66 10-27
+processors/embed.go
+  s_5811b7f24eccc0::t_5869c14ea84b69 20
+docs/adr/0007-pdf-to-markdown.md
+  s_5811b7f24eccc0::t_ddbb123acbc370 1-172
+internal/middleware/builtins_test.go
+  s_5811b7f24eccc0::t_9bdf721859ec42 34-35
+  s_5811b7f24eccc0::t_a2d32e92b6301f 58-59
+README.md
+  s_5811b7f24eccc0::t_94451e0648c8fe 297-301
+docs/adr/README.md
+  s_5811b7f24eccc0::t_52d014782a3794 14
+internal/middleware/embed_test.go
+  s_5811b7f24eccc0::t_c2c306fed47dcb 34-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "d9c5e6f8e56b9e51a26d4481cc7a179d323940f8",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
