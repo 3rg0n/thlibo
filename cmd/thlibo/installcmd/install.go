@@ -186,8 +186,9 @@ func Run(argv []string) int {
 	// a failed download just means the user gets passthrough until
 	// they retry or install inferd manually.
 	if !skipInferd {
-		spec := buildInferdSpec(home, inferdVersion)
+		spec := install.InferdInstallSpec{Version: inferdVersion}
 		ir, err := install.InstallInferd(spec, install.PullOptions{})
+		_ = home // home is reserved for future Mac-specific log-dir setup
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "install: inferd:", err)
 			fmt.Fprintln(os.Stderr, "install: thlibo middleware is fully installed; inferd install failed.")
@@ -347,69 +348,44 @@ func Run(argv []string) int {
 	return 0
 }
 
-// buildInferdSpec resolves per-platform install paths for inferd
-// based on home + the requested version. The returned spec is fed
-// to install.InstallInferd which does the heavy lifting.
-func buildInferdSpec(home, version string) install.InferdInstallSpec {
-	spec := install.InferdInstallSpec{
-		Version: version,
-	}
-	switch runtime.GOOS {
-	case "linux":
-		spec.BinaryDir = filepath.Join(home, ".local", "bin")
-		spec.UnitDir = filepath.Join(home, ".config", "systemd", "user")
-		spec.DropinDir = filepath.Join(home, ".config", "systemd", "user", "inferd.service.d")
-	case "darwin":
-		spec.BinaryDir = filepath.Join(home, ".local", "bin")
-		spec.UnitDir = filepath.Join(home, "Library", "LaunchAgents")
-	case "windows":
-		if appData := os.Getenv("LOCALAPPDATA"); appData != "" {
-			spec.BinaryDir = filepath.Join(appData, "inferd", "bin")
-		} else {
-			spec.BinaryDir = filepath.Join(home, ".local", "bin")
-		}
-	}
-	// Resolve the migrated model path. After v0.5→v0.6 migration
-	// the GGUF lives at the shared model store; if no model is
-	// there the spec is left blank and inferd starts in mock mode.
-	candidate := filepath.Join(install.SharedModelsDir(), "gemma-4-e4b-ud-q4-k-xl.gguf")
-	if _, err := os.Stat(candidate); err == nil {
-		spec.ModelPath = candidate
-	}
-	return spec
-}
-
-// reportInferdInstall prints the InferdInstallResult to stdout in
-// the same indented-bullet format the rest of the installer uses.
+// reportInferdInstall prints the InferdInstallResult in the same
+// indented-bullet format the rest of the installer uses. The output
+// shape depends on which branch of the probe-then-delegate state
+// machine fired:
+//
+//   - UsedExisting: thlibo found inferd already running and didn't
+//     touch anything.
+//   - StartedExisting: thlibo found the binary on disk and started
+//     it via the platform's service manager.
+//   - InstalledFresh: thlibo downloaded the tarball and ran inferd's
+//     bundled installer.
 func reportInferdInstall(ir install.InferdInstallResult) {
-	if ir.ResolvedVersion != "" {
-		fmt.Printf("  inferd %s installed:\n", ir.ResolvedVersion)
-	} else {
-		fmt.Println("  inferd installed:")
-	}
-	if ir.BinaryPath != "" {
-		fmt.Printf("    - binary: %s", ir.BinaryPath)
-		if ir.BinarySize > 0 {
-			fmt.Printf(" (%.1f MB)", float64(ir.BinarySize)/(1<<20))
+	switch {
+	case ir.UsedExisting:
+		if ir.ResolvedVersion != "" {
+			fmt.Printf("  inferd %s already running; using existing daemon\n", ir.ResolvedVersion)
+		} else {
+			fmt.Println("  inferd already running; using existing daemon")
 		}
-		fmt.Println()
+	case ir.StartedExisting:
+		if ir.ResolvedVersion != "" {
+			fmt.Printf("  inferd %s found installed; started\n", ir.ResolvedVersion)
+		} else {
+			fmt.Println("  inferd found installed; started")
+		}
+	case ir.InstalledFresh:
+		if ir.ResolvedVersion != "" {
+			fmt.Printf("  inferd %s installed via inferd's installer\n", ir.ResolvedVersion)
+		} else {
+			fmt.Println("  inferd installed via inferd's installer")
+		}
 	}
 	if ir.CosignVerified {
 		fmt.Println("    - cosign signature verified")
 	}
-	if ir.UnitInstalled {
-		fmt.Println("    - platform unit installed (systemd / LaunchAgent)")
-	}
-	if ir.UnitDropinInstalled {
-		fmt.Printf("    - backend drop-in: --backend %s --model-path %s\n",
-			ir.BackendConfigured, ir.ModelPath)
-	}
 	for _, n := range ir.Notes {
-		fmt.Println("    - note:", n)
+		fmt.Println("    -", n)
 	}
-	fmt.Println("    - to start: systemctl --user enable --now inferd  (Linux)")
-	fmt.Println("                launchctl bootstrap gui/$UID ~/Library/LaunchAgents/io.inferd.daemon.plist  (macOS)")
-	fmt.Println("                see packaging\\install.ps1  (Windows)")
 }
 
 // wslAPEInteropHint returns a non-empty advisory string when we detect

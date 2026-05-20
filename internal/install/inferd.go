@@ -1,32 +1,38 @@
 // Sidecar inferd installer.
 //
 // thlibo v0.6+ is pure middleware: inference moved to the separate
-// inferd daemon. This file owns the "install inferd alongside thlibo
-// at install time" path.
+// inferd daemon. This file owns the "make sure inferd is up before
+// thlibo install completes" path.
 //
-// Design choices:
+// Design philosophy:
 //
-//   - Latest by default, --inferd-version override. We don't pin a
-//     specific inferd release in source — instead we hit
-//     api.github.com/repos/3rg0n/inferd/releases/latest at install
-//     time and fetch whatever's current. Inferd ships often (5
-//     releases in 48h during M2 stabilisation); pinning a single
-//     SHA in thlibo source would be a constant-bump treadmill.
-//   - Cosign verify when available; HTTPS trust otherwise. Each
-//     inferd release ships <asset>.cosign.bundle alongside the
-//     tarball. If `cosign` is on PATH, we shell out and verify-blob
-//     against inferd's keyless OIDC identity. If not, we trust
-//     GitHub's HTTPS. Strongest-when-available, no install-time
-//     dep.
-//   - Use inferd's bundled platform manifest verbatim. Each tarball
-//     has packaging/inferd.service (Linux), packaging/io.inferd.daemon.plist
-//     (macOS), packaging/install.ps1 (Windows). We drop these into
-//     the right system path rather than rolling our own.
-//   - Backend override via systemd drop-in. The bundled unit
-//     defaults to --backend mock; we write a thlibo.conf drop-in
-//     that flips ExecStart to --backend llamacpp pointing at the
-//     migrated GGUF in the shared model store. Users can delete
-//     the drop-in to restore inferd's defaults.
+//	If inferd is already running on this machine, use it.
+//	If inferd is installed but not running, start it.
+//	If inferd is not installed, fetch it and run inferd's
+//	  own bundled installer (thlibo doesn't manage inferd's
+//	  config — inferd owns its own contract).
+//
+// State machine in InstallInferd:
+//
+//	[ probe admin socket ] ── reachable ──► UsedExisting → done
+//	          │
+//	          unreachable
+//	          ▼
+//	[ probe binary on PATH + known dirs ] ── found ──► start it ──► StartedExisting → done
+//	          │
+//	          not found
+//	          ▼
+//	[ download tarball + run inferd's installer ] ──► InstalledFresh → done
+//
+// Things this file deliberately does NOT do:
+//
+//   - Modify inferd's plist / systemd unit.
+//   - Configure --backend, --model-path, or any inferd flag. Inferd
+//     decides its own config from its own installer + env vars.
+//     Users who want a specific backend run `INFERD_BACKEND=llamacpp
+//     <inferd-installer>` themselves; thlibo doesn't second-guess.
+//   - Reinstall inferd if it's already there. Latest-version chasing
+//     is the user's choice via their package manager.
 
 package install
 
@@ -34,12 +40,14 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -51,9 +59,7 @@ import (
 
 const (
 	// inferdLatestURL returns the JSON for the most recent
-	// non-prerelease tag. Releases marked prerelease (e.g.
-	// v0.1.0-alpha.0) are skipped here; consumers wanting alphas
-	// pass --inferd-version explicitly.
+	// non-prerelease tag.
 	inferdLatestURL = "https://api.github.com/repos/3rg0n/inferd/releases/latest"
 
 	// inferdReleaseDLBase is the per-tag asset download root.
@@ -66,32 +72,50 @@ const (
 	cosignIssuer         = "https://token.actions.githubusercontent.com"
 )
 
-// InferdInstallSpec captures everything the installer needs to know
-// about where + how to install inferd.
+// InferdInstallSpec captures what the installer needs to know.
 type InferdInstallSpec struct {
-	// Version is the inferd tag to install, e.g. "v0.1.9". Empty
-	// means "fetch latest from GitHub Releases at install time."
+	// Version pins the inferd tag to install when a fresh install
+	// is needed. Empty means "fetch latest from GitHub Releases."
+	// Ignored when an existing inferd is found running or installed.
 	Version string
-
-	BinaryDir   string // ~/.local/bin or %LOCALAPPDATA%\inferd\bin
-	UnitDir     string // ~/.config/systemd/user, ~/Library/LaunchAgents, or empty
-	DropinDir   string // Linux: ~/.config/systemd/user/inferd.service.d; empty elsewhere
-	ModelPath   string // resolved GGUF path; passed to --model-path. Empty -> mock backend
-	SkipBackendOverride bool
 }
 
-// InferdInstallResult reports what the sidecar installer did.
+// InferdInstallResult reports what the orchestrator did.
 type InferdInstallResult struct {
-	Skipped             bool   // user passed --skip-inferd
-	ResolvedVersion     string // tag we actually fetched (after "latest" resolution)
-	BinaryPath          string
-	BinarySize          int64
-	UnitInstalled       bool
-	UnitDropinInstalled bool
-	BackendConfigured   string // "llamacpp" or "mock"
-	ModelPath           string
-	CosignVerified      bool   // .cosign.bundle was checked + passed
-	Notes               []string
+	// Skipped: the user passed --skip-inferd. No probing, no
+	// install. Other fields are zero.
+	Skipped bool
+
+	// UsedExisting: inferd was already reachable when thlibo
+	// install ran. No download, no start, no config write.
+	UsedExisting bool
+
+	// StartedExisting: an inferd binary was already on disk but
+	// wasn't running. thlibo started it via the platform's
+	// service manager (systemctl --user / launchctl bootstrap /
+	// sc start).
+	StartedExisting bool
+
+	// InstalledFresh: no inferd was found, so thlibo downloaded
+	// the tarball and ran inferd's bundled installer
+	// (packaging/install-launchagent.sh on macOS, etc).
+	InstalledFresh bool
+
+	// ResolvedVersion: the version that ended up active. For
+	// UsedExisting, this is whatever the running daemon reported
+	// in the admin status frame (best-effort; may be empty if
+	// inferd doesn't include it). For StartedExisting and
+	// InstalledFresh, this is whatever the binary was tagged at.
+	ResolvedVersion string
+
+	// CosignVerified: only meaningful on the InstalledFresh path.
+	// True if cosign was on PATH and the .cosign.bundle validated.
+	CosignVerified bool
+
+	// Notes: human-readable lines surfaced by the orchestrator.
+	// The installer prints them inline; users see them in the
+	// `thlibo install` output.
+	Notes []string
 }
 
 // PullOptions matches the shape v0.5's PullEngine used so callers
@@ -104,14 +128,8 @@ type PullOptions struct {
 // total may be 0 if the server did not send Content-Length.
 type ProgressFunc func(written, total int64)
 
-// InstallInferd is the high-level orchestrator: resolve the version,
-// download the matching tarball, verify (cosign if present),
-// extract, drop the binary into BinaryDir, drop the bundled
-// platform manifest into UnitDir, and (Linux only) write a thlibo
-// drop-in that flips the backend to llamacpp.
-//
-// Idempotent: a re-run with the same Version + ModelPath leaves disk
-// unchanged after the version-detection probe + drop-in compare.
+// InstallInferd is the orchestrator. See the file-level state
+// machine for the flow.
 func InstallInferd(spec InferdInstallSpec, opts PullOptions) (InferdInstallResult, error) {
 	var r InferdInstallResult
 	platform := currentPlatform()
@@ -119,7 +137,34 @@ func InstallInferd(spec InferdInstallSpec, opts PullOptions) (InferdInstallResul
 		return r, fmt.Errorf("inferd: %s not supported by inferd's release matrix", platform)
 	}
 
-	// 1. Resolve the requested version. Empty -> latest.
+	// 1. Probe: is inferd already reachable?
+	probeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if reachable, status, version := probeInferdAdmin(probeCtx); reachable {
+		r.UsedExisting = true
+		r.ResolvedVersion = version
+		if status != "" && status != "ready" {
+			r.Notes = append(r.Notes,
+				fmt.Sprintf("inferd is %s; thlibo will fail open until ready", status))
+		}
+		return r, nil
+	}
+
+	// 2. Probe: is the inferd-daemon binary already on disk?
+	if binPath := findInstalledInferdBinary(); binPath != "" {
+		if err := startInstalledInferd(binPath, &r); err != nil {
+			r.Notes = append(r.Notes,
+				fmt.Sprintf("found %s but couldn't start it: %v", binPath, err))
+			r.Notes = append(r.Notes,
+				"start inferd manually (systemctl / launchctl / sc) before re-running thlibo install")
+			return r, nil
+		}
+		r.StartedExisting = true
+		r.ResolvedVersion = readBinaryVersion(binPath)
+		return r, nil
+	}
+
+	// 3. Fresh install: download the tarball + run inferd's installer.
 	version := spec.Version
 	if version == "" {
 		v, err := fetchLatestInferdTag()
@@ -129,56 +174,320 @@ func InstallInferd(spec InferdInstallSpec, opts PullOptions) (InferdInstallResul
 		version = v
 	}
 	r.ResolvedVersion = version
-	r.BinaryPath = filepath.Join(spec.BinaryDir, inferdBinName())
 
-	// 2. Idempotency: if the on-disk inferd reports the same
-	//    version, skip the download.
-	skipDownload := onDiskMatchesVersion(r.BinaryPath, version)
-	if !skipDownload {
-		extractDir, err := pullInferd(version, opts)
-		if err != nil {
-			return r, err
-		}
-		defer os.RemoveAll(extractDir) // #nosec G104 -- best-effort temp cleanup
+	extractDir, err := pullInferd(version, opts)
+	if err != nil {
+		return r, err
+	}
+	defer os.RemoveAll(extractDir) // #nosec G104 -- best-effort temp cleanup
 
-		// 3. Optional cosign verify.
-		if v, note := tryCosignVerify(version, extractDir); v {
-			r.CosignVerified = true
-		} else if note != "" {
-			r.Notes = append(r.Notes, note)
-		}
-
-		// 4. Copy binary into place.
-		srcBin := filepath.Join(extractDir, inferdBinName())
-		if _, err := os.Stat(srcBin); err != nil {
-			return r, fmt.Errorf("inferd: tarball missing %s: %w", inferdBinName(), err)
-		}
-		if err := os.MkdirAll(spec.BinaryDir, 0o755); err != nil {
-			return r, fmt.Errorf("inferd: create %s: %w", spec.BinaryDir, err)
-		}
-		if err := copyFile(srcBin, r.BinaryPath, 0o755); err != nil {
-			return r, err
-		}
-		if info, err := os.Stat(r.BinaryPath); err == nil {
-			r.BinarySize = info.Size()
-		}
-
-		// 5. Drop the bundled platform manifest.
-		if err := installPlatformUnit(spec, extractDir, &r); err != nil {
-			return r, err
-		}
+	// Optional cosign verify.
+	if v, note := tryCosignVerify(version, extractDir); v {
+		r.CosignVerified = true
+	} else if note != "" {
+		r.Notes = append(r.Notes, note)
 	}
 
-	// 6. Backend override drop-in (Linux today; macOS/Windows TODO).
-	if !spec.SkipBackendOverride {
-		if installed, err := writeBackendDropin(spec, &r); err != nil {
-			return r, err
-		} else if installed {
-			r.UnitDropinInstalled = true
-		}
+	if err := runInferdInstaller(extractDir, &r); err != nil {
+		return r, err
 	}
-
+	r.InstalledFresh = true
 	return r, nil
+}
+
+// probeInferdAdmin connects to inferd's admin socket and reads one
+// status frame. Returns (reachable, current-status, version-if-known).
+//
+// The admin socket binds before the inference socket per protocol-v1,
+// so reachable on admin is a stronger signal than reachable on
+// infer.sock. We accept any non-error status as "inferd is up";
+// reporting `loading_model` or `restarting` to the caller as a Note
+// is the orchestrator's job.
+func probeInferdAdmin(ctx context.Context) (reachable bool, status, version string) {
+	addr := defaultInferdAdminAddr()
+	if addr == "" {
+		return false, "", ""
+	}
+
+	conn, err := dialInferdAdmin(ctx, addr)
+	if err != nil {
+		return false, "", ""
+	}
+	defer conn.Close()
+
+	// Read up to one status frame. The daemon writes the snapshot
+	// immediately on connect; if it doesn't show up in the deadline
+	// we treat the daemon as unhealthy enough to skip.
+	_ = conn.SetReadDeadline(time.Now().Add(1500 * time.Millisecond))
+	buf := make([]byte, 8192)
+	n, err := conn.Read(buf)
+	if err != nil || n == 0 {
+		// Connection succeeded but no frame — daemon process is
+		// up enough to bind the socket but not far enough to
+		// publish a status. Treat as reachable; let the caller
+		// surface the partial-readiness if it matters.
+		return true, "", ""
+	}
+
+	// Frames are NDJSON; we may have read more than one in the
+	// buffer. Use the first complete line.
+	line := buf[:n]
+	if idx := indexByteFrame(line); idx >= 0 {
+		line = line[:idx]
+	}
+	var frame struct {
+		Status  string `json:"status"`
+		Detail  any    `json:"detail,omitempty"`
+		Version string `json:"version,omitempty"`
+	}
+	if err := json.Unmarshal(line, &frame); err != nil {
+		return true, "", ""
+	}
+	return true, frame.Status, frame.Version
+}
+
+func indexByteFrame(b []byte) int {
+	for i, c := range b {
+		if c == '\n' {
+			return i
+		}
+	}
+	return -1
+}
+
+// dialInferdAdmin connects to inferd's admin socket on this platform.
+// Linux/macOS: Unix domain socket. Windows: named pipe.
+func dialInferdAdmin(ctx context.Context, addr string) (net.Conn, error) {
+	if runtime.GOOS == "windows" {
+		// Use the same os.OpenFile retry shape as inferdcli's
+		// pipe dialer; can't import inferdcli here without a
+		// cycle. Best-effort, short timeout.
+		return openWindowsPipe(ctx, addr)
+	}
+	var d net.Dialer
+	return d.DialContext(ctx, "unix", addr)
+}
+
+// defaultInferdAdminAddr returns the admin socket location inferd
+// publishes per protocol-v1. Mirrors inferdcli.DefaultAdminAddress
+// without the import dependency.
+func defaultInferdAdminAddr() string {
+	switch runtime.GOOS {
+	case "linux":
+		if d := os.Getenv("XDG_RUNTIME_DIR"); d != "" {
+			return filepath.Join(d, "inferd", "admin.sock")
+		}
+		if h, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(h, ".inferd", "run", "admin.sock")
+		}
+		return filepath.Join(os.TempDir(), "inferd", "admin.sock")
+	case "darwin":
+		return filepath.Join(os.TempDir(), "inferd", "admin.sock")
+	case "windows":
+		return `\\.\pipe\inferd-admin`
+	}
+	return ""
+}
+
+// findInstalledInferdBinary returns the path to inferd-daemon if it's
+// present in any of the canonical locations. Empty string means not
+// found.
+func findInstalledInferdBinary() string {
+	name := inferdBinName()
+	candidates := []string{}
+
+	// $PATH lookup first — covers brew, apt, manual installs.
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+
+	// Per-user known dirs (the spots inferd's own installer drops
+	// the binary into).
+	home, err := os.UserHomeDir()
+	if err == nil {
+		switch runtime.GOOS {
+		case "linux", "darwin":
+			candidates = append(candidates, filepath.Join(home, ".local", "bin", name))
+			candidates = append(candidates, "/usr/local/bin/"+name)
+		case "windows":
+			if appData := os.Getenv("LOCALAPPDATA"); appData != "" {
+				candidates = append(candidates, filepath.Join(appData, "inferd", "bin", name))
+			}
+		}
+	}
+
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && !info.IsDir() {
+			return c
+		}
+	}
+	return ""
+}
+
+// startInstalledInferd asks the platform's service manager to bring
+// up the existing inferd binary. Assumes the unit / plist / Windows
+// service is already registered (true if inferd was installed via
+// its own installer previously).
+func startInstalledInferd(binPath string, r *InferdInstallResult) error {
+	switch runtime.GOOS {
+	case "linux":
+		// Try the user systemd unit first. If the unit doesn't
+		// exist, fall back to running the daemon in the background
+		// and let the caller deal with persistence.
+		if err := runCommand("systemctl", "--user", "start", "inferd.service"); err == nil {
+			r.Notes = append(r.Notes, "started inferd via `systemctl --user start inferd`")
+			return nil
+		}
+		// Fall back: spawn the binary detached.
+		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+		cmd := exec.Command(binPath) // #nosec G204 -- binPath came from findInstalledInferdBinary
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("spawn inferd: %w", err)
+		}
+		r.Notes = append(r.Notes,
+			"systemd unit not registered; started inferd as a detached process — register with `inferd's installer` for persistence")
+		return nil
+	case "darwin":
+		// Bootstrap the LaunchAgent. If the plist isn't there,
+		// fail loud — inferd's own installer was supposed to put
+		// it there.
+		home, _ := os.UserHomeDir()
+		plist := filepath.Join(home, "Library", "LaunchAgents", "io.inferd.daemon.plist")
+		if _, err := os.Stat(plist); err != nil {
+			return fmt.Errorf("inferd: LaunchAgent plist missing at %s; run inferd's installer", plist)
+		}
+		uid := fmt.Sprintf("%d", os.Getuid())
+		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+		if err := runCommand("launchctl", "bootstrap", "gui/"+uid, plist); err != nil {
+			// Already-loaded? Try a kickstart.
+			_ = runCommand("launchctl", "kickstart", "gui/"+uid+"/io.inferd.daemon")
+		}
+		r.Notes = append(r.Notes, "started inferd via `launchctl bootstrap`")
+		return nil
+	case "windows":
+		// Try `sc.exe start`. If the service isn't registered we
+		// can't auto-register it (inferd's install.ps1 needs
+		// admin), so we surface a clear note.
+		if err := runCommand("sc.exe", "start", "inferd-daemon"); err == nil {
+			r.Notes = append(r.Notes, "started inferd via `sc.exe start inferd-daemon`")
+			return nil
+		}
+		return fmt.Errorf("inferd: 'sc.exe start inferd-daemon' failed; run inferd's install.ps1 elevated")
+	}
+	return fmt.Errorf("inferd: don't know how to start on %s", runtime.GOOS)
+}
+
+// readBinaryVersion shells the binary with --version and returns the
+// version string it prints. Returns empty on any failure.
+func readBinaryVersion(binPath string) string {
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+	out, err := exec.Command(binPath, "--version").Output() // #nosec G204 -- binPath is from findInstalledInferdBinary
+	if err != nil {
+		return ""
+	}
+	// Format is "inferd-daemon 0.1.12" — just return the trailing
+	// token so callers can compare or display it.
+	parts := strings.Fields(strings.TrimSpace(string(out)))
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
+}
+
+// runInferdInstaller invokes inferd's bundled platform installer.
+//   - macOS: packaging/install-launchagent.sh (substitutes plist
+//     placeholders, creates ~/Library/Logs/inferd, bootstraps the
+//     LaunchAgent).
+//   - Linux: there's no bundled install-systemd.sh in v0.1.12; we
+//     install the unit ourselves (just copy file) and start it.
+//   - Windows: packaging\install.ps1 (needs admin).
+func runInferdInstaller(extractDir string, r *InferdInstallResult) error {
+	switch runtime.GOOS {
+	case "darwin":
+		script := filepath.Join(extractDir, "packaging", "install-launchagent.sh")
+		if _, err := os.Stat(script); err != nil {
+			return fmt.Errorf("inferd: tarball missing packaging/install-launchagent.sh: %w", err)
+		}
+		// Pass the path to the binary inside the extract dir as
+		// the script's argument; it'll resolve __BIN__ to that.
+		bin := filepath.Join(extractDir, inferdBinName())
+		if _, err := os.Stat(bin); err != nil {
+			return fmt.Errorf("inferd: tarball missing %s: %w", inferdBinName(), err)
+		}
+		// First copy the binary somewhere stable — the script
+		// substitutes __BIN__ with the path we pass, so it has to
+		// be a path that survives extractDir cleanup.
+		home, _ := os.UserHomeDir()
+		stableBin := filepath.Join(home, ".local", "bin", inferdBinName())
+		if err := os.MkdirAll(filepath.Dir(stableBin), 0o755); err != nil {
+			return fmt.Errorf("inferd: create %s: %w", filepath.Dir(stableBin), err)
+		}
+		if err := copyFile(bin, stableBin, 0o755); err != nil {
+			return err
+		}
+		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+		cmd := exec.Command(script, stableBin) // #nosec G204 -- script + path are from our extract tree
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("inferd: install-launchagent.sh: %w", err)
+		}
+		r.Notes = append(r.Notes,
+			fmt.Sprintf("installed inferd via packaging/install-launchagent.sh (binary at %s)", stableBin))
+		return nil
+
+	case "linux":
+		// Inferd v0.1.12 doesn't bundle an install-systemd.sh, so
+		// thlibo does the minimal job: drop the binary at
+		// ~/.local/bin, install the unit at
+		// ~/.config/systemd/user, daemon-reload + enable + start.
+		// This stays the smallest possible "do what inferd's
+		// future installer would do."
+		home, _ := os.UserHomeDir()
+		bin := filepath.Join(extractDir, inferdBinName())
+		stableBin := filepath.Join(home, ".local", "bin", inferdBinName())
+		if err := os.MkdirAll(filepath.Dir(stableBin), 0o755); err != nil {
+			return fmt.Errorf("inferd: create %s: %w", filepath.Dir(stableBin), err)
+		}
+		if err := copyFile(bin, stableBin, 0o755); err != nil {
+			return err
+		}
+		unitSrc := filepath.Join(extractDir, "packaging", "inferd.service")
+		unitDst := filepath.Join(home, ".config", "systemd", "user", "inferd.service")
+		if err := os.MkdirAll(filepath.Dir(unitDst), 0o755); err != nil {
+			return fmt.Errorf("inferd: create unit dir: %w", err)
+		}
+		if err := copyFile(unitSrc, unitDst, 0o644); err != nil {
+			return err
+		}
+		_ = runCommand("systemctl", "--user", "daemon-reload")
+		if err := runCommand("systemctl", "--user", "enable", "--now", "inferd.service"); err != nil {
+			return fmt.Errorf("inferd: systemctl enable --now: %w", err)
+		}
+		r.Notes = append(r.Notes,
+			fmt.Sprintf("installed inferd at %s and enabled inferd.service", stableBin))
+		return nil
+
+	case "windows":
+		script := filepath.Join(extractDir, "packaging", "install.ps1")
+		if _, err := os.Stat(script); err != nil {
+			return fmt.Errorf("inferd: tarball missing packaging\\install.ps1: %w", err)
+		}
+		r.Notes = append(r.Notes,
+			fmt.Sprintf("Windows: run inferd's installer manually from elevated PowerShell: %s", script))
+		return nil
+	}
+	return fmt.Errorf("inferd: don't know how to install on %s", runtime.GOOS)
+}
+
+// runCommand wraps exec.Command with stdout/stderr inherited so the
+// user sees the underlying tool's output.
+func runCommand(name string, args ...string) error {
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+	cmd := exec.Command(name, args...) // #nosec G204 -- name + args are constants from this package
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // fetchLatestInferdTag hits the GitHub Releases API and returns the
@@ -209,17 +518,13 @@ func fetchLatestInferdTag() (string, error) {
 		return "", errors.New("GitHub API returned empty tag_name")
 	}
 	if payload.Prerelease {
-		// /releases/latest never returns prereleases per the API
-		// contract, but defend in depth in case GitHub changes
-		// behaviour.
 		return "", fmt.Errorf("GitHub returned prerelease %s; pass --inferd-version to install a prerelease", payload.TagName)
 	}
 	return payload.TagName, nil
 }
 
-// pullInferd downloads + extracts the tarball/zip for version into
-// a fresh temp directory. Returns the directory containing
-// inferd-daemon + packaging/.
+// pullInferd downloads + extracts the tarball/zip for version into a
+// fresh temp directory.
 func pullInferd(version string, opts PullOptions) (string, error) {
 	platform := currentPlatform()
 	asset := assetNameFor(version, platform)
@@ -236,16 +541,13 @@ func pullInferd(version string, opts PullOptions) (string, error) {
 	if err := download(url, archivePath, opts.Progress); err != nil {
 		return "", err
 	}
-	// Capture the SHA-256 we observed for the result struct.
 	if _, err := sha256OfFile(archivePath); err != nil {
 		return "", err
 	}
 
-	// Optionally also fetch the .cosign.bundle for verification later.
 	bundleURL := url + ".cosign.bundle"
 	bundlePath := archivePath + ".cosign.bundle"
 	if err := download(bundleURL, bundlePath, nil); err != nil {
-		// Bundle isn't fatal; we just won't verify if it's missing.
 		_ = os.Remove(bundlePath)
 	}
 
@@ -266,17 +568,12 @@ func pullInferd(version string, opts PullOptions) (string, error) {
 }
 
 // tryCosignVerify runs `cosign verify-blob` against the bundle if
-// cosign is on PATH. Returns (verified, advisory-note). Verified=true
-// means the signature checked out; note is non-empty when we want
-// the installer to surface an explanation (cosign missing, bundle
-// missing, verify failed).
+// cosign is on PATH.
 func tryCosignVerify(version, extractDir string) (bool, string) {
 	cosignPath, err := exec.LookPath("cosign")
 	if err != nil {
 		return false, "cosign not on PATH; skipped signature verify (HTTPS trust only)"
 	}
-	// The bundle + tarball both live in the parent of extractDir
-	// (we MkdirTemp/archive.tar.gz, MkdirTemp/extracted/...).
 	parent := filepath.Dir(extractDir)
 	platform := currentPlatform()
 	asset := assetNameFor(version, platform)
@@ -300,28 +597,8 @@ func tryCosignVerify(version, extractDir string) (bool, string) {
 	return true, ""
 }
 
-// onDiskMatchesVersion runs `<bin> --version` and reports whether
-// the output ends with the requested tag. Returns false silently if
-// the binary is missing, unreadable, or doesn't speak --version.
-func onDiskMatchesVersion(binPath, wantVersion string) bool {
-	if _, err := os.Stat(binPath); err != nil {
-		return false
-	}
-	// #nosec G204 -- binPath is a path we resolved + own; argv is constant
-	cmd := exec.Command(binPath, "--version")
-	cmd.Stdin = nil
-	out, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	// Format is e.g. "inferd-daemon 0.1.9". Match either with or
-	// without the leading "v".
-	want := strings.TrimPrefix(wantVersion, "v")
-	return strings.Contains(string(out), want)
-}
-
-// download streams url to dest. Returns the SHA-256 it observed.
-// 200 MB cap is generous for inferd (~3-4 MB tarballs).
+// download streams url to dest. 200 MB cap is generous for inferd
+// (~3-9 MB tarballs).
 func download(url, dest string, progress ProgressFunc) error {
 	const maxBytes = 200 << 20
 	client := &http.Client{Timeout: 5 * time.Minute}
@@ -370,9 +647,6 @@ func download(url, dest string, progress ProgressFunc) error {
 	return nil
 }
 
-// sha256OfFile returns the hex-encoded SHA-256 of path. Used for the
-// installer to record what it actually fetched (separate from
-// signature verify).
 func sha256OfFile(path string) (string, error) {
 	f, err := os.Open(path) // #nosec G304 -- caller-controlled path inside our temp dir
 	if err != nil {
@@ -387,8 +661,7 @@ func sha256OfFile(path string) (string, error) {
 }
 
 // extractTarGz extracts src.tar.gz into dst. Strips one leading path
-// component (inferd's tarballs put everything under
-// inferd-vX.Y.Z-<platform>/...). Refuses paths that escape dst.
+// component (inferd-vX.Y.Z-<platform>/...). Refuses paths that escape dst.
 func extractTarGz(src, dst string) error {
 	f, err := os.Open(src) // #nosec G304 -- our own download path
 	if err != nil {
@@ -444,9 +717,6 @@ func extractTarGz(src, dst string) error {
 	return nil
 }
 
-// extractZip extracts src.zip into dst with the same path-strip
-// (inferd-vX.Y.Z-x86_64-pc-windows-msvc/...) and zip-slip
-// protection.
 func extractZip(src, dst string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {
@@ -493,8 +763,6 @@ func extractZip(src, dst string) error {
 	return nil
 }
 
-// stripLeadingComponent removes the first path component, e.g.
-// "inferd-v0.1.9-linux/inferd-daemon" -> "inferd-daemon".
 func stripLeadingComponent(p string) string {
 	p = strings.TrimPrefix(filepath.ToSlash(p), "./")
 	idx := strings.IndexRune(p, '/')
@@ -508,7 +776,6 @@ func stripLeadingComponent(p string) string {
 	return filepath.FromSlash(rest)
 }
 
-// safeJoin refuses archive entries that resolve outside base.
 func safeJoin(base, rel string) (string, error) {
 	full := filepath.Join(base, rel)
 	abs, err := filepath.Abs(full)
@@ -524,227 +791,6 @@ func safeJoin(base, rel string) (string, error) {
 		return "", fmt.Errorf("inferd: archive entry %q escapes extract dir", rel)
 	}
 	return full, nil
-}
-
-// installPlatformUnit drops the bundled manifest from the inferd
-// tarball into the right system path.
-func installPlatformUnit(spec InferdInstallSpec, extractDir string, r *InferdInstallResult) error {
-	if spec.UnitDir == "" {
-		return nil
-	}
-	switch runtime.GOOS {
-	case "linux":
-		src := filepath.Join(extractDir, "packaging", "inferd.service")
-		if _, err := os.Stat(src); err != nil {
-			r.Notes = append(r.Notes, "tarball missing packaging/inferd.service; skipping unit install")
-			return nil
-		}
-		dst := filepath.Join(spec.UnitDir, "inferd.service")
-		if err := os.MkdirAll(spec.UnitDir, 0o755); err != nil {
-			return fmt.Errorf("inferd: create unit dir: %w", err)
-		}
-		if err := copyFile(src, dst, 0o644); err != nil {
-			return err
-		}
-		r.UnitInstalled = true
-	case "darwin":
-		src := filepath.Join(extractDir, "packaging", "io.inferd.daemon.plist")
-		if _, err := os.Stat(src); err != nil {
-			r.Notes = append(r.Notes, "tarball missing packaging/io.inferd.daemon.plist; skipping LaunchAgent install")
-			return nil
-		}
-		dst := filepath.Join(spec.UnitDir, "io.inferd.daemon.plist")
-		if err := os.MkdirAll(spec.UnitDir, 0o755); err != nil {
-			return fmt.Errorf("inferd: create LaunchAgents dir: %w", err)
-		}
-		// Inferd v0.1.9's bundled plist ships with three problems:
-		//
-		//   1. Literal `USERNAME_HERE` in every $HOME-relative path
-		//      (launchd doesn't expand $HOME inside <string>).
-		//   2. Hardcoded `/usr/local/bin/inferd-daemon` for the
-		//      ProgramArguments[0] which doesn't match where this
-		//      installer actually drops the binary.
-		//   3. --uds / --lock paths point at
-		//      `~/Library/Application Support/inferd/...` while
-		//      thlibo's inferd client + the inferd protocol-v1
-		//      default both use $TMPDIR/inferd/... — wire never
-		//      connects.
-		//
-		// Filed upstream against inferd. Substituting on install
-		// here keeps Mac users functional today; remove this
-		// indirection once inferd ships a fixed template.
-		if err := copyMacPlistWithFixes(src, dst, spec, r); err != nil {
-			return err
-		}
-		r.UnitInstalled = true
-	case "windows":
-		// install.ps1 needs admin; skip auto-run from `thlibo
-		// install`. Note the user.
-		r.Notes = append(r.Notes,
-			`Windows: run inferd's packaging\install.ps1 from an elevated PowerShell to register the service`)
-	}
-	return nil
-}
-
-// copyMacPlistWithFixes performs the install-time substitution that
-// inferd's v0.1.11+ plist template requires. The shipped plist uses
-// three placeholders that launchd does NOT expand at load time
-// (Mac confirmed empirically — $TMPDIR, ${HOME}, ~ all arrive
-// literally in ProgramArguments / EnvironmentVariables / *Path
-// keys). The bundled README documents an equivalent sed pipeline:
-//
-//	sed -e "s|__HOME__|$HOME|g" \
-//	    -e "s|__TMPDIR__|$(getconf DARWIN_USER_TEMP_DIR)|g" \
-//	    -e "s|__BIN__|/usr/local/bin/inferd-daemon|g"
-//
-// The plist already references the right semantics (admin socket
-// on $TMPDIR, no Application-Support paths, --admin-addr present).
-// This helper just resolves the placeholders for thlibo's install
-// site.
-//
-// Inferd's release artifact promised an install-launchagent.sh
-// helper that would do this for us, but it isn't bundled in the
-// v0.1.11 tarball. Filed back upstream; meanwhile we do the
-// substitution ourselves.
-func copyMacPlistWithFixes(src, dst string, spec InferdInstallSpec, r *InferdInstallResult) error {
-	raw, err := os.ReadFile(src) // #nosec G304 -- src is under our temp extract dir
-	if err != nil {
-		return fmt.Errorf("inferd: read plist: %w", err)
-	}
-	body := string(raw)
-
-	// Defend against a stale plist still using the v0.1.9 USERNAME_HERE
-	// scheme: log a clear note and bail out.
-	if strings.Contains(body, "USERNAME_HERE") {
-		return fmt.Errorf("inferd: plist still uses v0.1.9 USERNAME_HERE scheme; bump the inferd pin")
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("inferd: resolve home: %w", err)
-	}
-
-	// __TMPDIR__ resolves to per-user temp dir WITH a trailing
-	// slash, because the plist template's paths read
-	// "__TMPDIR__inferd/..." with no separator between placeholder
-	// and "inferd". inferd's README uses
-	// $(getconf DARWIN_USER_TEMP_DIR) which returns
-	// "/var/folders/<hash>/T/" — already trailing-slashed. We
-	// match that by appending os.PathSeparator if not present.
-	tmpdir := os.TempDir()
-	if !strings.HasSuffix(tmpdir, string(os.PathSeparator)) {
-		tmpdir += string(os.PathSeparator)
-	}
-
-	wantBinary := filepath.Join(spec.BinaryDir, inferdBinName())
-
-	body = strings.ReplaceAll(body, "__BIN__", wantBinary)
-	body = strings.ReplaceAll(body, "__HOME__", home)
-	body = strings.ReplaceAll(body, "__TMPDIR__", tmpdir)
-
-	// Sanity check: any leftover placeholder means we missed a
-	// rename inferd added in a later release. Better to fail loud
-	// than ship a broken plist.
-	if rem := findLeftoverPlaceholder(body); rem != "" {
-		return fmt.Errorf("inferd: plist contains unresolved placeholder %q after substitution; bump inferd pin or extend copyMacPlistWithFixes", rem)
-	}
-
-	if err := os.WriteFile(dst, []byte(body), 0o644); err != nil { // #nosec G306 -- launchd reads this
-		return fmt.Errorf("inferd: write plist: %w", err)
-	}
-	return nil
-}
-
-// findLeftoverPlaceholder returns the first __FOO__ token still
-// present in body, or "" if none. We use a simple two-step scan
-// rather than a regex to keep the dependency surface small.
-func findLeftoverPlaceholder(body string) string {
-	idx := strings.Index(body, "__")
-	if idx < 0 {
-		return ""
-	}
-	tail := body[idx+2:]
-	end := strings.Index(tail, "__")
-	if end < 0 {
-		return ""
-	}
-	// __FOO__ — must be uppercase + underscores only between the
-	// markers, otherwise it's a coincidence in user content.
-	token := tail[:end]
-	for _, r := range token {
-		if !((r >= 'A' && r <= 'Z') || r == '_') {
-			return ""
-		}
-	}
-	return "__" + token + "__"
-}
-
-// writeBackendDropin writes a small systemd override that flips the
-// daemon to --backend llamacpp pointing at spec.ModelPath. Currently
-// Linux-only; macOS launchd plist override + Windows service config
-// are TODO.
-//
-// Returns (installed, err). installed=true means the drop-in is now
-// at the expected path with the expected content (whether we wrote
-// it or it was already there).
-func writeBackendDropin(spec InferdInstallSpec, r *InferdInstallResult) (bool, error) {
-	r.BackendConfigured = "mock"
-	if spec.ModelPath == "" {
-		r.Notes = append(r.Notes,
-			"no model on disk; inferd will run --backend mock until a model is available")
-		return false, nil
-	}
-	switch runtime.GOOS {
-	case "linux":
-		return writeLinuxDropin(spec, r)
-	case "darwin", "windows":
-		r.Notes = append(r.Notes,
-			fmt.Sprintf("backend override not yet automated on %s; inferd will start --backend mock; configure manually for real inference", runtime.GOOS))
-		return false, nil
-	default:
-		return false, nil
-	}
-}
-
-func writeLinuxDropin(spec InferdInstallSpec, r *InferdInstallResult) (bool, error) {
-	if spec.DropinDir == "" {
-		return false, fmt.Errorf("inferd: DropinDir must be set on Linux")
-	}
-	if err := os.MkdirAll(spec.DropinDir, 0o755); err != nil {
-		return false, fmt.Errorf("inferd: create dropin dir: %w", err)
-	}
-	content := fmt.Sprintf(`# thlibo-owned drop-in: switch inferd to --backend llamacpp pointing at
-# the shared model store. Written by `+"`thlibo install`"+`. Safe to
-# delete if you want to manage inferd's backend yourself.
-
-[Service]
-ExecStart=
-ExecStart=%%h/.local/bin/inferd-daemon \
-    --backend llamacpp \
-    --model-path %s \
-    --lock %%t/inferd/inferd.lock \
-    --uds %%t/inferd/infer.sock \
-    --admin-addr %%t/inferd/admin.sock
-`, escapeForUnit(spec.ModelPath))
-
-	dropinPath := filepath.Join(spec.DropinDir, "thlibo.conf")
-	if existing, err := os.ReadFile(dropinPath); err == nil { // #nosec G304 -- our own write path
-		if string(existing) == content {
-			// Idempotent path: drop-in already matches. Still
-			// update the result so the install report says
-			// "llamacpp + model-path" instead of the default
-			// "mock + empty" placeholder.
-			r.BackendConfigured = "llamacpp"
-			r.ModelPath = spec.ModelPath
-			return true, nil
-		}
-	}
-	if err := os.WriteFile(dropinPath, []byte(content), 0o644); err != nil { // #nosec G306 -- systemd reads this
-		return false, fmt.Errorf("inferd: write dropin: %w", err)
-	}
-	r.BackendConfigured = "llamacpp"
-	r.ModelPath = spec.ModelPath
-	return true, nil
 }
 
 // copyFile copies src to dst with mode.
@@ -768,18 +814,8 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	return out.Close()
 }
 
-// escapeForUnit handles paths containing spaces / quotes for the
-// systemd ExecStart line.
-func escapeForUnit(s string) string {
-	if !strings.ContainsAny(s, " \t\"") {
-		return s
-	}
-	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
-}
-
 // assetNameFor returns the inferd release asset filename for
-// (version, platform). Patterns track inferd's release.yml — they
-// use Rust target triples, not Go GOOS-GOARCH.
+// (version, platform). Patterns track inferd's release.yml.
 func assetNameFor(version, platform string) string {
 	v := strings.TrimPrefix(version, "v")
 	switch platform {
@@ -795,19 +831,14 @@ func assetNameFor(version, platform string) string {
 	return ""
 }
 
-// platformSupported reports whether the current GOOS-GOARCH appears
-// in inferd's release matrix.
 func platformSupported(platform string) bool {
 	return assetNameFor("v0.0.0", platform) != ""
 }
 
-// currentPlatform returns the GOOS-GOARCH key thlibo uses for its
-// inferd-platform decisions.
 func currentPlatform() string {
 	return runtime.GOOS + "-" + runtime.GOARCH
 }
 
-// inferdBinName returns the platform-correct binary name.
 func inferdBinName() string {
 	if runtime.GOOS == "windows" {
 		return "inferd-daemon.exe"

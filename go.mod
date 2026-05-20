@@ -8,4 +8,4 @@ require github.com/Microsoft/go-winio v0.6.2
 
 require gopkg.in/yaml.v3 v3.0.1
 
-require github.com/3rg0n/inferd/clients/go v0.0.0-20260520164236-741b999c9c40 // indirect
+require github.com/3rg0n/inferd/clients/go v0.0.0-20260520173420-ac020bb1023f // indirect

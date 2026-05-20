@@ -4,6 +4,8 @@ github.com/3rg0n/inferd/clients/go v0.0.0-20260520143558-ac1edf7c9c3f h1:pdqDtAE
 github.com/3rg0n/inferd/clients/go v0.0.0-20260520143558-ac1edf7c9c3f/go.mod h1:1HZtej0Y1+T2+qfoKpyvFDMC6KcDRrX6GaTLL5lW4WQ=
 github.com/3rg0n/inferd/clients/go v0.0.0-20260520164236-741b999c9c40 h1:nu9zkPI8PBErw5vi5fXmslXPNxQX/BvzkkIj6LZnHWs=
 github.com/3rg0n/inferd/clients/go v0.0.0-20260520164236-741b999c9c40/go.mod h1:1HZtej0Y1+T2+qfoKpyvFDMC6KcDRrX6GaTLL5lW4WQ=
+github.com/3rg0n/inferd/clients/go v0.0.0-20260520173420-ac020bb1023f h1:c9zF+5FepZQqF6vAgBTUR7pAvrHluUDYi7A8MmdMjS0=
+github.com/3rg0n/inferd/clients/go v0.0.0-20260520173420-ac020bb1023f/go.mod h1:1HZtej0Y1+T2+qfoKpyvFDMC6KcDRrX6GaTLL5lW4WQ=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 golang.org/x/sys v0.20.0 h1:Od9JTbYCk261bKm4M/mw7AklTlFYIa0bIp9BgSm1S8Y=
