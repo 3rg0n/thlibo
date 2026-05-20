@@ -1,0 +1,77 @@
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_10c13b814b4a9f 38-42,46-52,59-60,128-131,133,144-177,184-198,200-204,351-390
+cmd/thlibo/shorthandcmd/shorthand.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 36,38,236,240,271,274,276,296-300,303-304,306-307,312,316-318
+processors/pdf-to-md/run.py
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-327
+internal/install/inferd_pipe_windows.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-67
+internal/install/migrate_v05_test.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-186
+go.mod
+  s_5811b7f24eccc0::t_2c75deea7d8186 10-11
+internal/router/router.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 17-18,45,54,67,86,102-104,236-238,240,259,271
+internal/install/inferd_pipe_unix.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-16
+processors/pdf-to-md/requirements.txt
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-2
+processors/pdf-to-md/processor.yaml
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-18
+internal/inferdcli/addr.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-60
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-909
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 73-76
+README.md
+  s_5811b7f24eccc0::t_2c75deea7d8186 297-301
+cmd/thlibo/execcmd/pipeline.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 4,9,19-20,22
+internal/adapters/claudecode/hook-read.sh
+  s_5811b7f24eccc0::t_2c75deea7d8186 37-39,42,46-57
+cmd/thlibo/compresscmd/compress.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 21,72-73
+internal/inferdcli/dial_unix.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-15
+docs/adr/0007-pdf-to-markdown.md
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-215
+internal/middleware/embed_test.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 34-35
+cmd/thlibo/execcmd/exec.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 33,233
+internal/middleware/builtins_test.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 34-35,58-59
+internal/inferdcli/inferdcli_test.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-187
+internal/adapters/claudecode/hook-read.ps1
+  s_5811b7f24eccc0::t_2c75deea7d8186 33-34,36,39-50
+internal/install/migrate_v05.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-337
+docs/adr/README.md
+  s_5811b7f24eccc0::t_2c75deea7d8186 14
+processors/embed.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 20
+internal/inferdcli/dial_windows.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-66
+internal/inferdcli/inferdcli.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 1-182
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_2c75deea7d8186 20-21,165-167,169,172-173,178,185,187-189,207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "527eec0c992f8c777ad8386e882b49ed489c3bfd",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
