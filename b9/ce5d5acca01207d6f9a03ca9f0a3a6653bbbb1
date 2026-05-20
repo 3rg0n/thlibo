@@ -1,0 +1,31 @@
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_75681825f47f2c 856-861
+  s_5811b7f24eccc0::t_68490e2c083d44 431,434,458,461,466,508,511,514,615,757,761,796,801
+  s_5811b7f24eccc0::t_baa6cc0553922f 764
+  s_5811b7f24eccc0::t_c59fb537c0dfcb 507
+  s_5811b7f24eccc0::t_b85ee0b2e05f61 328
+internal/install/migrate_v05.go
+  s_5811b7f24eccc0::t_a46bd0c49ce19a 240,244
+  s_5811b7f24eccc0::t_e26b429ff942ab 280-284,286,293
+  s_5811b7f24eccc0::t_b48268d1a97f4b 316
+internal/inferdcli/dial_windows.go
+  s_5811b7f24eccc0::t_a37750adce5ee1 25
+internal/install/inferd_pipe_windows.go
+  s_5811b7f24eccc0::t_fb431d83893c8b 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "b9ce5d5acca01207d6f9a03ca9f0a3a6653bbbb1",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
