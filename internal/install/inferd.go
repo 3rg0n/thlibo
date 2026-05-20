@@ -557,7 +557,23 @@ func installPlatformUnit(spec InferdInstallSpec, extractDir string, r *InferdIns
 		if err := os.MkdirAll(spec.UnitDir, 0o755); err != nil {
 			return fmt.Errorf("inferd: create LaunchAgents dir: %w", err)
 		}
-		if err := copyFile(src, dst, 0o644); err != nil {
+		// Inferd v0.1.9's bundled plist ships with three problems:
+		//
+		//   1. Literal `USERNAME_HERE` in every $HOME-relative path
+		//      (launchd doesn't expand $HOME inside <string>).
+		//   2. Hardcoded `/usr/local/bin/inferd-daemon` for the
+		//      ProgramArguments[0] which doesn't match where this
+		//      installer actually drops the binary.
+		//   3. --uds / --lock paths point at
+		//      `~/Library/Application Support/inferd/...` while
+		//      thlibo's inferd client + the inferd protocol-v1
+		//      default both use $TMPDIR/inferd/... — wire never
+		//      connects.
+		//
+		// Filed upstream against inferd. Substituting on install
+		// here keeps Mac users functional today; remove this
+		// indirection once inferd ships a fixed template.
+		if err := copyMacPlistWithFixes(src, dst, spec, r); err != nil {
 			return err
 		}
 		r.UnitInstalled = true
@@ -566,6 +582,78 @@ func installPlatformUnit(spec InferdInstallSpec, extractDir string, r *InferdIns
 		// install`. Note the user.
 		r.Notes = append(r.Notes,
 			`Windows: run inferd's packaging\install.ps1 from an elevated PowerShell to register the service`)
+	}
+	return nil
+}
+
+// copyMacPlistWithFixes patches inferd's bundled v0.1.9 plist on the
+// way to ~/Library/LaunchAgents/. Three classes of substitution:
+//
+//   - Replace literal "USERNAME_HERE" with the real username (the
+//     basename of $HOME). launchd does not expand $HOME inside
+//     <string> elements; the unsubstituted template makes launchd
+//     fail with EX_CONFIG (78) on bootstrap.
+//   - Replace "/usr/local/bin/inferd-daemon" with the actual binary
+//     path the installer dropped at spec.BinaryDir.
+//   - Replace the daemon's --lock and --uds paths in
+//     ProgramArguments from
+//     "/Users/USERNAME_HERE/Library/Application Support/inferd/..."
+//     to "$TMPDIR/inferd/..." (which launchd does expand from the
+//     daemon's session env). This matches what thlibo's inferdcli
+//     dials by default — without this, the daemon binds a socket
+//     at one path and the client looks for it at another.
+//
+// Tracked upstream as https://github.com/3rg0n/inferd/issues/N
+// (filed alongside this code). Once inferd ships a corrected
+// template this whole helper can be replaced with the original
+// copyFile call.
+func copyMacPlistWithFixes(src, dst string, spec InferdInstallSpec, r *InferdInstallResult) error {
+	raw, err := os.ReadFile(src) // #nosec G304 -- src is under our temp extract dir
+	if err != nil {
+		return fmt.Errorf("inferd: read plist: %w", err)
+	}
+	out := string(raw)
+
+	// 1. Username substitution. We use the basename of $HOME
+	//    rather than `id -un` to avoid shelling out for a value
+	//    we already know.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("inferd: resolve home: %w", err)
+	}
+	username := filepath.Base(home)
+	if username == "" || username == "/" || username == "." {
+		return fmt.Errorf("inferd: cannot resolve username from home dir %q", home)
+	}
+	out = strings.ReplaceAll(out, "USERNAME_HERE", username)
+
+	// 2. Binary path. Inferd's template hardcodes /usr/local/bin
+	//    but we install at spec.BinaryDir.
+	wantBinary := filepath.Join(spec.BinaryDir, inferdBinName())
+	out = strings.ReplaceAll(out, "/usr/local/bin/inferd-daemon", wantBinary)
+
+	// 3. Socket + lock paths. Move them out of
+	//    ~/Library/Application Support/inferd/ (where the bundled
+	//    template puts them) into $TMPDIR/inferd/ (where thlibo
+	//    looks). launchd expands $TMPDIR per-session, matching
+	//    what `os.TempDir()` returns inside the inferd-daemon
+	//    process — same path on both sides.
+	libraryAppSupport := filepath.Join(home, "Library", "Application Support", "inferd")
+	out = strings.ReplaceAll(out, libraryAppSupport+"/inferd.lock", "$TMPDIR/inferd/inferd.lock")
+	out = strings.ReplaceAll(out, libraryAppSupport+"/infer.sock", "$TMPDIR/inferd/infer.sock")
+
+	// 4. The bundled v0.1.9 plist also omits --admin-addr entirely.
+	//    Without it the admin socket never binds and `thlibo
+	//    doctor` can't read lifecycle events. We can't easily
+	//    inject XML mid-document with a regex, so we record a
+	//    note and leave the plist as-is. Fix is upstream.
+	if !strings.Contains(out, "--admin-addr") {
+		r.Notes = append(r.Notes,
+			"inferd v0.1.9 plist omits --admin-addr; admin socket will not bind on macOS until inferd ships a fix")
+	}
+
+	if err := os.WriteFile(dst, []byte(out), 0o644); err != nil { // #nosec G306 -- launchd reads this
+		return fmt.Errorf("inferd: write plist: %w", err)
 	}
 	return nil
 }
