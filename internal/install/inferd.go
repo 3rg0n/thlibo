@@ -189,6 +189,14 @@ func InstallInferd(spec InferdInstallSpec, opts PullOptions) (InferdInstallResul
 	}
 
 	if err := runInferdInstaller(extractDir, &r); err != nil {
+		// ErrInferdNeedsManualStep: thlibo did everything it
+		// could, but the final activation needs the user (e.g.
+		// elevated install.ps1 on Windows). Record it as a
+		// partial-success; don't surface as an error to the
+		// caller because the middleware is still healthy.
+		if errors.Is(err, ErrInferdNeedsManualStep) {
+			return r, nil
+		}
 		return r, err
 	}
 	r.InstalledFresh = true
@@ -469,16 +477,66 @@ func runInferdInstaller(extractDir string, r *InferdInstallResult) error {
 		return nil
 
 	case "windows":
+		// Inferd's Windows install.ps1 needs admin (it registers a
+		// service via sc.exe). thlibo runs as the regular user, so
+		// we can't auto-execute it.
+		//
+		// What we CAN do: copy the binary + the install script to
+		// a stable location (out of our temp extract dir, which is
+		// about to be RemoveAll'd by the caller's defer), then
+		// surface clear instructions for the user to run install.ps1
+		// elevated. Without this, the path we'd print would point
+		// at a temp dir we just deleted.
 		script := filepath.Join(extractDir, "packaging", "install.ps1")
 		if _, err := os.Stat(script); err != nil {
 			return fmt.Errorf("inferd: tarball missing packaging\\install.ps1: %w", err)
 		}
+		bin := filepath.Join(extractDir, inferdBinName())
+		if _, err := os.Stat(bin); err != nil {
+			return fmt.Errorf("inferd: tarball missing %s: %w", inferdBinName(), err)
+		}
+
+		appData := os.Getenv("LOCALAPPDATA")
+		if appData == "" {
+			return fmt.Errorf("inferd: LOCALAPPDATA env var not set; can't pick stable install dir")
+		}
+		stableDir := filepath.Join(appData, "inferd", "bin")
+		stableBin := filepath.Join(stableDir, inferdBinName())
+		stableScript := filepath.Join(appData, "inferd", "install.ps1")
+		if err := os.MkdirAll(stableDir, 0o755); err != nil {
+			return fmt.Errorf("inferd: create %s: %w", stableDir, err)
+		}
+		if err := copyFile(bin, stableBin, 0o755); err != nil {
+			return err
+		}
+		if err := copyFile(script, stableScript, 0o755); err != nil {
+			return err
+		}
+
 		r.Notes = append(r.Notes,
-			fmt.Sprintf("Windows: run inferd's installer manually from elevated PowerShell: %s", script))
-		return nil
+			fmt.Sprintf("inferd binary copied to %s", stableBin))
+		r.Notes = append(r.Notes,
+			fmt.Sprintf("install.ps1 copied to %s", stableScript))
+		r.Notes = append(r.Notes,
+			"Windows install.ps1 needs admin to register the service.")
+		r.Notes = append(r.Notes,
+			fmt.Sprintf("From an ELEVATED PowerShell, run: & '%s'", stableScript))
+
+		// Return ErrInferdNeedsManualStep so the orchestrator
+		// records this as "binary placed, manual step required"
+		// rather than "fully installed."
+		return ErrInferdNeedsManualStep
 	}
 	return fmt.Errorf("inferd: don't know how to install on %s", runtime.GOOS)
 }
+
+// ErrInferdNeedsManualStep is a sentinel returned from
+// runInferdInstaller when thlibo did everything it could but the
+// final activation step needs the user (e.g. running install.ps1
+// elevated on Windows). The orchestrator catches this specifically
+// to record InstalledFresh=false but still treat the install as
+// "ok, just incomplete."
+var ErrInferdNeedsManualStep = errors.New("inferd: manual step required")
 
 // runCommand wraps exec.Command with stdout/stderr inherited so the
 // user sees the underlying tool's output.
