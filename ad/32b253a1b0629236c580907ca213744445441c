@@ -1,0 +1,21 @@
+.plan/inferd-linux-handoff.md
+  s_5811b7f24eccc0::t_730ba915cab80e 1-292
+docs/site/index.html
+  s_5811b7f24eccc0::t_730ba915cab80e 517,572-573,765-767,775-777,781,785
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "ad32b253a1b0629236c580907ca213744445441c",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
