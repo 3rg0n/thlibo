@@ -22,34 +22,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  # Download the GGUF once, compute its SHA, then reuse that hash
-  # across every per-platform build. The GGUF itself is NOT
-  # attached to the release (5.4 GB exceeds GitHub's 2 GiB
-  # release-asset cap); users pull it directly from HuggingFace
-  # via `thlibo pull`, and the pinned SHA injected into the binary
-  # guards integrity.
-  pin-model:
-    name: pin-model
-    runs-on: ubuntu-latest
-    outputs:
-      sha256: ${{ steps.hash.outputs.sha256 }}
-    steps:
-      - name: Download GGUF
-        run: |
-          mkdir -p /tmp/model
-          curl -fsSL \
-            -o /tmp/model/gemma.gguf \
-            https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-UD-Q4_K_XL.gguf
-      - name: Compute SHA256
-        id: hash
-        run: |
-          sha=$(sha256sum /tmp/model/gemma.gguf | awk '{print $1}')
-          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
-          echo "Model SHA: $sha"
-
   build:
     name: build (${{ matrix.goos }}-${{ matrix.goarch }})
-    needs: pin-model
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -77,39 +51,22 @@ jobs:
           go-version: "1.26.3"
           cache: true
 
-      - name: Download llamafile engine
-        run: |
-          mkdir -p dist-engine
-          curl -fsSL \
-            -o dist-engine/thlibo-engine${{ matrix.ext }} \
-            https://github.com/mozilla-ai/llamafile/releases/download/0.10.1/llamafile-0.10.1
-          chmod +x dist-engine/thlibo-engine${{ matrix.ext }}
-          echo "3cc6ea1a5af07813d6c9f7459a64ec28345352c8322d2b355b6715847871bc13  dist-engine/thlibo-engine${{ matrix.ext }}" | sha256sum --check
-
-      - name: Build binaries
+      - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
-          MODEL_SHA: ${{ needs.pin-model.outputs.sha256 }}
         run: |
           mkdir -p dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin
-          LDFLAGS="-s -w -X github.com/3rg0n/thlibo/internal/install.pinnedGemma4E4BQ4KM=$MODEL_SHA -X github.com/3rg0n/thlibo/internal/version.Tag=${{ github.ref_name }}"
+          LDFLAGS="-s -w -X github.com/3rg0n/thlibo/internal/version.Tag=${{ github.ref_name }}"
           go build -trimpath -ldflags="$LDFLAGS" \
             -o dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibo${{ matrix.ext }} \
             ./cmd/thlibo
-          go build -trimpath -ldflags="$LDFLAGS" \
-            -o dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibod${{ matrix.ext }} \
-            ./cmd/thlibod
-          cp dist-engine/thlibo-engine${{ matrix.ext }} \
-            dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibo-engine${{ matrix.ext }}
 
       - name: Copy docs into bundle
         run: |
           DIR=dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}
           cp README.md CHANGELOG.md "$DIR/"
-          # LICENSE will be added when the repo picks one; for now,
-          # a placeholder so users see a file in the expected slot.
           if [ -f LICENSE ]; then cp LICENSE "$DIR/"; fi
 
       - name: Archive (tar.gz for Unix)
@@ -133,7 +90,7 @@ jobs:
 
   release:
     name: release
-    needs: [pin-model, build]
+    needs: [build]
     runs-on: ubuntu-latest
     # Required for the keyless OIDC-token exchange with Fulcio that
     # cosign uses to sign without long-lived private keys. See
@@ -221,13 +178,15 @@ jobs:
             # thlibo ${{ github.ref_name }}
 
             Local-Gemma tool-output compression middleware for Claude
-            Code + Codex CLI.
+            Code + Codex CLI. Inference is delegated to
+            [inferd](https://github.com/3rg0n/inferd) — thlibo's
+            installer detects/installs inferd as a sidecar.
 
             ## Binaries
 
             Cross-platform binaries are attached as tarballs/zip.
-            Each bundle contains `bin/thlibo`, `bin/thlibod`,
-            `README.md`, `CHANGELOG.md`, `LICENSE`.
+            Each bundle contains `bin/thlibo`, `README.md`,
+            `CHANGELOG.md`, and `LICENSE`.
 
             ## Verifying signatures
 
@@ -255,16 +214,10 @@ jobs:
             the repo at the release tag. Signed with cosign like the
             archives.
 
-            ## Model (pulled separately)
+            ## Inferd sidecar
 
-            The canonical GGUF
-            (`unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-UD-Q4_K_XL.gguf`,
-            ~5.1 GB) is not attached because it exceeds GitHub's
-            2 GiB asset cap. After installing, run:
-
-                thlibo pull gemma-4-e4b
-
-            The binary has the expected SHA-256 pinned at build
-            time, so `thlibo pull` verifies integrity automatically.
-            No network trust required beyond HuggingFace's TLS +
-            our pin.
+            On first run, `thlibo install` probes for a running inferd
+            admin socket and consumes it if present; otherwise it
+            fetches the matching inferd release for the host platform
+            and runs inferd's installer. The model GGUF is downloaded
+            once by inferd into a shared per-platform model store.
