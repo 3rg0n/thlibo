@@ -43,17 +43,21 @@ import (
 func Run(argv []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	var (
-		dryRun        bool
-		processorsDir string
-		hookDir       string
-		settingsPath  string
-		skipHook      bool
+		dryRun         bool
+		processorsDir  string
+		hookDir        string
+		settingsPath   string
+		skipHook       bool
+		skipInferd     bool
+		inferdVersion  string
 	)
 	fs.BoolVar(&dryRun, "dry-run", false, "report planned actions without applying them")
 	fs.StringVar(&processorsDir, "processors-dir", "", "override processors dir (default: ~/.thlibo/processors)")
 	fs.StringVar(&hookDir, "hook-dir", "", "override hook dir (default: ~/.thlibo/hooks)")
 	fs.StringVar(&settingsPath, "settings", "", "override Claude Code settings path (default: ~/.claude/settings.json)")
 	fs.BoolVar(&skipHook, "skip-hook", false, "skip installing the Claude Code hook")
+	fs.BoolVar(&skipInferd, "skip-inferd", false, "skip downloading + registering the inferd daemon (middleware-only install)")
+	fs.StringVar(&inferdVersion, "inferd-version", "", "pin inferd to a specific tag (default: latest non-prerelease)")
 	var installCodex bool
 	var codexHooksPath string
 	fs.BoolVar(&installCodex, "codex", false, "also install the Codex CLI hook (advisory until Codex lands updatedInput support)")
@@ -121,8 +125,13 @@ func Run(argv []string) int {
 	} else {
 		fmt.Println("  codex hooks:    (skipped; use --codex to install)")
 	}
-	fmt.Println("  inferd:         not managed by this installer in v0.6.0;")
-	fmt.Println("                  install separately from https://github.com/3rg0n/inferd")
+	if skipInferd {
+		fmt.Println("  inferd:         (skipped; --skip-inferd)")
+	} else if inferdVersion != "" {
+		fmt.Println("  inferd:         pinned to", inferdVersion)
+	} else {
+		fmt.Println("  inferd:         latest from github.com/3rg0n/inferd/releases")
+	}
 	if dryRun {
 		fmt.Println("  (dry-run: no changes applied)")
 		if hint := wslAPEInteropHint(); hint != "" {
@@ -171,6 +180,23 @@ func Run(argv []string) int {
 		return 4
 	}
 	fmt.Println("  mirrored built-in processors")
+
+	// Sidecar inferd. Failures are non-fatal: thlibo middleware
+	// works without inferd (fail-open passthrough per ADR 0006);
+	// a failed download just means the user gets passthrough until
+	// they retry or install inferd manually.
+	if !skipInferd {
+		spec := buildInferdSpec(home, inferdVersion)
+		ir, err := install.InstallInferd(spec, install.PullOptions{})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "install: inferd:", err)
+			fmt.Fprintln(os.Stderr, "install: thlibo middleware is fully installed; inferd install failed.")
+			fmt.Fprintln(os.Stderr, "install: re-run later or install inferd manually from")
+			fmt.Fprintln(os.Stderr, "install: https://github.com/3rg0n/inferd")
+		} else {
+			reportInferdInstall(ir)
+		}
+	}
 
 	if skipHook {
 		fmt.Println("thlibo install complete.")
@@ -312,10 +338,6 @@ func Run(argv []string) int {
 		fmt.Printf("  wrote Codex hook + merged %s + enabled codex_hooks in %s\n", cp, cfgPath)
 	}
 
-	// v0.6.0: model + engine download + autostart all moved to inferd.
-	// Thlibo install is now middleware-only; the inferd daemon must be
-	// installed and started separately via inferd's own installer.
-
 	if hint := wslAPEInteropHint(); hint != "" {
 		fmt.Println()
 		fmt.Println(hint)
@@ -323,6 +345,71 @@ func Run(argv []string) int {
 
 	fmt.Println("thlibo install complete.")
 	return 0
+}
+
+// buildInferdSpec resolves per-platform install paths for inferd
+// based on home + the requested version. The returned spec is fed
+// to install.InstallInferd which does the heavy lifting.
+func buildInferdSpec(home, version string) install.InferdInstallSpec {
+	spec := install.InferdInstallSpec{
+		Version: version,
+	}
+	switch runtime.GOOS {
+	case "linux":
+		spec.BinaryDir = filepath.Join(home, ".local", "bin")
+		spec.UnitDir = filepath.Join(home, ".config", "systemd", "user")
+		spec.DropinDir = filepath.Join(home, ".config", "systemd", "user", "inferd.service.d")
+	case "darwin":
+		spec.BinaryDir = filepath.Join(home, ".local", "bin")
+		spec.UnitDir = filepath.Join(home, "Library", "LaunchAgents")
+	case "windows":
+		if appData := os.Getenv("LOCALAPPDATA"); appData != "" {
+			spec.BinaryDir = filepath.Join(appData, "inferd", "bin")
+		} else {
+			spec.BinaryDir = filepath.Join(home, ".local", "bin")
+		}
+	}
+	// Resolve the migrated model path. After v0.5→v0.6 migration
+	// the GGUF lives at the shared model store; if no model is
+	// there the spec is left blank and inferd starts in mock mode.
+	candidate := filepath.Join(install.SharedModelsDir(), "gemma-4-e4b-ud-q4-k-xl.gguf")
+	if _, err := os.Stat(candidate); err == nil {
+		spec.ModelPath = candidate
+	}
+	return spec
+}
+
+// reportInferdInstall prints the InferdInstallResult to stdout in
+// the same indented-bullet format the rest of the installer uses.
+func reportInferdInstall(ir install.InferdInstallResult) {
+	if ir.ResolvedVersion != "" {
+		fmt.Printf("  inferd %s installed:\n", ir.ResolvedVersion)
+	} else {
+		fmt.Println("  inferd installed:")
+	}
+	if ir.BinaryPath != "" {
+		fmt.Printf("    - binary: %s", ir.BinaryPath)
+		if ir.BinarySize > 0 {
+			fmt.Printf(" (%.1f MB)", float64(ir.BinarySize)/(1<<20))
+		}
+		fmt.Println()
+	}
+	if ir.CosignVerified {
+		fmt.Println("    - cosign signature verified")
+	}
+	if ir.UnitInstalled {
+		fmt.Println("    - platform unit installed (systemd / LaunchAgent)")
+	}
+	if ir.UnitDropinInstalled {
+		fmt.Printf("    - backend drop-in: --backend %s --model-path %s\n",
+			ir.BackendConfigured, ir.ModelPath)
+	}
+	for _, n := range ir.Notes {
+		fmt.Println("    - note:", n)
+	}
+	fmt.Println("    - to start: systemctl --user enable --now inferd  (Linux)")
+	fmt.Println("                launchctl bootstrap gui/$UID ~/Library/LaunchAgents/io.inferd.daemon.plist  (macOS)")
+	fmt.Println("                see packaging\\install.ps1  (Windows)")
 }
 
 // wslAPEInteropHint returns a non-empty advisory string when we detect
