@@ -1,0 +1,22 @@
+docs/adr/0007-pdf-to-markdown.md
+  s_5811b7f24eccc0::t_104b7eea552127 161-165
+  s_5811b7f24eccc0::t_50738fb26c71ee 191-207
+CHANGELOG.md
+  s_5811b7f24eccc0::t_17d71f230ca24a 33-34,37-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "677d37f91e5b16ea196640d999a0209da72a3b3d",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
