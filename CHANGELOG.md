@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New `pdf-to-md` script processor. Converts a PDF (born-digital,
+  text-based) into GitHub-flavored markdown: TOC reconstructed
+  from the PDF outline, per-page rendering, tables emitted as
+  GHFM tables. Image surfacing is placeholder-only in v0.7
+  (`[image: page N — vision not yet supported]`); OCR for scanned
+  PDFs lands in v0.8 (pytesseract); model-driven image
+  descriptions land in v0.9 (requires inferd vision endpoint).
+  Triggered by the fast-path regex `^%PDF-`. Verified end-to-end
+  on a USENIX academic paper (351 KB → 7.5 KB in 0.6 s) and on a
+  generated table fixture (cleanly extracted as markdown table).
+  Adds `pypdf` + `pdfplumber` to thlibo's Python processor
+  dependencies; install via
+  `pip install -r ~/.thlibo/processors/pdf-to-md/requirements.txt`
+  after `thlibo install` mirrors the processor. See
+  [ADR 0007](docs/adr/0007-pdf-to-markdown.md) for the rationale.
+
 ## [0.6.0] - 2026-05-19
 
 The inferd extraction is real. Thlibo is now pure middleware: hooks,
