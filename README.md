@@ -294,6 +294,11 @@ same name as a built-in override the built-in.
 | `git-filter` | script | `git status`, `git diff`, `git log` |
 | `npm-filter` | script | `npm`, `npx`, `pnpm`, `yarn` |
 | `cargo-filter` | script | `cargo build`, `cargo test`, `cargo clippy` |
+| `pytest-filter` | script | `pytest` output |
+| `ndjson-filter` | script | structured-log streams |
+| `stacktrace-filter` | script | Python / Go / Rust / Java / Node stack traces |
+| `pdf-to-md` | script | PDF → GitHub-flavored markdown (text + tables; OCR + vision in v0.8/v0.9) |
+| `shorthand` | prompt | LLM-facing prose compression (SKILL.md, CLAUDE.md, system prompts) |
 | `compress` | prompt | Generic verbose output, fallback |
 | `casefolder` | prompt | Stack traces, error logs, crash output |
 

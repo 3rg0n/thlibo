@@ -33,10 +33,10 @@ import (
 	"os"
 	"strings"
 
+	inferd "github.com/3rg0n/inferd/clients/go"
 	"github.com/3rg0n/thlibo/cmd/thlibo/compresscmd"
-	"github.com/3rg0n/thlibo/internal/ipc"
+	"github.com/3rg0n/thlibo/internal/inferdcli"
 	"github.com/3rg0n/thlibo/internal/processors"
-	"github.com/3rg0n/thlibo/internal/router"
 	"github.com/3rg0n/thlibo/internal/shorthand"
 )
 
@@ -233,11 +233,11 @@ func readInput(path string) ([]byte, error) {
 	return os.ReadFile(path) // #nosec G304 -- argv-supplied path is the user's own input file
 }
 
-// buildEngine wires a shorthand.Engine pointed at the daemon's
+// buildEngine wires a shorthand.Engine pointed at inferd's
 // "shorthand" prompt processor. The engine package is transport-
 // agnostic; this is the production wiring.
 func buildEngine() (*shorthand.Engine, error) {
-	client := &router.DaemonClient{Address: ipc.DefaultInferenceAddress()}
+	client := &inferdcli.Client{Address: inferdcli.DefaultInferenceAddress()}
 	pr := &daemonBackend{client: client}
 	return &shorthand.Engine{Backend: pr}, nil
 }
@@ -268,12 +268,12 @@ func emitOriginal(target, raw string, inPlace, _ bool, quiet bool) int {
 	return ExitOK
 }
 
-// daemonBackend adapts the router.DaemonClient + shorthand processor
+// daemonBackend adapts the inferd client + shorthand processor
 // descriptor to the shorthand.Backend interface. It loads the
 // embedded processor registry on first use; every call after that
-// reuses the cached descriptor for the daemon round-trip.
+// reuses the cached descriptor for the inferd round-trip.
 type daemonBackend struct {
-	client *router.DaemonClient
+	client *inferdcli.Client
 	desc   *processors.Descriptor
 }
 
@@ -293,45 +293,27 @@ func (b *daemonBackend) Run(ctx context.Context, input string) (string, error) {
 		b.desc = d
 	}
 
-	pr := &daemonPromptRunner{client: b.client}
-	out, err := pr.Run(ctx, b.desc, input)
-	if err != nil {
-		return "", err
-	}
-	// Strip leading/trailing whitespace the model sometimes adds.
-	return strings.TrimSpace(out), nil
-}
-
-// daemonPromptRunner is a thin wrapper around the router.DaemonClient
-// that submits a single prompt-processor request and returns the
-// model's response. Same protocol middleware.PromptRunner uses, but
-// shorthandcmd doesn't need the full middleware pipeline (no
-// processor chain, no fast-path regex), so we hit the daemon
-// directly.
-type daemonPromptRunner struct {
-	client *router.DaemonClient
-}
-
-func (p *daemonPromptRunner) Run(ctx context.Context, d *processors.Descriptor, input string) (string, error) {
-	req := ipc.Request{
-		ID: "shorthand-" + d.Name,
-		Messages: []ipc.Message{
-			{Role: ipc.RoleSystem, Content: d.SystemPrompt},
-			{Role: ipc.RoleUser, Content: input},
+	req := inferd.Request{
+		ID: "shorthand-" + b.desc.Name,
+		Messages: []inferd.Message{
+			{Role: inferd.RoleSystem, Content: b.desc.SystemPrompt},
+			{Role: inferd.RoleUser, Content: input},
 		},
 	}
-	if d.Temperature != nil {
-		req.Temperature = d.Temperature
+	if b.desc.Temperature != nil {
+		req.Temperature = b.desc.Temperature
 	}
-	if d.MaxTokens != nil {
-		req.MaxTokens = d.MaxTokens
+	if b.desc.MaxTokens != nil {
+		req.MaxTokens = b.desc.MaxTokens
 	}
 	stream := false
 	req.Stream = &stream
 
-	out, _, err := p.client.Post(ctx, req)
+	out, err := b.client.Post(ctx, req)
 	if err != nil {
 		return "", err
 	}
-	return processors.Strip(out), nil
+	// Strip the Gemma <thought> block + leading/trailing whitespace
+	// the model sometimes adds.
+	return strings.TrimSpace(processors.Strip(out)), nil
 }

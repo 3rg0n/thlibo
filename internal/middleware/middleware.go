@@ -17,7 +17,8 @@ import (
 
 	builtins "github.com/3rg0n/thlibo/processors"
 
-	"github.com/3rg0n/thlibo/internal/ipc"
+	inferd "github.com/3rg0n/inferd/clients/go"
+	"github.com/3rg0n/thlibo/internal/inferdcli"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/promptsan"
 	"github.com/3rg0n/thlibo/internal/router"
@@ -161,31 +162,31 @@ func readAll(r io.Reader) (string, error) {
 	return string(b), nil
 }
 
-// PromptRunner adapts a router.DaemonClient into the
-// processors.PromptRunner interface so prompt processors can call the
-// daemon through the same transport as the router.
+// PromptRunner adapts an inferdcli.Client into the
+// processors.PromptRunner interface so prompt processors can call
+// inferd through the same transport as the router.
 type PromptRunner struct {
-	Client *router.DaemonClient
+	Client *inferdcli.Client
 }
 
-// Run sends a prompt processor invocation to the daemon and returns
-// the model's answer with thought blocks stripped (see spec
+// Run sends a prompt processor invocation to inferd and returns the
+// model's answer with thought blocks stripped (see spec
 // §"Thought-stripping"). Gemma 4 always emits a thought block - even
 // empty when thinking is disabled - so stripping runs unconditionally.
 func (p *PromptRunner) Run(ctx context.Context, d *processors.Descriptor, input string) (string, error) {
 	if p.Client == nil {
-		return "", errors.New("middleware: no daemon client")
+		return "", errors.New("middleware: no inferd client")
 	}
 	// Escape Gemma native tool-call markers in tool output before
 	// it becomes a user turn. Real git/npm/cargo output does not
 	// contain these sequences; if they do appear, they are attacker-
 	// controlled (e.g. a crafted commit diff or README). See
 	// THREAT_MODEL.md finding #1.
-	req := ipc.Request{
+	req := inferd.Request{
 		ID: "prompt-" + d.Name,
-		Messages: []ipc.Message{
-			{Role: ipc.RoleSystem, Content: d.SystemPrompt},
-			{Role: ipc.RoleUser, Content: promptsan.Sanitize(input)},
+		Messages: []inferd.Message{
+			{Role: inferd.RoleSystem, Content: d.SystemPrompt},
+			{Role: inferd.RoleUser, Content: promptsan.Sanitize(input)},
 		},
 	}
 	if d.Temperature != nil {
@@ -203,7 +204,7 @@ func (p *PromptRunner) Run(ctx context.Context, d *processors.Descriptor, input 
 	s := false
 	req.Stream = &s
 
-	out, _, err := p.Client.Post(ctx, req)
+	out, err := p.Client.Post(ctx, req)
 	if err != nil {
 		return "", err
 	}

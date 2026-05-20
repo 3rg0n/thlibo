@@ -31,6 +31,8 @@ func TestEmbeddedFSContainsAllBuiltins(t *testing.T) {
 		"stacktrace-filter",
 		"pytest-filter",
 		"ndjson-filter",
+		// v0.7 — PDF → Markdown
+		"pdf-to-md",
 	}
 	for _, name := range want {
 		if d := r.Get(name); d == nil {

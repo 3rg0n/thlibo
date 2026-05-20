@@ -30,19 +30,23 @@ $src = $obj.tool_input.file_path
 if ([string]::IsNullOrEmpty($src)) { exit 0 }
 if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { exit 0 }
 
-# Size gate.
-$minBytes = 32768
-if ($env:THLIBO_READ_MIN_BYTES) {
-    $parsed = 0
-    if ([int]::TryParse($env:THLIBO_READ_MIN_BYTES, [ref]$parsed)) { $minBytes = $parsed }
-}
-$size = (Get-Item -LiteralPath $src).Length
-if ($size -lt $minBytes) { exit 0 }
-
-# Extension gate.
+# Extension gate. Log-shaped extensions + binary formats Claude
+# can't read natively (pdf). Other files pass through unmodified.
 $ext = [System.IO.Path]::GetExtension($src).TrimStart('.').ToLowerInvariant()
-$allowed = @('log','ndjson','txt','out','err','stderr','trace','dump')
+$allowed = @('log','ndjson','txt','out','err','stderr','trace','dump','pdf')
 if ($allowed -notcontains $ext) { exit 0 }
+
+# Size gate. PDFs skip the gate — Claude can't usefully read PDF
+# bytes at any size, so conversion is always worth running.
+if ($ext -ne 'pdf') {
+    $minBytes = 32768
+    if ($env:THLIBO_READ_MIN_BYTES) {
+        $parsed = 0
+        if ([int]::TryParse($env:THLIBO_READ_MIN_BYTES, [ref]$parsed)) { $minBytes = $parsed }
+    }
+    $size = (Get-Item -LiteralPath $src).Length
+    if ($size -lt $minBytes) { exit 0 }
+}
 
 # Don't double-compress. Check common path separators regardless of host.
 $norm = $src -replace '\\','/'

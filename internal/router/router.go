@@ -14,7 +14,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/3rg0n/thlibo/internal/ipc"
+	inferd "github.com/3rg0n/inferd/clients/go"
+	"github.com/3rg0n/thlibo/internal/inferdcli"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/promptsan"
 )
@@ -41,7 +42,7 @@ const RouteInput = 200
 // Any error from the daemon (B8a/B8b) or an empty chain produces a
 // Passthrough decision so callers can uniformly treat "route failed"
 // and "route said none" the same way.
-func Ask(ctx context.Context, client *DaemonClient, reg *processors.Registry, input string) (Decision, error) {
+func Ask(ctx context.Context, client *inferdcli.Client, reg *processors.Registry, input string) (Decision, error) {
 	names := reg.Names()
 	if len(names) == 0 {
 		return Decision{}, nil
@@ -50,7 +51,7 @@ func Ask(ctx context.Context, client *DaemonClient, reg *processors.Registry, in
 	// Sanitize before truncating: the marker breaks lie at exact
 	// substring positions, so truncation after sanitize cannot split
 	// a ZWSP-separated pair. See THREAT_MODEL.md finding #3.
-	req := ipc.Request{
+	req := inferd.Request{
 		ID:       "route",
 		Messages: buildRoutingMessages(reg, truncate(promptsan.Sanitize(input), RouteInput)),
 		Grammar:  buildGrammar(names),
@@ -63,7 +64,7 @@ func Ask(ctx context.Context, client *DaemonClient, reg *processors.Registry, in
 	s := false
 	req.Stream = &s
 
-	raw, _, err := client.Post(ctx, req)
+	raw, err := client.Post(ctx, req)
 	if err != nil {
 		return Decision{}, err
 	}
@@ -82,7 +83,7 @@ func Ask(ctx context.Context, client *DaemonClient, reg *processors.Registry, in
 // chat template directly. The tool-call output is still grammar-
 // enforced, so a misrendered declaration would just produce a valid
 // empty chain (passthrough) rather than garbage.
-func buildRoutingMessages(reg *processors.Registry, input string) []ipc.Message {
+func buildRoutingMessages(reg *processors.Registry, input string) []inferd.Message {
 	var sysb strings.Builder
 	sysb.WriteString(toolDeclaration(reg))
 	sysb.WriteString("\n\nYou are a processor router. Given tool output, emit exactly one\n")
@@ -98,9 +99,9 @@ func buildRoutingMessages(reg *processors.Registry, input string) []ipc.Message 
 		fmt.Fprintf(&sysb, "  - %s: %s\n", n, singleLine(desc))
 	}
 
-	return []ipc.Message{
-		{Role: ipc.RoleSystem, Content: sysb.String()},
-		{Role: ipc.RoleUser, Content: input},
+	return []inferd.Message{
+		{Role: inferd.RoleSystem, Content: sysb.String()},
+		{Role: inferd.RoleUser, Content: input},
 	}
 }
 
@@ -232,11 +233,11 @@ func singleLine(s string) string {
 // level.
 var ErrDaemonUnreachable = errors.New("router: daemon unreachable")
 
-// ClientAdapter wraps a DaemonClient so it satisfies the middleware's
-// RouterClient interface without the middleware package importing
-// router's package-level Ask function.
+// ClientAdapter wraps an inferdcli.Client so it satisfies the
+// middleware's RouterClient interface without the middleware package
+// importing router's package-level Ask function.
 type ClientAdapter struct {
-	Client *DaemonClient
+	Client *inferdcli.Client
 	// OnUnknownProcessor, if set, is called when Gemma names a
 	// processor that isn't in the registry. Used by the middleware
 	// to log a security-relevant event; logging belongs to the
@@ -255,7 +256,7 @@ func (a *ClientAdapter) askDetailed(ctx context.Context, reg *processors.Registr
 	if len(names) == 0 {
 		return Decision{}, nil
 	}
-	req := ipc.Request{
+	req := inferd.Request{
 		ID:       "route",
 		Messages: buildRoutingMessages(reg, truncate(promptsan.Sanitize(input), RouteInput)),
 		Grammar:  buildGrammar(names),
@@ -267,7 +268,7 @@ func (a *ClientAdapter) askDetailed(ctx context.Context, reg *processors.Registr
 	s := false
 	req.Stream = &s
 
-	raw, _, err := a.Client.Post(ctx, req)
+	raw, err := a.Client.Post(ctx, req)
 	if err != nil {
 		return Decision{}, err
 	}

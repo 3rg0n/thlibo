@@ -1,0 +1,18 @@
+name: pdf-to-md
+type: script
+entry: run.py
+# PDFs start with %PDF-<version>. The fast-path regex runs against
+# the input bytes, so the magic match works on any born-digital PDF.
+# Scanned PDFs (image-only) also start with %PDF-, so they hit the
+# same processor — the script's per-page logic decides what to do
+# when text extraction comes up empty.
+match: "^%PDF-"
+commands: []
+description: >
+  Convert a PDF to GitHub-flavored markdown. Born-digital text
+  extracts directly via pdfplumber; tables come out as markdown
+  tables; images are surfaced as `[image: page N]` placeholders in
+  v0.7. Scanned (image-only) PDFs return `[scanned page N — OCR not
+  yet supported]` placeholders pending v0.8 (pytesseract). Vision-
+  model image descriptions are pending v0.9 + inferd protocol-v2.
+  See ADR 0007 for the staged rollout.

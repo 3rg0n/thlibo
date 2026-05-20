@@ -30,27 +30,30 @@ if [ -z "$PATH_IN" ]; then
   exit 0
 fi
 
-# Size gate. Under the threshold, Claude reading the file directly is
-# cheap - don't spend a daemon call on a 100-line config. Reuse the
-# middleware's own short-circuit threshold (2000 bytes) plus a healthy
-# margin so we only fire on "big" files.
-MIN_BYTES=${THLIBO_READ_MIN_BYTES:-32768}
 if [ ! -f "$PATH_IN" ]; then
   exit 0
 fi
-SIZE=$(wc -c < "$PATH_IN" 2>/dev/null | tr -d ' ')
-if [ -z "$SIZE" ] || [ "$SIZE" -lt "$MIN_BYTES" ]; then
-  exit 0
-fi
 
-# Extension gate. Log-shaped extensions are the primary target; other
-# files (source code, configs, images) pass through to Claude unmodified.
-# Users who want to force it can symlink their file to something.log.
+# Extension gate. Log-shaped extensions + binary formats Claude
+# can't read natively. Other files (source code, configs, images)
+# pass through to Claude unmodified.
 EXT_LOWER=$(printf '%s' "${PATH_IN##*.}" | tr '[:upper:]' '[:lower:]')
 case "$EXT_LOWER" in
-  log|ndjson|txt|out|err|stderr|trace|dump) ;;
+  log|ndjson|txt|out|err|stderr|trace|dump|pdf) ;;
   *) exit 0 ;;
 esac
+
+# Size gate. Under the threshold, Claude reading the file directly
+# is cheap — don't spend a daemon call on a 100-line config.
+# PDFs skip the size gate: Claude can't usefully read PDF bytes at
+# any size, so conversion is always worth running.
+MIN_BYTES=${THLIBO_READ_MIN_BYTES:-32768}
+if [ "$EXT_LOWER" != "pdf" ]; then
+  SIZE=$(wc -c < "$PATH_IN" 2>/dev/null | tr -d ' ')
+  if [ -z "$SIZE" ] || [ "$SIZE" -lt "$MIN_BYTES" ]; then
+    exit 0
+  fi
+fi
 
 # Don't double-compress a file that already lives inside a case dir.
 # "${HOME}/.thlibo/cases/" might not be expanded if $HOME is unset in

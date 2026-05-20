@@ -7,28 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Architecture
+### Added
 
-- ADR 0005: extract inference to a separate `inferd` service
-  (https://github.com/3rg0n/inferd). Thlibo becomes pure
-  middleware in v0.6+; inference daemon, llamafile spawner,
-  model download, and queue admission move to inferd.
-  Distribution: inferd is a sidecar binary fetched at
-  `thlibo install` time; thlibo imports inferd's Go client
-  module (`github.com/3rg0n/inferd/clients/go`) for the wire
-  protocol. Supersedes ADR 0002.
-- ADR 0006: fail open during the inferd bootstrap window. Thlibo
-  uses inferd protocol-v1 §6.3 passive readiness — connect-and-
-  retry against the inference socket, immediate passthrough on
-  connect failure. Admin socket reserved for `thlibo doctor`
-  progress UX; not consulted by the inference dispatch path.
-- New: `docs/inferd-admin-protocol-v1.md` vendors the inferd
-  admin-socket wire spec into this repo so thlibo's client code
-  can be reviewed against the contract without context-switching.
-- New: `.plan/spec.issue.md` drafts the upstream proposal for a
-  shared `~/.local/share/models/` model store convention,
-  positioning inferd's on-disk layout as the reference
-  implementation.
+- New `pdf-to-md` script processor. Converts a PDF (born-digital,
+  text-based) into GitHub-flavored markdown: TOC reconstructed
+  from the PDF outline, per-page rendering, tables emitted as
+  GHFM tables, numbered section headings promoted to `##`/`###`
+  via a tightened heuristic (numeric prefix + uppercase title +
+  no internal periods + length cap, to avoid falsely promoting
+  numbered list items or table cells).
+- Image surfacing is placeholder-only in v0.7
+  (`[image: page N — vision not yet supported]`). v0.8 will
+  collapse OCR (scanned pages) and chart-description (image-only
+  pages) into a single feature: render the page as an image and
+  send it to inferd's multimodal Gemma 4 with a transcription or
+  chart-description prompt — both paths use the same wire
+  endpoint, only the prompt differs. Gated on inferd exposing
+  image payloads over its NDJSON wire (in flight).
+- Triggered by the fast-path regex `^%PDF-`. Verified end-to-end
+  on a 29-page Cisco PRD (327 KB → 70 KB in 1.2 s, 6 tables
+  cleanly rendered as GHFM tables, 11 top-level sections + 10
+  subsections promoted to markdown headings), a 19-page MIME-info
+  spec (146 KB → 35 KB), a USENIX academic paper (351 KB →
+  7.5 KB), and a generated table fixture.
+- Adds `pypdf` (BSD-3) + `pdfplumber` (MIT) to thlibo's Python
+  processor dependencies; install via
+  `pip install -r ~/.thlibo/processors/pdf-to-md/requirements.txt`
+  after `thlibo install` mirrors the processor. See
+  [ADR 0007](docs/adr/0007-pdf-to-markdown.md) for the full
+  library shootout — thlibo's dep tree is permissively-licensed
+  end-to-end (MIT / BSD / Apache); copyleft-licensed tools in
+  this space (pymupdf, marker) are excluded entirely, including
+  from any opt-in user-recipe documentation.
+
+## [0.6.0] - 2026-05-19
+
+The inferd extraction is real. Thlibo is now pure middleware: hooks,
+processors, settings.json merge, registry, router. Inference moved
+to the separate [inferd](https://github.com/3rg0n/inferd) project,
+which thlibo dials over its frozen NDJSON protocol-v1 wire.
+
+### Removed
+
+- `cmd/thlibod/` — embedded inference daemon. Inferd owns this now.
+- `internal/daemon/` — engine supervisor, llamafile spawner, lock,
+  server-side peer-cred, lifecycle.
+- `internal/queue/` — single-active admission queue (inferd manages
+  its own).
+- `internal/ipc/` — NDJSON wire types, endpoint, peer-cred client.
+  Replaced by import of `github.com/3rg0n/inferd/clients/go`.
+- `internal/install/{model,engine}.go` — model GGUF + llamafile
+  binary download. Inferd handles model bootstrap.
+- `cmd/thlibo/pullcmd/` — `thlibo pull` removed. Run `inferd pull`
+  instead. The `pull` subcommand now prints a deprecation message
+  pointing at inferd.
+- Install flags `--pull-engine`, `--pull-model`, `--allow-unpinned`,
+  `--engine-path`, `--daemon-path`, `--skip-autostart` — gone with
+  the daemon they configured. Inferd's installer registers inferd's
+  own autostart entry.
+
+### Added
+
+- `internal/inferdcli/` — thin wrapper around the inferd Go client
+  exposing the connection-per-call `Post(ctx, Request) -> (string, error)`
+  shape thlibo's hot path uses. Implements **passive readiness**
+  per ADR 0006: connect-and-retry against the inference socket;
+  connect failure surfaces as `ErrBackendNotReady` and the caller
+  passes the original bytes through. Six unit tests cover stream
+  collapse, done-frame fallback, error frame surfacing, refused-
+  connect detection, TCP-shape detection, and transient-error
+  classification across Linux / macOS / Windows error wording.
+
+### Changed
+
+- `internal/router/`, `internal/middleware/`, `cmd/thlibo/{execcmd,
+  compresscmd,shorthandcmd}` — all rewired from the old
+  `internal/router.DaemonClient` to `internal/inferdcli.Client`.
+  The Gemma-native tool-call routing logic, GBNF grammar building,
+  unknown-name fallback, and prompt sanitization all carried over
+  unchanged; only the wire transport swapped.
+- Default endpoint paths now point at inferd's locations:
+  `$XDG_RUNTIME_DIR/inferd/infer.sock` (Linux),
+  `$TMPDIR/inferd/infer.sock` (macOS), `\\.\pipe\inferd-infer`
+  (Windows). Match the protocol-v1 spec inferd publishes.
+- `thlibo install` is now middleware-only: hooks, processors,
+  settings.json merge, optional Codex hook. The autostart
+  registration moved to inferd's installer.
+
+### Migration from v0.5.x
+
+`thlibo install` now auto-detects v0.5.x installs and migrates
+them in place. Idempotent: safe on fresh installs (no-op) and
+on already-migrated hosts (also no-op). On detection it:
+
+- Stops + disables the v0.5 daemon autostart unit:
+  - Linux: `systemctl --user stop/disable cisco.thlibo.daemon.service`,
+    removes the unit file
+  - macOS: `launchctl bootout` + removes `cisco.thlibo.daemon.plist`
+  - Windows: removes `cisco.thlibo.daemon.cmd` from `Startup\`
+- Deletes the dead binaries: `thlibod` and `thlibo-engine` (the
+  ~878 MB APE llamafile)
+- **Moves the model** from `~/.thlibo/models/<name>.gguf` to the
+  shared model store at the platform's standard data dir:
+  - Linux: `${XDG_DATA_HOME:-$HOME/.local/share}/models/`
+  - macOS: `~/Library/Application Support/models/`
+  - Windows: `%LOCALAPPDATA%\models\`
+
+  No redownload required. Atomic `rename(2)` on same-filesystem
+  moves; falls back to copy + delete for cross-filesystem.
+- Cleans up `~/.thlibo/{models,logs,run}/` (daemon-only state)
+- Preserves `~/.thlibo/{processors,hooks,config.yaml,state}/` —
+  still load-bearing in v0.6
+
+Verified end-to-end on Ubuntu 26.04 / WSL2 against a real v0.5.4
+install: 5.1 GB GGUF moved cleanly, all daemon artefacts gone,
+processors / hooks / settings.json untouched. Second run shows
+no migration block (idempotent).
+
+Existing `~/.claude/settings.json` hook entries keep working
+through the upgrade — re-running `thlibo install` refreshes them
+to current SHA-stamped versions.
+
+The shared model store at `~/.local/share/models/` (and
+equivalents) is where inferd should also look for the GGUF —
+follows the cross-tool model-store convention drafted in
+`.plan/spec.issue.md`.
 
 ## [0.5.4] - 2026-05-18
 
@@ -85,8 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   above is independent of this bug — the daemon now reaches the
   engine-spawn step cleanly. The engine UDS-mode bug goes away in
   v0.6.0 when inferd takes over inference (ADR 0005); not worth
-  patching the soon-to-be-deleted llamafile spawn path. Filed
-  upstream as [mozilla-ai/llamafile#971](https://github.com/mozilla-ai/llamafile/issues/971).
+  patching the soon-to-be-deleted llamafile spawn path.
 
 ## [0.5.3] - 2026-05-17
 
