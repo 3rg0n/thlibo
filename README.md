@@ -23,22 +23,22 @@ is captured. Same token savings, no proxy, no API-wire tampering.
  log file 500 lines    ~20000 bytes      ──thlibo──►  ~1500 bytes     (92%)
 ```
 
-Works with Claude Code today. Codex support ships in v0.1 too —
-Codex uses PostToolUse `decision: block` with a `reason` field to
-replace the tool result, same observable effect via a different
-mechanism. The compression engine is identical.
+Works with Claude Code (Bash + PowerShell + Read + Write/Edit hooks)
+and Codex CLI (PostToolUse `decision: block`).
 
 ---
 
 ## How it works
 
-thlibo is two binaries plus a PreToolUse hook:
+thlibo is one binary plus PreToolUse hooks. Inference runs in a
+separate sidecar daemon, [inferd](https://github.com/3rg0n/inferd),
+which thlibo's installer detects-or-installs alongside itself.
 
 ```
 Claude Code: about to run `git status`
       │
       ▼
- PreToolUse hook (bash script)
+ PreToolUse hook (bash / powershell)
       │  ask: thlibo rewrite "git status"
       ▼
  thlibo (CLI)
@@ -55,7 +55,7 @@ Claude Code: about to run `git status`
       │
       ▼
  middleware: fast-path regex → git-filter (python script)
-             OR router call → thlibod daemon → Gemma 4 processor
+             OR router call → inferd sidecar → Gemma 4 processor
       │
       ▼
  compressed stdout, original stderr, original exit code
@@ -67,14 +67,15 @@ Claude Code: about to run `git status`
  Model never sees the original — only the summary.
 ```
 
-The daemon (`thlibod`) keeps a local Gemma 4 E4B model warm in the
-background via llamafile. Script processors (`git-filter`, `npm-filter`,
-`cargo-filter`) are deterministic Python scripts — they don't need
-the daemon. Prompt processors (`compress`, `casefolder`) dispatch
-through the daemon for LLM-driven summarization of unfamiliar output.
+Script processors (`git-filter`, `npm-filter`, `cargo-filter`,
+`pytest-filter`, `ndjson-filter`, `stacktrace-filter`,
+`pdf-to-md`) are deterministic Python scripts — they don't need
+inferd. Prompt processors (`compress`, `casefolder`, `shorthand`)
+dispatch through inferd for LLM-driven summarisation of unfamiliar
+output.
 
-Everything runs on your machine. No network calls, no telemetry,
-nothing leaves localhost.
+Everything runs on your machine. No network calls during inference,
+no telemetry, nothing leaves localhost.
 
 ---
 
@@ -89,7 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.s
 Pin to a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.6.2 bash
 ```
 
 ### One-liner (Windows PowerShell)
@@ -101,27 +102,27 @@ irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | ie
 Or pinned:
 
 ```powershell
-$env:THLIBO_VERSION='v0.3.0'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+$env:THLIBO_VERSION='v0.6.2'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
 Both installers:
 1. Download the platform-matching release tarball/zip from GitHub.
 2. Verify SHA-256 against `SHA256SUMS` published in the same release.
-3. Extract `thlibo` and `thlibod` into `~/.local/bin` (Unix) or
+3. Extract `thlibo` into `~/.local/bin` (Unix) or
    `%LOCALAPPDATA%\thlibo\bin` (Windows).
 4. On Windows, add the install dir to the User PATH (no admin).
+5. Run `thlibo install` — writes Claude Code hooks, mirrors
+   processors, probe-or-installs the inferd sidecar.
 
-Neither runs `thlibo install` automatically — that step writes to
-your Claude Code settings and registers an autostart entry, so it's
-yours to run when you've read what it does.
+Skip step 5 with `THLIBO_SKIP_INSTALL=1` if you want to inspect the
+binary before running configure.
 
 ### Prerequisites for running
 
-- Python 3.8+ — the built-in script processors (git-filter,
-  npm-filter, cargo-filter) are Python.
+- Python 3.8+ — the built-in script processors are Python.
 - `jq` — the Claude Code hook shell script needs it. Install via
   your package manager or `winget install jqlang.jq` on Windows.
-- `git` — for pulling git diffs, you probably have it already.
+- `git` — for git-related compression you probably have it already.
 
 On Windows you also need `bash` on PATH so Claude Code can execute
 the PreToolUse hook script. **Git Bash (bundled with Git for
@@ -136,115 +137,72 @@ cd thlibo
 mkdir -p bin
 
 # Unix:
-go build -o bin/thlibo   ./cmd/thlibo
-go build -o bin/thlibod  ./cmd/thlibod
+go build -o bin/thlibo ./cmd/thlibo
 
 # Windows (note the .exe):
-go build -o bin/thlibo.exe   ./cmd/thlibo
-go build -o bin/thlibod.exe  ./cmd/thlibod
+go build -o bin/thlibo.exe ./cmd/thlibo
 ```
 
-Leave them in `./bin/` and pass `--daemon-path` to the installer,
-or copy them somewhere already on your `$PATH` (e.g. `~/.local/bin/`
-or `~/bin/`) and omit the flag.
+Copy the binary somewhere on your `$PATH` (e.g. `~/.local/bin/`)
+and run `thlibo install`.
 
 ### Run the installer
 
 ```bash
-./bin/thlibo install
-# Or include the model download in one step:
-./bin/thlibo install --pull-model --allow-unpinned
+thlibo install
 ```
 
 This does five things:
 
 1. Mirrors the embedded built-in processors to `~/.thlibo/processors/`
    (script processors need an on-disk directory to chdir+exec into).
-2. Writes the Claude Code hook script to `~/.thlibo/hooks/thlibo-rewrite.sh`.
-3. Merges a PreToolUse/Bash hook entry into `~/.claude/settings.json`
-   (preserves all your existing hooks and settings verbatim — idempotent).
-4. Registers `thlibod` for per-user autostart:
-   - **Windows:** `.cmd` shim in `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`
-   - **macOS:** `~/Library/LaunchAgents/cisco.thlibo.daemon.plist`, loaded via `launchctl`
-   - **Linux:** `~/.config/systemd/user/cisco.thlibo.daemon.service`, enabled via `systemctl --user`
-5. Reports the plan before applying (use `--dry-run` to see without touching anything).
+2. Writes the Claude Code hook scripts to `~/.thlibo/hooks/`.
+3. Merges PreToolUse/Bash, PowerShell, Read, and Write/Edit hook
+   entries into `~/.claude/settings.json` (preserves all your
+   existing hooks and settings verbatim — idempotent).
+4. **Probe-then-delegate inferd**: if inferd is already running,
+   uses it; if installed but stopped, starts it; otherwise
+   downloads the latest inferd release and runs inferd's bundled
+   installer (which registers inferd's own per-platform autostart).
+5. Reports the plan as it goes (use `--dry-run` to see without
+   touching anything).
 
-No admin/root required. No password prompts. Everything lives under
-your user's home directory.
+No admin/root required for thlibo's own install. Inferd's Windows
+service registration *does* need admin (the installer surfaces a
+clear instruction when that's the case); systemd / launchd setups
+are per-user and need no elevation.
 
 ### Install flags
 
 ```
---dry-run           Report the plan, don't apply it.
---processors-dir    Override ~/.thlibo/processors.
---hook-dir          Override ~/.thlibo/hooks.
---settings          Override ~/.claude/settings.json.
---skip-hook         Mirror processors only; don't touch Claude Code.
---skip-autostart    Don't register the daemon for autostart.
---daemon-path       Absolute path to thlibod (default: alongside thlibo).
---engine-path       Path to llamafile/engine binary (passed to thlibod -engine).
---pull-model        Download the default GGUF (~2.5 GB) as part of install.
---allow-unpinned    Allow --pull-model before the canonical SHA is pinned
-                    (required in v0.1; goes away once a release hash is
-                    recorded in internal/install/model.go).
+--dry-run             Report the plan, don't apply it.
+--processors-dir      Override ~/.thlibo/processors.
+--hook-dir            Override ~/.thlibo/hooks.
+--settings            Override ~/.claude/settings.json.
+--skip-hook           Mirror processors only; don't touch Claude Code.
+--skip-inferd         Don't probe / install the inferd sidecar.
+--inferd-version      Pin inferd to a specific tag (default: latest).
+--codex               Also install the Codex CLI PostToolUse hook.
 ```
 
-### Download the model separately
-
-If you skip `--pull-model` at install time, pull it later with:
-
-```bash
-./bin/thlibo pull gemma-4-e4b
-```
-
-Writes the GGUF to `~/.thlibo/models/` (or `$THLIBO_MODELS_DIR`),
-resumes from any partial `.part` file, and verifies SHA-256 against
-the hash pinned at build time. Progress prints on stderr so stdout
-remains clean for scripting.
-
-**No HuggingFace account required.** The default model
-(`unsloth/gemma-4-E4B-it-GGUF`, Apache-2.0) is a public,
-imatrix-calibrated repack — downloads work anonymously. 1.2M+
-downloads at the time of pinning; thlibo pins a specific repo
-revision so the file bytes are stable across upstream reuploads.
-If you need a different quantisation from Google's gated
-`google/gemma-4-E4B-it` repo, that's where you'd need an HF
-account + token; v0.1 uses the unsloth pin so you don't.
-
-### Start the daemon now (skip autostart wait)
-
-```bash
-./bin/thlibod
-```
-
-The daemon runs in the foreground with logging. When you're happy it
-works, autostart will handle it at every subsequent logon.
+The model GGUF (~5.1 GB Gemma 4 E4B) is downloaded by inferd on
+first inference request, into a shared per-platform model store
+(`~/.local/share/models/` on Linux, `~/Library/Application Support/models/`
+on macOS, `%LOCALAPPDATA%\models\` on Windows). thlibo doesn't
+manage the model — that's inferd's job.
 
 ---
 
 ## Uninstall
 
-There's no `thlibo uninstall` subcommand yet (v0.2). To remove by hand:
-
 ```bash
-# Stop the daemon
-# Windows:  taskkill /F /IM thlibod.exe
-# macOS:    launchctl bootout gui/$UID ~/Library/LaunchAgents/cisco.thlibo.daemon.plist
-# Linux:    systemctl --user disable --now cisco.thlibo.daemon.service
-
-# Remove the autostart entry
-# Windows:  del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\cisco.thlibo.daemon.cmd"
-# macOS:    rm ~/Library/LaunchAgents/cisco.thlibo.daemon.plist
-# Linux:    rm ~/.config/systemd/user/cisco.thlibo.daemon.service
-
-# Remove the Claude Code hook entry
-# Edit ~/.claude/settings.json and delete the PreToolUse group with
-# matcher "Bash" whose command ends in thlibo-rewrite.sh.
-# (Other hooks in that file survive.)
-
-# Remove thlibo's own files
-rm -rf ~/.thlibo
+thlibo uninstall            # remove hooks + scripts; leave ~/.thlibo
+thlibo uninstall --purge    # also delete ~/.thlibo (processors + state)
 ```
+
+Inferd is left running because other tools may use it. To remove
+inferd separately, use inferd's own uninstaller — see
+[inferd's docs](https://github.com/3rg0n/inferd).
 
 ---
 
@@ -282,10 +240,10 @@ same name as a built-in override the built-in.
 | | Script | Prompt |
 |---|---|---|
 | Descriptor | `processor.yaml` + entry file | `processor.md` (YAML frontmatter + body) |
-| Speed | ~10 ms | ~200-800 ms (daemon call) |
+| Speed | ~10 ms | ~200-800 ms (inferd round-trip) |
 | Determinism | Always the same output for the same input | Model-dependent |
 | When to use | Fixed-format output (git, npm, cargo, known log schemas) | Unfamiliar output; stack traces; arbitrary logs |
-| Daemon needed? | No | Yes |
+| Inferd needed? | No | Yes |
 
 ### Built-in processors
 
@@ -297,7 +255,7 @@ same name as a built-in override the built-in.
 | `pytest-filter` | script | `pytest` output |
 | `ndjson-filter` | script | structured-log streams |
 | `stacktrace-filter` | script | Python / Go / Rust / Java / Node stack traces |
-| `pdf-to-md` | script | PDF → GitHub-flavored markdown (text + tables; OCR + vision in v0.8/v0.9) |
+| `pdf-to-md` | script | PDF → GitHub-flavored markdown (text + tables; multimodal pages in v0.8) |
 | `shorthand` | prompt | LLM-facing prose compression (SKILL.md, CLAUDE.md, system prompts) |
 | `compress` | prompt | Generic verbose output, fallback |
 | `casefolder` | prompt | Stack traces, error logs, crash output |
@@ -307,12 +265,14 @@ same name as a built-in override the built-in.
 ## Check it's working
 
 ```bash
-# Daemon is running and listening
-# Windows:  tasklist | findstr thlibod
-# Unix:     pgrep thlibod
+# Inferd sidecar is running
+# Linux:    systemctl --user is-active inferd
+# macOS:    launchctl list | grep io.inferd.daemon
+# Windows:  sc.exe query inferd-daemon
 
 # Hook is registered in Claude Code
-cat ~/.claude/settings.json | grep -A3 thlibo-rewrite
+grep -c thlibo ~/.claude/settings.json
+# Expected: 5+ (Bash + PowerShell + Read + Write + Edit matchers)
 
 # Direct test of the rewrite path
 thlibo rewrite 'git status'
@@ -380,104 +340,92 @@ Temporarily stop compressing without removing anything:
 export THLIBO_DISABLED=1
 ```
 
-(v0.2: the hook honours this flag and exits passthrough immediately.
-Not implemented in v0.1; for now, remove the hook entry from
-`~/.claude/settings.json` to disable.)
+Every hook honours this flag and exits passthrough immediately.
 
 ---
 
 ## Security model
 
 - **All-local at runtime.** No network calls during inference. The
-  daemon listens only on a Unix domain socket / Windows named pipe /
-  loopback TCP — never on a public interface.
-- **One network touch: `thlibo pull`.** The model download reaches
-  HuggingFace over TLS and verifies a SHA-256 pinned into the thlibo
-  binary at build time. Run it once; every subsequent run is offline.
+  inferd sidecar listens only on a Unix domain socket / Windows named
+  pipe / loopback TCP — never on a public interface.
+- **One network touch per host: model download.** Inferd fetches the
+  GGUF on first request and verifies a SHA-256 published in inferd's
+  own release. After that, the daemon is offline.
 - **User-scoped.** On Unix, the inference socket is mode 0660 owned
-  by group `thlibo-users`; admin socket is 0600 owned by the daemon
-  user. On Windows, the pipe ACL grants the current user only;
-  Everyone is excluded.
-- **No elevation.** `thlibo install` runs entirely under your user
-  account. No root / admin / sudo / UAC prompts.
+  by group `inferd-users` (or user-only when the group doesn't
+  exist); admin socket is 0600 owned by the daemon user. On Windows,
+  the pipe ACL grants the current user only; Everyone is excluded.
+- **No elevation for thlibo itself.** `thlibo install` runs entirely
+  under your user account. Inferd's Windows service registration
+  needs admin (one-time, surfaced clearly); systemd / launchd setups
+  are per-user.
 - **Fallback on every error.** If anything in the compression path
-  fails — daemon down, script crashes, processor times out,
+  fails — inferd unreachable, script crashes, processor times out,
   malformed response — the original output is returned unchanged.
   The AI never sees a broken intermediate state.
-- **Model stays offline after install.** The GGUF lives at
-  `~/.thlibo/models/`; `thlibod` spawns `llamafile` as a private
-  child on stdio. llamafile is never exposed on the network.
 - **Hook auto-allows rewritten commands.** By design, the PreToolUse
   hook returns `permissionDecision: allow` for every Bash command it
   rewrites so users aren't re-prompted for the same action. That
   means: once installed, every Bash tool-call that matches the hook
   matcher runs through thlibo's rewrite without a Claude Code
   permission prompt. See [`THREAT_MODEL.md`](THREAT_MODEL.md) finding
-  #15 for the trade-off discussion. To re-introduce prompting,
-  uninstall the hook (remove the thlibo entry from
-  `~/.claude/settings.json`) or edit
-  `internal/adapters/claudecode/hook.sh` to emit no
-  `permissionDecision` field on the allow path.
+  #15 for the trade-off discussion.
 - **Activity log redaction.** `~/.thlibo/logs/*.ndjson` records
   byte-count telemetry only; subprocess stderr and error strings
   pass through a secret-pattern redactor before disk write (AWS keys,
   GitHub PATs, HuggingFace tokens, generic `SECRET=` / `API_KEY=`
   assignments). The redactor is a best-effort backstop, not a
   replacement for keeping secrets out of subprocess output.
+- **Inferd version gate.** thlibo refuses to delegate to inferd
+  binaries older than `MinInferdVersion` (currently v0.1.14). Older
+  versions had a tempdir-copy bug that crashed on /tmp-constrained
+  hosts (WSL) and a macOS launchagent that registered a mock daemon
+  silently. The gate detects them and triggers a fresh inferd
+  install instead of using a known-bad version.
 - **Supply chain.** Every GitHub Action in this repo is pinned by
   commit SHA. Every release archive, the `SHA256SUMS`, and the
   CycloneDX SBOM are signed with cosign via Sigstore's keyless flow
   — no key to manage, identity rooted in the GitHub OIDC token for
   `.github/workflows/release.yml` at the release tag, transparency-
   log entry published to `rekor.sigstore.dev`. Verification command
-  is in the release notes for each tag. A full threat model lives
-  at [`THREAT_MODEL.md`](THREAT_MODEL.md).
+  is in the release notes for each tag. The release pipeline runs
+  the installer scripts against the just-built archive on
+  ubuntu-latest + windows-latest before `gh release create` — a
+  broken installer cannot ship. A full threat model lives at
+  [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 ---
 
-## Known limitations (v0.2)
+## Known limitations
 
-- **Bash, PowerShell, and Read tool coverage; MCP tools bypass.** The
-  PreToolUse hook intercepts Claude Code's `Bash` tool, `PowerShell`
-  tool (when `CLAUDE_CODE_USE_POWERSHELL_TOOL=1`), and `Read` tool
-  (for files dragged into the window or referenced by path). `Grep`
-  / `Glob` / `MCP`-served tools bypass the hook — their inputs and
-  outputs are not intercepted.
-- **No Cursor support.** Claude Code (Bash + PowerShell + Read) and
-  Codex CLI (PostToolUse `decision: block`) are both supported;
-  Cursor is not.
+- **Bash, PowerShell, Read, and Write/Edit tool coverage; MCP tools
+  bypass.** The PreToolUse hooks intercept Claude Code's `Bash` tool,
+  `PowerShell` tool (when `CLAUDE_CODE_USE_POWERSHELL_TOOL=1`),
+  `Read` tool (for files dragged into the window or referenced by
+  path), and `Write` / `Edit` tools (when shorthand auto-apply is
+  enabled). `Grep` / `Glob` / `MCP`-served tools bypass the hook —
+  their inputs and outputs are not intercepted.
+- **No Cursor support.** Claude Code and Codex CLI are both
+  supported; Cursor is not.
 - **Compound shell commands pass through.** `git status | head` or
   `cmd1 && cmd2` are not rewritten — only single-program
   invocations. `thlibo rewrite` matches on `argv[0]` and deliberately
   doesn't try to parse a shell AST.
-- **GGUF must be pulled explicitly.** The 5.1 GB Gemma 4 E4B GGUF is
-  too big to attach to a GitHub release. Run `thlibo pull` (or
-  `thlibo install --pull-model`) to fetch + SHA-verify from
-  HuggingFace.
-
----
-
-## Uninstalling the model
-
-Models can be 2-8 GB. To clean them up separately from the rest of
-thlibo:
-
-```bash
-rm ~/.thlibo/models/gemma-4-e4b-ud-q4-k-xl.gguf
-```
-
-The daemon will report an engine spawn failure on next start, which
-the middleware catches via the restart-cap mechanism (A11) and
-eventually gives up. Installing a fresh model resumes normal operation.
+- **Inferd is a separate dependency.** thlibo no longer ships its
+  own inference daemon. The first `thlibo install` on a fresh host
+  pulls inferd over HTTPS and runs inferd's installer; if you need
+  air-gapped install, fetch inferd manually first (see
+  [github.com/3rg0n/inferd](https://github.com/3rg0n/inferd)) and
+  thlibo's probe-then-delegate will use it without touching the
+  network.
 
 ---
 
 ## Development
 
-- Spec: [`.plan/thlibo-spec.md`](.plan/thlibo-spec.md) is the source
-  of truth. Release gate at [`.plan/release-gate.md`](.plan/release-gate.md)
-  lists every requirement with pass conditions.
 - AI-assistant guidance: [`CLAUDE.md`](CLAUDE.md).
+- Architecture decisions: [`docs/adr/`](docs/adr/).
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md).
 - Run the tests: `go test ./... -timeout 120s`
 - Scanner sweep: `go vet ./... && staticcheck ./... && gosec ./... && govulncheck ./...`
@@ -486,28 +434,30 @@ eventually gives up. Installing a fresh model resumes normal operation.
 
 ```
 cmd/
-  thlibo/          User CLI: rewrite, exec, compress, case, install, uninstall, pull, version.
-  thlibod/         Inference daemon.
+  thlibo/             User CLI: rewrite, exec, compress, case, install,
+                      uninstall, shorthand, version.
 internal/
   adapters/
-    claudecode/    PreToolUse Bash + PowerShell + Read hooks, /caselog skill, settings.json merger.
-    codex/         PostToolUse hook (decision: block) + hooks.json merger.
-  casefile/        `thlibo case` directory builder (compressed.log + summary + meta).
-  daemon/          Lifecycle, lock, engine supervisor, queue, llamafile HTTP backend.
-  execpolicy/      `thlibo exec` allow/deny policy (~/.thlibo/policy.yaml).
-  install/         Disk mirror + per-user autostart (Windows/macOS/Linux) + model/engine download.
-  ipc/             NDJSON protocol over sockets/pipes + peer-cred identity check.
-  logx/            NDJSON activity log with rolling rotation + secret redactor.
-  middleware/      Main flow: short-circuit → fast-path → router → chain.
-  processors/      Registry, descriptors, script+prompt dispatch, thought-stripping.
-  promptsan/       Gemma marker sanitiser for untrusted tool output.
-  queue/           Single-active admission queue + per-caller quota.
-  router/          Gemma native tool-call routing + GBNF grammar.
-  shellcmd/        Minimal shell-command argv[0] extractor.
-  update/          Background release check + upgrade banner.
-  version/         Build-tag constant (overridable via -ldflags).
-processors/        Embedded built-ins (go:embed): compress, casefolder, git-filter, npm-filter, cargo-filter.
-skills/            Claude Code skills: /caselog.
+    claudecode/       PreToolUse hooks (Bash + PowerShell + Read + Write/Edit),
+                      /caselog skill, settings.json merger.
+    codex/            PostToolUse hook (decision: block) + hooks.json merger.
+  casefile/           `thlibo case` directory builder (compressed.log + summary + meta).
+  config/             ~/.thlibo/config.yaml read/write.
+  execpolicy/         `thlibo exec` allow/deny policy.
+  inferdcli/          Thin wrapper over inferd's Go client.
+  install/            Disk mirror + per-platform inferd sidecar installer
+                      (probe-then-delegate) + v0.5 → v0.6 migration.
+  logx/               NDJSON activity log with rolling rotation + secret redactor.
+  middleware/         Main flow: short-circuit → fast-path → router → chain.
+  processors/         Registry, descriptors, script+prompt dispatch, thought-stripping.
+  promptsan/          Gemma marker sanitiser for untrusted tool output.
+  router/             Gemma native tool-call routing + GBNF grammar.
+  shellcmd/           Minimal shell-command argv[0] extractor.
+  shorthand/          LLM-facing prose compression (SKILL.md / CLAUDE.md).
+  update/             Background release check + upgrade banner.
+  version/            Build-tag constant (overridable via -ldflags).
+processors/           Embedded built-ins (go:embed).
+skills/               Claude Code skills: /caselog.
 ```
 
 ---
