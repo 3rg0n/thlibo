@@ -1,0 +1,19 @@
+processors/compress/processor.md
+  s_5811b7f24eccc0::t_36e5bdf0d97442 4-7,10-14,16-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "a758ebf3c69eb2f65cbf4fcb77d193356da6df97",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
