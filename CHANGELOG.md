@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-05-21
+
+Follow-up to v0.6.1's version gate. mac claude's macOS smoke (#24)
+caught a hole: the gate only checked the binary on disk. If an
+older inferd was already running, `probeInferdAdmin` returned
+reachable, the orchestrator short-circuited to `UsedExisting`,
+and no version comparison ever happened — so a user who had
+inferd 0.1.13 running before installing thlibo v0.6.1 would
+silently keep getting mock inference.
+
+### Fixed
+
+- **Running-daemon version check** (#26 / closes #25): when
+  the admin socket is reachable, resolve the daemon version
+  (from the admin status frame if present, falling back to
+  shelling `inferd-daemon --version` for pre-v0.1.14 daemons
+  that don't include a version field), compare against
+  `MinInferdVersion`, and if too old: stop the running daemon
+  via the platform service manager (`systemctl --user stop` /
+  `launchctl bootout` / `sc.exe stop`) and fall through to the
+  fresh-install branch. New `stopInferd()` mirrors the shape
+  of `startInstalledInferd`. Best-effort silent stop — the
+  installer's `enable --now` / `bootstrap` / re-create
+  overwrites the unit / plist / service either way.
+  Verified by mac claude during #24 follow-up: thlibo install
+  with inferd 0.1.13 running emits "stopping for upgrade",
+  runs the fresh-install path, lands on v0.1.14 with
+  `--backend llamacpp` in the plist.
+
 ## [0.6.1] - 2026-05-21
 
 Hotfix release. v0.6.0's release pipeline + installer scripts
