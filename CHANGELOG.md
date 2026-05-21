@@ -7,7 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-21
+
+Hotfix release. v0.6.0's release pipeline + installer scripts
+shipped three regressions in code that only runs at install time;
+this release lands all three fixes plus a CI guard so they cannot
+recur, and a version gate that detects stale inferds (the kind of
+bug v0.6.0's lack of install-path tests would have caught).
+
+### Fixed
+
+- **`scripts/install.sh` / `scripts/install.ps1`**: v0.6.0
+  shipped scripts that still copied `thlibod[.exe]` (gone in
+  v0.6.0) and called `thlibo install --pull-engine --pull-model`
+  (flags removed when inferd became the sidecar). Both rewritten
+  to extract just `thlibo[.exe]` and invoke `thlibo install`.
+  This is the change that unblocks `curl -fsSL ... | bash` and
+  `irm ... | iex` from main.
+- **`.github/workflows/release.yml`**: dropped the leftover
+  `thlibod` build step + llamafile-engine bundle download +
+  `pinnedGemma4E4BQ4KM` ldflag. Bundles now contain only
+  `bin/thlibo`. Switched cosign signing from
+  `--output-signature` / `--output-certificate` (deprecated in
+  cosign v3) to `--bundle <file>.cosign-bundle` (sig + cert +
+  Rekor entry in one file). Verifying signatures now uses
+  `cosign verify-blob --bundle <file>.cosign-bundle <file>`.
+- **Sidecar inferd version gate**: `thlibo install` now refuses
+  to delegate to an inferd binary older than `MinInferdVersion =
+  v0.1.14`. Older builds carry two bugs: WSL ENOSPC during
+  llamacpp init (inferd commit 1fe99d4 / inferd #6, fixed in
+  v0.1.13), and a macOS launchagent that registered a mock
+  daemon because the install script never wrote `--backend
+  llamacpp` / `--model-path` (inferd #8 / #9, fixed in v0.1.14).
+  Stale binaries trigger the fresh-install branch which runs
+  inferd's installer; both the binary and the install script
+  get refreshed. Version comparator tolerates leading-`v`,
+  `-rc` / `+build` trailers, four-component versions, and
+  empty input. 13-case unit test plus a floor-pinning test that
+  fails fast on a careless edit. Verified end-to-end on a WSL
+  host: downgraded inferd to v0.1.11, ran `thlibo install`,
+  observed `found inferd 0.1.11 ... but it's older than the
+  minimum supported v0.1.14; upgrading` followed by
+  `inferd v0.1.14 installed via inferd's installer`. Closes #21.
+
 ### Added
+
+- **`verify-install` CI matrix job** in `release.yml`. Between
+  `build` and `release`, downloads the just-built archive on
+  ubuntu-latest + windows-latest, runs
+  `scripts/install.{sh,ps1}` against it (via the new
+  `THLIBO_LOCAL_ARCHIVE` env var), and asserts the resulting
+  binary reports the tag. The `release` job now needs `[build,
+  verify-install]` — a broken installer cannot reach
+  `gh release create`. Closes #20. Without this, the next
+  v0.6.x would have shipped the same way v0.6.0 did.
+- **`THLIBO_LOCAL_ARCHIVE` env var** on both installer scripts.
+  When set, skip the GitHub Releases download + SHA-256 verify
+  and use the supplied file. CI / release-verification only;
+  the user-facing flow is unchanged.
+
+## [0.6.0] - 2026-05-19
+
+### Added (PDF processor; shipped in the v0.6.0 squash)
 
 - New `pdf-to-md` script processor. Converts a PDF (born-digital,
   text-based) into GitHub-flavored markdown: TOC reconstructed
@@ -40,7 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   this space (pymupdf, marker) are excluded entirely, including
   from any opt-in user-recipe documentation.
 
-## [0.6.0] - 2026-05-19
+---
 
 The inferd extraction is real. Thlibo is now pure middleware: hooks,
 processors, settings.json merge, registry, router. Inference moved
