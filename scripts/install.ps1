@@ -6,6 +6,12 @@
 # Or pinned to a specific version:
 #   $env:THLIBO_VERSION='v0.6.0'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 #
+# Or against a local archive (CI / release verification):
+#   $env:THLIBO_LOCAL_ARCHIVE='C:\path\to\thlibo-windows-amd64.zip'
+#   .\scripts\install.ps1
+# When set, the script skips the download + SHA-256 verify and uses
+# that file directly. Intended for CI; users should not need this.
+#
 # What it does:
 #   1. Downloads thlibo-windows-amd64.zip from the GitHub release.
 #   2. Verifies SHA-256 against SHA256SUMS in the same release.
@@ -57,30 +63,41 @@ function Resolve-Tag {
 # --- main -----------------------------------------------------------
 
 try {
-    $tag = Resolve-Tag
     $asset = 'thlibo-windows-amd64.zip'
-    $assetUrl = "https://github.com/3rg0n/thlibo/releases/download/$tag/$asset"
-    $sumsUrl  = "https://github.com/3rg0n/thlibo/releases/download/$tag/SHA256SUMS"
-
-    Say "version:  $tag"
     Say "install:  $InstallDir"
 
     $tmp = Join-Path $env:TEMP ("thlibo-install-" + [Guid]::NewGuid())
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     try {
         $zipPath = Join-Path $tmp $asset
-        $sumsPath = Join-Path $tmp 'SHA256SUMS'
 
-        Say "downloading $asset..."
-        Invoke-WebRequest -UseBasicParsing -Uri $assetUrl -OutFile $zipPath
-        Invoke-WebRequest -UseBasicParsing -Uri $sumsUrl  -OutFile $sumsPath
+        if ($env:THLIBO_LOCAL_ARCHIVE) {
+            # CI / release-verification path: use the supplied archive
+            # directly, skip download + SHA verify.
+            if (-not (Test-Path -LiteralPath $env:THLIBO_LOCAL_ARCHIVE)) {
+                Die "THLIBO_LOCAL_ARCHIVE not found at $env:THLIBO_LOCAL_ARCHIVE" 3
+            }
+            Copy-Item -LiteralPath $env:THLIBO_LOCAL_ARCHIVE -Destination $zipPath
+            $tag = if ($env:THLIBO_VERSION) { $env:THLIBO_VERSION } else { 'local' }
+            Say "version:  $tag (from local archive $($env:THLIBO_LOCAL_ARCHIVE))"
+        } else {
+            $tag = Resolve-Tag
+            $assetUrl = "https://github.com/3rg0n/thlibo/releases/download/$tag/$asset"
+            $sumsUrl  = "https://github.com/3rg0n/thlibo/releases/download/$tag/SHA256SUMS"
+            $sumsPath = Join-Path $tmp 'SHA256SUMS'
 
-        Say 'verifying SHA-256...'
-        $expectedLine = Get-Content $sumsPath | Where-Object { $_ -match "  ${asset}`$" }
-        if (-not $expectedLine) { Die "SHA256SUMS does not reference $asset" 3 }
-        $expected = ($expectedLine -split '\s+')[0].ToLower()
-        $actual   = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash.ToLower()
-        if ($expected -ne $actual) { Die "SHA mismatch: expected=$expected actual=$actual" 3 }
+            Say "version:  $tag"
+            Say "downloading $asset..."
+            Invoke-WebRequest -UseBasicParsing -Uri $assetUrl -OutFile $zipPath
+            Invoke-WebRequest -UseBasicParsing -Uri $sumsUrl  -OutFile $sumsPath
+
+            Say 'verifying SHA-256...'
+            $expectedLine = Get-Content $sumsPath | Where-Object { $_ -match "  ${asset}`$" }
+            if (-not $expectedLine) { Die "SHA256SUMS does not reference $asset" 3 }
+            $expected = ($expectedLine -split '\s+')[0].ToLower()
+            $actual   = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash.ToLower()
+            if ($expected -ne $actual) { Die "SHA mismatch: expected=$expected actual=$actual" 3 }
+        }
 
         # Extract into a temp folder, then move the exe to the final
         # location. Avoids partial state if something goes wrong

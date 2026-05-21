@@ -8,6 +8,11 @@
 #   curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh \
 #     | THLIBO_VERSION=v0.6.0 bash
 #
+# Or against a local archive (CI / release verification):
+#   THLIBO_LOCAL_ARCHIVE=/path/to/thlibo-linux-amd64.tar.gz bash scripts/install.sh
+#   When set, the script skips the download + SHA-256 verify and uses
+#   that file directly. Intended for CI; users should not need this.
+#
 # What it does:
 #   1. Detects OS + architecture (linux/amd64, linux/arm64, darwin/arm64).
 #   2. Downloads the matching tarball from the GitHub release.
@@ -92,34 +97,45 @@ main() {
 
   local platform tag asset asset_url sums_url
   platform=$(detect_platform)
-  tag=$(resolve_tag)
-  [ -n "$tag" ] || die "could not resolve thlibo release tag" 3
 
   say "platform: $platform"
-  say "version:  $tag"
   say "install:  $INSTALL_DIR"
 
   asset="thlibo-${platform}.tar.gz"
-  asset_url="https://github.com/3rg0n/thlibo/releases/download/${tag}/${asset}"
-  sums_url="https://github.com/3rg0n/thlibo/releases/download/${tag}/SHA256SUMS"
-
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
 
-  say "downloading $asset..."
-  curl -fsSL "$asset_url" -o "$tmp/$asset"   || die "download failed: $asset_url" 3
-  curl -fsSL "$sums_url"  -o "$tmp/SHA256SUMS" || die "download failed: $sums_url" 3
+  if [ -n "${THLIBO_LOCAL_ARCHIVE:-}" ]; then
+    # CI / release-verification path: caller has already produced the
+    # archive (e.g. release.yml's build matrix). Skip the download +
+    # SHA verify; just use the file. Tag display is purely cosmetic
+    # in this branch.
+    [ -f "$THLIBO_LOCAL_ARCHIVE" ] || die "THLIBO_LOCAL_ARCHIVE not found at $THLIBO_LOCAL_ARCHIVE" 3
+    cp "$THLIBO_LOCAL_ARCHIVE" "$tmp/$asset"
+    tag="${THLIBO_VERSION:-local}"
+    say "version:  $tag (from local archive $THLIBO_LOCAL_ARCHIVE)"
+  else
+    tag=$(resolve_tag)
+    [ -n "$tag" ] || die "could not resolve thlibo release tag" 3
+    asset_url="https://github.com/3rg0n/thlibo/releases/download/${tag}/${asset}"
+    sums_url="https://github.com/3rg0n/thlibo/releases/download/${tag}/SHA256SUMS"
 
-  # Verify the asset's SHA against SHA256SUMS. grep matches the
-  # " <filename>" pattern sha256sum emits; standalone sha256sum
-  # --check would require the file to be in cwd, so we do the
-  # compare by hand.
-  say "verifying SHA-256..."
-  local expected actual
-  expected=$(grep -E "[[:space:]]${asset}\$" "$tmp/SHA256SUMS" | awk '{print $1}')
-  [ -n "$expected" ] || die "SHA256SUMS does not reference $asset" 3
-  actual=$(sha256sum "$tmp/$asset" | awk '{print $1}')
-  [ "$expected" = "$actual" ] || die "SHA mismatch: expected=$expected actual=$actual" 3
+    say "version:  $tag"
+    say "downloading $asset..."
+    curl -fsSL "$asset_url" -o "$tmp/$asset"   || die "download failed: $asset_url" 3
+    curl -fsSL "$sums_url"  -o "$tmp/SHA256SUMS" || die "download failed: $sums_url" 3
+
+    # Verify the asset's SHA against SHA256SUMS. grep matches the
+    # " <filename>" pattern sha256sum emits; standalone sha256sum
+    # --check would require the file to be in cwd, so we do the
+    # compare by hand.
+    say "verifying SHA-256..."
+    local expected actual
+    expected=$(grep -E "[[:space:]]${asset}\$" "$tmp/SHA256SUMS" | awk '{print $1}')
+    [ -n "$expected" ] || die "SHA256SUMS does not reference $asset" 3
+    actual=$(sha256sum "$tmp/$asset" | awk '{print $1}')
+    [ "$expected" = "$actual" ] || die "SHA mismatch: expected=$expected actual=$actual" 3
+  fi
 
   mkdir -p "$INSTALL_DIR"
   say "extracting into $INSTALL_DIR..."
