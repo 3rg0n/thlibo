@@ -1,0 +1,25 @@
+README.md
+  s_5811b7f24eccc0::t_2b2d1be694d633 26-27,33-35,41,58,70-75,77-78,93,105,111,114-115,117-118,122,125,140,143,146-147,152,159-173,178-185,188-192,199-200,203-206,243,246,258,268-271,274-275,343,350-354,356-362,364,373,380-385,392-396,400-410,415-421,428,437-438,441-460
+docs/site/index.html
+  s_5811b7f24eccc0::t_4f616e92c7927d 776-779,782,786,788-791
+  s_5811b7f24eccc0::t_e49d551ab4b9c8 517
+  s_5811b7f24eccc0::t_3f3c97c89144fa 712-714,717-720
+  s_5811b7f24eccc0::t_16ab5cd213ec27 572
+  s_5811b7f24eccc0::t_ea1f1417588397 767
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "18c39efb4c5bf70422cd951c21e6c1834e7c9cf5",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
