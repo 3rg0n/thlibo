@@ -14,9 +14,13 @@
 //
 // State machine in InstallInferd:
 //
-//	[ probe admin socket ] ── reachable ──► UsedExisting → done
-//	          │
-//	          unreachable
+//	[ probe admin socket ] ── reachable + version OK ──► UsedExisting → done
+//	          │                          │
+//	          │                          version too old
+//	          │                          ▼
+//	          │                    stop running daemon
+//	          │                          │
+//	          unreachable ───────────────┘
 //	          ▼
 //	[ probe binary on PATH + known dirs ] ── found ──► start it ──► StartedExisting → done
 //	          │
@@ -163,13 +167,30 @@ func InstallInferd(spec InferdInstallSpec, opts PullOptions) (InferdInstallResul
 	probeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if reachable, status, version := probeInferdAdmin(probeCtx); reachable {
-		r.UsedExisting = true
-		r.ResolvedVersion = version
-		if status != "" && status != "ready" {
-			r.Notes = append(r.Notes,
-				fmt.Sprintf("inferd is %s; thlibo will fail open until ready", status))
+		// If the admin frame didn't include a version (pre-v0.1.14
+		// daemons omit it), fall back to shelling the binary on disk.
+		if version == "" {
+			if binPath := findInstalledInferdBinary(); binPath != "" {
+				version = readBinaryVersion(binPath)
+			}
 		}
-		return r, nil
+		if !versionIsOlder(version, MinInferdVersion) {
+			// Running and version is acceptable (or undetectable).
+			r.UsedExisting = true
+			r.ResolvedVersion = version
+			if status != "" && status != "ready" {
+				r.Notes = append(r.Notes,
+					fmt.Sprintf("inferd is %s; thlibo will fail open until ready", status))
+			}
+			return r, nil
+		}
+		// Running but too old: stop it so the fresh-install branch
+		// can replace it. Failure to stop is non-fatal — the installer
+		// runs anyway and the service manager will overwrite the unit.
+		r.Notes = append(r.Notes,
+			fmt.Sprintf("inferd %s is running but older than minimum %s; stopping for upgrade",
+				version, MinInferdVersion))
+		stopInferd()
 	}
 
 	// 2. Probe: is the inferd-daemon binary already on disk?
@@ -469,6 +490,31 @@ func parseSemverTuple(s string) [4]int {
 		out[i] = n
 	}
 	return out
+}
+
+// stopInferd asks the platform's service manager to stop the running
+// inferd daemon. Best-effort: failures are silently ignored because the
+// fresh-install branch (inferd's own installer) will overwrite the unit
+// and re-bootstrap the agent regardless.
+func stopInferd() {
+	switch runtime.GOOS {
+	case "linux":
+		_ = runCommandSilent("systemctl", "--user", "stop", "inferd.service")
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		plist := filepath.Join(home, "Library", "LaunchAgents", "io.inferd.daemon.plist")
+		uid := fmt.Sprintf("%d", os.Getuid())
+		_ = runCommandSilent("launchctl", "bootout", "gui/"+uid, plist)
+	case "windows":
+		_ = runCommandSilent("sc.exe", "stop", "inferd-daemon")
+	}
+}
+
+// runCommandSilent is like runCommand but discards stdout/stderr.
+func runCommandSilent(name string, args ...string) error {
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+	cmd := exec.Command(name, args...) // #nosec G204 -- name + args are constants from this package
+	return cmd.Run()
 }
 
 // readBinaryVersion shells the binary with --version and returns the
