@@ -88,9 +88,81 @@ jobs:
           path: dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}.*
           if-no-files-found: error
 
+  # Run scripts/install.{sh,ps1} against the just-built archive on a
+  # clean runner, asserting the install actually wires up the binary,
+  # ~/.thlibo, and ~/.claude/settings.json. Issue #20: v0.6.0 shipped
+  # three regressions in code that only runs at install time
+  # (cmd/thlibod build, cosign v3 deprecation, --pull-engine flag
+  # removal); CI's go-test/scanners/cosign-self-test didn't touch any
+  # of them. This job closes that gap so the release job can't ship
+  # a broken installer.
+  verify-install:
+    name: verify-install (${{ matrix.os }})
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: thlibo-linux-amd64
+            archive: thlibo-linux-amd64.tar.gz
+            shell: bash
+          - os: windows-latest
+            artifact: thlibo-windows-amd64
+            archive: thlibo-windows-amd64.zip
+            shell: pwsh
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5 (node24)
+
+      - name: Download archive artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifact
+
+      - name: Run install.sh against local archive (linux)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          THLIBO_LOCAL_ARCHIVE: ${{ github.workspace }}/artifact/${{ matrix.archive }}
+          THLIBO_VERSION: ${{ github.ref_name }}
+          THLIBO_SKIP_INSTALL: "1"  # don't fetch inferd; we're testing install.sh, not inferd
+        run: |
+          set -euxo pipefail
+          bash scripts/install.sh
+          # Post-conditions
+          test -x "$HOME/.local/bin/thlibo"
+          actual=$("$HOME/.local/bin/thlibo" version)
+          expected="${{ github.ref_name }}"
+          if [ "$actual" != "$expected" ]; then
+            echo "version mismatch: got '$actual', want '$expected'" >&2
+            exit 1
+          fi
+          echo "OK: install.sh against local archive produced thlibo $actual"
+
+      - name: Run install.ps1 against local archive (windows)
+        if: matrix.os == 'windows-latest'
+        env:
+          THLIBO_LOCAL_ARCHIVE: ${{ github.workspace }}\artifact\${{ matrix.archive }}
+          THLIBO_VERSION: ${{ github.ref_name }}
+          THLIBO_SKIP_INSTALL: "1"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\scripts\install.ps1
+          $bin = Join-Path $env:LOCALAPPDATA 'thlibo\bin\thlibo.exe'
+          if (-not (Test-Path $bin)) { throw "binary missing at $bin" }
+          $actual = & $bin version
+          $expected = "${{ github.ref_name }}"
+          if ($actual -ne $expected) { throw "version mismatch: got '$actual', want '$expected'" }
+          Write-Host "OK: install.ps1 against local archive produced thlibo $actual"
+
   release:
     name: release
-    needs: [build]
+    needs: [build, verify-install]
     runs-on: ubuntu-latest
     # Required for the keyless OIDC-token exchange with Fulcio that
     # cosign uses to sign without long-lived private keys. See
