@@ -1,0 +1,25 @@
+scripts/install.sh
+  s_5811b7f24eccc0::t_78ace239359629 108-126,128-138
+  s_5811b7f24eccc0::t_f7066fd00ea1b3 11-15,127
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_4873c4859debad 91-162,165
+scripts/install.ps1
+  s_5811b7f24eccc0::t_d285a7bcac25e0 74-92,94-100
+  s_5811b7f24eccc0::t_d5fe700b995748 9-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "402eb576bb4955d5513d0e6ca303388e537377f5",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
