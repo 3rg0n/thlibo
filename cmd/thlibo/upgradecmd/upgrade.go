@@ -65,6 +65,7 @@ Options:
 func runUnix() int {
 	script := fmt.Sprintf("curl -fsSL %s | bash", installScriptURL)
 	// #nosec G204 — script is a compile-time constant URL
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- script is fmt.Sprintf'd from the const installScriptURL only; no caller-controlled input reaches the shell.
 	cmd := exec.Command("bash", "-c", script)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -84,6 +85,7 @@ func runWindows() int {
 		psURL,
 	)
 	// #nosec G204 — script is a compile-time constant URL
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- script is fmt.Sprintf'd from the const psURL only; no caller-controlled input reaches PowerShell.
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
