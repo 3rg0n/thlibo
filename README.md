@@ -114,7 +114,7 @@ curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.s
 Pin to a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.7.2 bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.7.3 bash
 ```
 
 ### One-liner (Windows PowerShell)
@@ -126,7 +126,7 @@ irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | ie
 Or pinned:
 
 ```powershell
-$env:THLIBO_VERSION='v0.7.2'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+$env:THLIBO_VERSION='v0.7.3'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
 Both installers:
