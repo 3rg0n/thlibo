@@ -718,9 +718,7 @@ html.no-js .reveal{ opacity:1; transform:none }
     </div>
 
     <div class="demo-foot">
-      <span><b>Without thlibo</b> = what Claude Code consumes natively. Text outputs at <a href="https://docs.anthropic.com/en/docs/build-with-claude/tokens">~4&nbsp;chars/tok</a>; PDFs at <a href="https://docs.anthropic.com/en/docs/build-with-claude/pdf-support">~2,250&nbsp;tok/page</a> (page render + extracted text). <b>With thlibo</b> = bytes returned by the processor, ÷4.</span>
-      <span><sup>†</sup> A 7-day log won't fit in any context window (Claude's is 200k tok). The "without thlibo" cell is what the bytes would tokenise to — without thlibo you wouldn't be able to ask the model about this data at all.</span>
-      <span>Commands reproducible via <code>go&nbsp;test&nbsp;./internal/middleware/...&nbsp;-run&nbsp;TokenSavings</code>; PDF + log fixtures embedded with <a href="https://github.com/3rg0n/inferd">inferd</a>'s 300M-param embed model; top-percentile windows surfaced by k-NN density (<code>CORDON_MAX_WINDOWS=5000</code>).</span>
+      <span>Methodology + reproduction notes in the <a href="https://github.com/3rg0n/thlibo#methodology">README</a>.</span>
     </div>
   </div>
 </section>

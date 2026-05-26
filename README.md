@@ -23,6 +23,29 @@ is captured. Same token savings, no proxy, no API-wire tampering.
  log file 500 lines    ~20000 bytes      ──thlibo──►  ~1500 bytes     (92%)
 ```
 
+### Methodology
+
+The savings figures on the [marketing page](https://3rg0n.github.io/thlibo/)
+and in this README are measured in tokens — the unit you actually
+pay for — not raw bytes:
+
+- **Without thlibo** = what Claude Code consumes natively. Text
+  outputs at [~4 chars/tok](https://docs.anthropic.com/en/docs/build-with-claude/tokens);
+  PDFs at [~2,250 tok/page](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support)
+  (page render + extracted text).
+- **With thlibo** = bytes returned by the processor, ÷4.
+
+A 7-day log won't fit in any context window (Claude's is 200k tok).
+The "without thlibo" figure for those rows is what the bytes
+*would* tokenise to — in practice, without thlibo you wouldn't be
+able to ask the model about that data at all.
+
+Commands reproducible via
+`go test ./internal/middleware/... -run TokenSavings`. PDF + log
+fixtures embedded with [inferd](https://github.com/3rg0n/inferd)'s
+300M-param embed model; top-percentile windows surfaced by k-NN
+density (`CORDON_MAX_WINDOWS=5000`).
+
 Works with Claude Code (Bash + PowerShell + Read + Write/Edit hooks)
 and Codex CLI (PostToolUse `decision: block`).
 
