@@ -12,6 +12,7 @@ implementation choices aren't.
 | [0005](0005-extract-inference-to-inferd.md) | Extract inference to a separate `inferd` service | Accepted |
 | [0006](0006-fail-open-during-inferd-bootstrap.md) | Fail open during the inferd bootstrap window | Accepted |
 | [0007](0007-pdf-to-markdown.md) | PDF → Markdown converter (pypdf + pdfplumber, Python script processor) | Accepted |
+| [0008](0008-numpy-as-processor-dep.md) | numpy as a processor dep, soft-imported with passthrough fallback | Accepted |
 
 ## Writing a new ADR
 

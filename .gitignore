@@ -59,3 +59,11 @@ Thumbs.db
 
 # Local reference material (docs you've stashed for me to read)
 .references/
+
+# Python (script processors)
+__pycache__/
+*.pyc
+*.pyo
+
+# Local working notes (stashed alongside repo, not source)
+.notes/

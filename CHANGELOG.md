@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-26
+
+### Added
+
+- **`cordon-filter` processor** — semantic anomaly surfacer for
+  unstructured / weakly-structured logs and long-form text.
+  Windows the input into N-line chunks, embeds each window via
+  inferd's embed socket (EmbeddingGemma 300M, MRL-256), scores
+  each window by k-NN density in embedding space, and emits the
+  top-percentile windows as the same `signature_groups` shape
+  that the `compress` prompt produces. Fail-open contract: if
+  inferd is unreachable, numpy is missing, or anything else
+  goes sideways, the input passes through verbatim.
+  `CORDON_MAX_WINDOWS` caps the O(n²) pairwise-distance step on
+  large inputs (uniform sampling). E2e on real fixtures:
+  543 MB traefik 7-day log → 169 KB / 272 anomaly groups; 551 MB
+  application log → 254 KB / 505 groups; 17-page PDF → 49 KB /
+  287 groups. See [ADR 0008](docs/adr/0008-numpy-as-processor-dep.md)
+  for the numpy soft-import pattern this introduces. Tested
+  against [inferd](https://github.com/3rg0n/inferd) v0.2.4.
+
+### Fixed
+
+- **`cordon-filter` signature collapse on structured logs**:
+  the original `_signature()` truncated the tokenised line at 40
+  chars, before any discriminating field appeared in JSON / Loki
+  / OTel records. On real traefik access logs every record
+  collapsed to one signature, which would defeat the surfacer's
+  purpose on production log fixtures. Rewrote `_signature()`
+  with two paths: (1) detect JSON, lift discriminating keys
+  (`level`, `RequestMethod`, status-class like `5xx` / `4xx`,
+  `RequestPath` stem with numeric / hex / UUID segments
+  tokenised, `caller`, `msg` stem) into a stable kebab-case
+  composite; (2) plain text falls through to the token-replace
+  path with the prefix cap raised 40 → 80 chars. `_level()` now
+  reads `level` / `detected_level` / `severity` directly out of
+  structured records. 14-case unit test pins the regression.
+
 ## [0.6.2] - 2026-05-21
 
 Follow-up to v0.6.1's version gate. mac claude's macOS smoke (#24)

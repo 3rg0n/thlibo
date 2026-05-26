@@ -17,5 +17,5 @@ import "embed"
 // processor.md descriptor and (for script processors) the entry
 // script file.
 //
-//go:embed all:git-filter all:npm-filter all:cargo-filter all:compress all:casefolder all:shorthand all:stacktrace-filter all:pytest-filter all:ndjson-filter all:pdf-to-md
+//go:embed all:git-filter all:npm-filter all:cargo-filter all:compress all:casefolder all:shorthand all:stacktrace-filter all:pytest-filter all:ndjson-filter all:pdf-to-md all:cordon-filter
 var FS embed.FS

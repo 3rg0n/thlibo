@@ -584,7 +584,7 @@ html.no-js .reveal{ opacity:1; transform:none }
     <div class="section-head">
       <span class="section-num">§ i</span>
       <h2 class="section-title">What comes back is smaller.</h2>
-      <span class="section-tag">measured 2026-05-13</span>
+      <span class="section-tag">commands · pdfs · logs</span>
     </div>
 
     <div class="bars">
@@ -652,11 +652,74 @@ html.no-js .reveal{ opacity:1; transform:none }
         </div>
       </article>
 
+      <!-- pdf → markdown (atc-sse-prd) ......................................... -->
+      <article class="bar reveal"
+               data-raw="70231" data-compressed="48692" data-scale="0.6933">
+        <div class="bar-label">
+          <span class="cmd">PDF (17 pages, 326 KB)</span>
+          <span class="processor">via <b>pdf-to-md → cordon-filter</b> · python + local model</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.6933"></div>
+            <div class="bar-compressed" style="--pct:69.33%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">70,231&nbsp;B</span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="48692">48,692<span class="unit">&nbsp;B</span></span>
+            <span class="reduction">−30.7%</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- traefik 7d log ...................................................... -->
+      <article class="bar reveal"
+               data-raw="543044634" data-compressed="169261" data-scale="0.0003">
+        <div class="bar-label">
+          <span class="cmd">traefik access log (7 d)</span>
+          <span class="processor">via <b>cordon-filter</b> · embeddings + k-NN</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.0003"></div>
+            <div class="bar-compressed" style="--pct:0.03%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">543&nbsp;MB</span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="169261">169,261<span class="unit">&nbsp;B</span></span>
+            <span class="reduction">−99.97%</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- things-api 7d log ................................................... -->
+      <article class="bar reveal"
+               data-raw="551179819" data-compressed="254260" data-scale="0.0005">
+        <div class="bar-label">
+          <span class="cmd">application log (7 d, 633k lines)</span>
+          <span class="processor">via <b>cordon-filter</b> · embeddings + k-NN</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.0005"></div>
+            <div class="bar-compressed" style="--pct:0.05%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">551&nbsp;MB</span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="254260">254,260<span class="unit">&nbsp;B</span></span>
+            <span class="reduction">−99.95%</span>
+          </div>
+        </div>
+      </article>
+
     </div>
 
     <div class="demo-foot">
-      <span>Same inputs, reproducible via <code>go&nbsp;test&nbsp;./internal/middleware/...&nbsp;-run&nbsp;TokenSavings</code>.</span>
-      <span>Raw bytes measured before the <code>thlibo&nbsp;exec</code> wrapper touches them; compressed bytes after the Python filter returns.</span>
+      <span>Commands reproducible via <code>go&nbsp;test&nbsp;./internal/middleware/...&nbsp;-run&nbsp;TokenSavings</code>.</span>
+      <span>PDF + log fixtures embedded with <a href="https://github.com/3rg0n/inferd">inferd</a>'s 300M-param embed model; top-percentile windows surfaced by k-NN density. <code>CORDON_MAX_WINDOWS=5000</code>.</span>
     </div>
   </div>
 </section>

@@ -1,0 +1,19 @@
+name: cordon-filter
+type: script
+entry: run.py
+description: >
+  Semantic anomaly surfacer for unstructured / weakly-structured logs.
+  Windows the input into N-line chunks, embeds each window via inferd's
+  embed socket (EmbeddingGemma 300M, MRL-256), scores each window by
+  k-NN distance to its nearest neighbours, and emits the top N% as the
+  same structured signature_groups shape that the compress prompt
+  uses. Repetitive-but-loud errors cluster with each other and score
+  low; rare events stand out and surface.
+
+  Runs only when explicitly opted in (no `match` regex). Wire this
+  into the dispatch chain as a fallback for inputs ndjson-filter
+  declines, or as an opt-in augmentation alongside it.
+
+  Falls back to the input verbatim if inferd's embed socket is
+  unreachable, returns an error frame, or numpy is unavailable —
+  matching the rest of thlibo's processor contract.
