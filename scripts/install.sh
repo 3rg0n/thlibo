@@ -6,7 +6,7 @@
 #
 # Or pinned to a specific version:
 #   curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh \
-#     | THLIBO_VERSION=v0.6.0 bash
+#     | THLIBO_VERSION=v0.7.0 bash
 #
 # Or against a local archive (CI / release verification):
 #   THLIBO_LOCAL_ARCHIVE=/path/to/thlibo-linux-amd64.tar.gz bash scripts/install.sh

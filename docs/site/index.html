@@ -514,7 +514,7 @@ html.no-js .reveal{ opacity:1; transform:none }
 
 <!-- masthead ................................................................ -->
 <header class="masthead">
-  <div class="mark"><b>θ</b>&nbsp;thlibo <span style="color:var(--ink-ghost)">·&nbsp;v0.6.2</span></div>
+  <div class="mark"><b>θ</b>&nbsp;thlibo <span style="color:var(--ink-ghost)">·&nbsp;v0.7.0</span></div>
   <nav>
     <a href="#demo">demo</a>
     <a href="#how">how it works</a>
@@ -569,7 +569,7 @@ html.no-js .reveal{ opacity:1; transform:none }
   </div>
 
   <p class="hero-meta">
-    <span>v <b>0.6.2</b></span>
+    <span>v <b>0.7.0</b></span>
     <span>binary <b>~7&nbsp;MB</b></span>
     <span>model <b>5.1&nbsp;GB</b> (opt-in)</span>
     <span>hf tokens <b>none</b></span>
@@ -583,15 +583,15 @@ html.no-js .reveal{ opacity:1; transform:none }
   <div class="shell">
     <div class="section-head">
       <span class="section-num">§ i</span>
-      <h2 class="section-title">What comes back is smaller.</h2>
-      <span class="section-tag">commands · pdfs · logs</span>
+      <h2 class="section-title">What you'd send vs. what thlibo sends.</h2>
+      <span class="section-tag">tokens · without → with</span>
     </div>
 
     <div class="bars">
 
       <!-- git diff ............................................................ -->
       <article class="bar reveal"
-               data-raw="68821" data-compressed="929" data-scale="0.0135">
+               data-raw="17205" data-compressed="232" data-scale="0.0135">
         <div class="bar-label">
           <span class="cmd">git diff HEAD~5</span>
           <span class="processor">via <b>git-filter</b> · python</span>
@@ -602,9 +602,9 @@ html.no-js .reveal{ opacity:1; transform:none }
             <div class="bar-compressed" style="--pct:1.35%"></div>
           </div>
           <div class="bar-figures">
-            <span class="from">68,821&nbsp;B</span>
+            <span class="from">~17,205&nbsp;tok</span>
             <span class="arrow">→</span>
-            <span class="to" data-counter-to="929">929<span class="unit">&nbsp;B</span></span>
+            <span class="to" data-counter-to="232">~232<span class="unit">&nbsp;tok</span></span>
             <span class="reduction">−98.6%</span>
           </div>
         </div>
@@ -612,7 +612,7 @@ html.no-js .reveal{ opacity:1; transform:none }
 
       <!-- npm list ............................................................ -->
       <article class="bar reveal"
-               data-raw="9228" data-compressed="52" data-scale="0.0056">
+               data-raw="2307" data-compressed="13" data-scale="0.0056">
         <div class="bar-label">
           <span class="cmd">npm list (200 deps)</span>
           <span class="processor">via <b>npm-filter</b> · python</span>
@@ -623,9 +623,9 @@ html.no-js .reveal{ opacity:1; transform:none }
             <div class="bar-compressed" style="--pct:0.56%"></div>
           </div>
           <div class="bar-figures">
-            <span class="from">9,228&nbsp;B</span>
+            <span class="from">~2,307&nbsp;tok</span>
             <span class="arrow">→</span>
-            <span class="to" data-counter-to="52">52<span class="unit">&nbsp;B</span></span>
+            <span class="to" data-counter-to="13">~13<span class="unit">&nbsp;tok</span></span>
             <span class="reduction">−99.4%</span>
           </div>
         </div>
@@ -633,7 +633,7 @@ html.no-js .reveal{ opacity:1; transform:none }
 
       <!-- cargo test .......................................................... -->
       <article class="bar reveal"
-               data-raw="13227" data-compressed="1434" data-scale="0.1084">
+               data-raw="3307" data-compressed="359" data-scale="0.1084">
         <div class="bar-label">
           <span class="cmd">cargo test (20 failures)</span>
           <span class="processor">via <b>cargo-filter</b> · python</span>
@@ -644,9 +644,9 @@ html.no-js .reveal{ opacity:1; transform:none }
             <div class="bar-compressed" style="--pct:10.84%"></div>
           </div>
           <div class="bar-figures">
-            <span class="from">13,227&nbsp;B</span>
+            <span class="from">~3,307&nbsp;tok</span>
             <span class="arrow">→</span>
-            <span class="to" data-counter-to="1434">1,434<span class="unit">&nbsp;B</span></span>
+            <span class="to" data-counter-to="359">~359<span class="unit">&nbsp;tok</span></span>
             <span class="reduction">−89.2%</span>
           </div>
         </div>
@@ -654,30 +654,30 @@ html.no-js .reveal{ opacity:1; transform:none }
 
       <!-- pdf → markdown (atc-sse-prd) ......................................... -->
       <article class="bar reveal"
-               data-raw="70231" data-compressed="48692" data-scale="0.6933">
+               data-raw="38250" data-compressed="12173" data-scale="0.3183">
         <div class="bar-label">
           <span class="cmd">PDF (17 pages, 326 KB)</span>
           <span class="processor">via <b>pdf-to-md → cordon-filter</b> · python + local model</span>
         </div>
         <div class="bar-canvas">
           <div class="bar-track" aria-hidden="true">
-            <div class="bar-raw" style="--scale:0.6933"></div>
-            <div class="bar-compressed" style="--pct:69.33%"></div>
+            <div class="bar-raw" style="--scale:0.3183"></div>
+            <div class="bar-compressed" style="--pct:31.83%"></div>
           </div>
           <div class="bar-figures">
-            <span class="from">70,231&nbsp;B</span>
+            <span class="from">~38,250&nbsp;tok</span>
             <span class="arrow">→</span>
-            <span class="to" data-counter-to="48692">48,692<span class="unit">&nbsp;B</span></span>
-            <span class="reduction">−30.7%</span>
+            <span class="to" data-counter-to="12173">~12,173<span class="unit">&nbsp;tok</span></span>
+            <span class="reduction">−68.2%</span>
           </div>
         </div>
       </article>
 
       <!-- traefik 7d log ...................................................... -->
       <article class="bar reveal"
-               data-raw="543044634" data-compressed="169261" data-scale="0.0003">
+               data-raw="135761000" data-compressed="42315" data-scale="0.0003">
         <div class="bar-label">
-          <span class="cmd">traefik access log (7 d)</span>
+          <span class="cmd">traefik access log (7 d, 543 MB)</span>
           <span class="processor">via <b>cordon-filter</b> · embeddings + k-NN</span>
         </div>
         <div class="bar-canvas">
@@ -686,9 +686,9 @@ html.no-js .reveal{ opacity:1; transform:none }
             <div class="bar-compressed" style="--pct:0.03%"></div>
           </div>
           <div class="bar-figures">
-            <span class="from">543&nbsp;MB</span>
+            <span class="from">~135.8&nbsp;M&nbsp;tok<sup>†</sup></span>
             <span class="arrow">→</span>
-            <span class="to" data-counter-to="169261">169,261<span class="unit">&nbsp;B</span></span>
+            <span class="to" data-counter-to="42315">~42,315<span class="unit">&nbsp;tok</span></span>
             <span class="reduction">−99.97%</span>
           </div>
         </div>
@@ -696,9 +696,9 @@ html.no-js .reveal{ opacity:1; transform:none }
 
       <!-- things-api 7d log ................................................... -->
       <article class="bar reveal"
-               data-raw="551179819" data-compressed="254260" data-scale="0.0005">
+               data-raw="137795000" data-compressed="63565" data-scale="0.0005">
         <div class="bar-label">
-          <span class="cmd">application log (7 d, 633k lines)</span>
+          <span class="cmd">application log (7 d, 551 MB, 633k lines)</span>
           <span class="processor">via <b>cordon-filter</b> · embeddings + k-NN</span>
         </div>
         <div class="bar-canvas">
@@ -707,9 +707,9 @@ html.no-js .reveal{ opacity:1; transform:none }
             <div class="bar-compressed" style="--pct:0.05%"></div>
           </div>
           <div class="bar-figures">
-            <span class="from">551&nbsp;MB</span>
+            <span class="from">~137.8&nbsp;M&nbsp;tok<sup>†</sup></span>
             <span class="arrow">→</span>
-            <span class="to" data-counter-to="254260">254,260<span class="unit">&nbsp;B</span></span>
+            <span class="to" data-counter-to="63565">~63,565<span class="unit">&nbsp;tok</span></span>
             <span class="reduction">−99.95%</span>
           </div>
         </div>
@@ -718,8 +718,9 @@ html.no-js .reveal{ opacity:1; transform:none }
     </div>
 
     <div class="demo-foot">
-      <span>Commands reproducible via <code>go&nbsp;test&nbsp;./internal/middleware/...&nbsp;-run&nbsp;TokenSavings</code>.</span>
-      <span>PDF + log fixtures embedded with <a href="https://github.com/3rg0n/inferd">inferd</a>'s 300M-param embed model; top-percentile windows surfaced by k-NN density. <code>CORDON_MAX_WINDOWS=5000</code>.</span>
+      <span><b>Without thlibo</b> = what Claude Code consumes natively. Text outputs at <a href="https://docs.anthropic.com/en/docs/build-with-claude/tokens">~4&nbsp;chars/tok</a>; PDFs at <a href="https://docs.anthropic.com/en/docs/build-with-claude/pdf-support">~2,250&nbsp;tok/page</a> (page render + extracted text). <b>With thlibo</b> = bytes returned by the processor, ÷4.</span>
+      <span><sup>†</sup> A 7-day log won't fit in any context window (Claude's is 200k tok). The "without thlibo" cell is what the bytes would tokenise to — without thlibo you wouldn't be able to ask the model about this data at all.</span>
+      <span>Commands reproducible via <code>go&nbsp;test&nbsp;./internal/middleware/...&nbsp;-run&nbsp;TokenSavings</code>; PDF + log fixtures embedded with <a href="https://github.com/3rg0n/inferd">inferd</a>'s 300M-param embed model; top-percentile windows surfaced by k-NN density (<code>CORDON_MAX_WINDOWS=5000</code>).</span>
     </div>
   </div>
 </section>
