@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-05-26
+
+### Added
+
+- **Headless detection** (`internal/update.IsHeadless`) — explicit
+  `THLIBO_HEADLESS=1/0` override, falls back to `CI=true` and
+  stderr-TTY check. Used to select the right update-notice channel.
+- **Headless update notice** — when running non-interactively (hooks,
+  pipes, CI), a `[thlibo] new update available, run: thlibo upgrade`
+  line is prepended to stdout once per new release tag. The literal
+  is a compile-time constant so no release-server content reaches
+  the AI client.
+- **`thlibo upgrade` subcommand** — shells out to the signed install
+  script (`bash -c "curl -fsSL … | bash"` on Unix; PowerShell
+  `Invoke-Expression` on Windows). Accepts `--version v0.X.Y` to
+  pin a specific tag; supports `THLIBO_VERSION` env passthrough.
+- **macOS toast notification** (`osascript display notification`)
+  fires alongside the interactive stderr banner. No-op on non-macOS.
+- **Per-channel notification de-dup** — `NotifiedTag` for interactive
+  stderr banner, `HeadlessNotifiedTag` for stdout injection; each
+  channel fires at most once per new tag.
+- **Headless sync in main** — when `IsHeadless()` is true the runner
+  goroutine is awaited before the subcommand runs, guaranteeing the
+  notice line appears first in piped output.
+
+### Changed
+
+- Interactive banner now says `run: thlibo upgrade` instead of the
+  raw curl one-liner (reduces noise; upgrade subcommand handles it).
+
 ## [0.7.2] - 2026-05-26
 
 ### Added

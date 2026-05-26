@@ -29,12 +29,13 @@ const (
 // state is what we persist between runs. Stored at
 // ~/.thlibo/state/update-check.json.
 type state struct {
-	CheckedAt      time.Time `json:"checked_at"`
-	LatestTag      string    `json:"latest_tag"`
-	NotifiedTag    string    `json:"notified_tag"` // last tag we printed a banner for
-	SeenURL        string    `json:"url"`
-	LastErr        string    `json:"last_err,omitempty"`
-	LastErrAt      time.Time `json:"last_err_at,omitempty"`
+	CheckedAt           time.Time `json:"checked_at"`
+	LatestTag           string    `json:"latest_tag"`
+	NotifiedTag         string    `json:"notified_tag"`          // last tag we printed a banner for
+	HeadlessNotifiedTag string    `json:"headless_notified_tag"` // last tag injected into tool stdout
+	SeenURL             string    `json:"url"`
+	LastErr             string    `json:"last_err,omitempty"`
+	LastErrAt           time.Time `json:"last_err_at,omitempty"`
 }
 
 // Runner orchestrates the check: read state, decide whether cooldown
@@ -52,12 +53,19 @@ type Runner struct {
 	// Out is where the banner is written. Typically os.Stderr so
 	// the upgrade notice doesn't pollute a piped stdout.
 	Out io.Writer
+	// Stdout is where the headless NoticeLine is prepended. Nil
+	// defaults to os.Stdout. Only written when IsHeadless() is true
+	// and an upgrade is available.
+	Stdout io.Writer
 	// Logger receives structured records for fetch failures and
 	// skips. nil is safe.
 	Logger *logx.Logger
 	// Interval overrides DefaultInterval. Zero means use the
 	// environment / default.
 	Interval time.Duration
+	// Headless overrides IsHeadless() for tests. nil = use
+	// IsHeadless(); non-nil = use the pointed-to value.
+	Headless *bool
 }
 
 // Run performs one check attempt, asynchronously. Returns
@@ -113,12 +121,17 @@ func (r *Runner) runOnce(ctx context.Context) {
 	// pending upgrade to re-notify about.
 	if !prev.CheckedAt.IsZero() && time.Since(prev.CheckedAt) < interval {
 		// Still re-show the banner for an unacknowledged upgrade
-		// (one banner per new tag; NotifiedTag tracks the last).
-		if prev.LatestTag != "" && prev.LatestTag != prev.NotifiedTag &&
-			newerThan(prev.LatestTag, r.Current) {
-			r.printBanner(prev.LatestTag, prev.SeenURL)
-			prev.NotifiedTag = prev.LatestTag
-			_ = saveState(statePath, prev)
+		// (one banner per new tag; per-channel tracking prevents
+		// double-firing: NotifiedTag for interactive, HeadlessNotifiedTag
+		// for headless injection).
+		if prev.LatestTag != "" && newerThan(prev.LatestTag, r.Current) {
+			headless := r.isHeadless()
+			alreadyNotified := headless && prev.LatestTag == prev.HeadlessNotifiedTag ||
+				!headless && prev.LatestTag == prev.NotifiedTag
+			if !alreadyNotified {
+				r.notify(prev.LatestTag, prev.SeenURL, &prev)
+				_ = saveState(statePath, prev)
+			}
 		}
 		return
 	}
@@ -132,7 +145,11 @@ func (r *Runner) runOnce(ctx context.Context) {
 	defer cancel()
 
 	decision, err := Check(fetchCtx, r.Current, fetcher)
-	next := state{CheckedAt: time.Now().UTC(), NotifiedTag: prev.NotifiedTag}
+	next := state{
+		CheckedAt:           time.Now().UTC(),
+		NotifiedTag:         prev.NotifiedTag,
+		HeadlessNotifiedTag: prev.HeadlessNotifiedTag,
+	}
 	switch {
 	case errors.Is(err, ErrDevBuild):
 		return
@@ -146,15 +163,51 @@ func (r *Runner) runOnce(ctx context.Context) {
 		next.LatestTag = decision.Latest
 		next.SeenURL = decision.URL
 		if decision.UpgradeAvailable && decision.Latest != prev.NotifiedTag {
-			r.printBanner(decision.Latest, decision.URL)
-			next.NotifiedTag = decision.Latest
+			r.notify(decision.Latest, decision.URL, &next)
 		}
 	}
 	_ = saveState(statePath, next)
 }
 
-// printBanner writes the upgrade notice. One line, stderr, easy to
-// grep away. Uses ANSI bold if Out is a terminal; otherwise plain.
+// isHeadless returns true when the process is running non-interactively.
+// Uses the Headless override field when set (for testing).
+func (r *Runner) isHeadless() bool {
+	if r.Headless != nil {
+		return *r.Headless
+	}
+	return IsHeadless()
+}
+
+// notify dispatches the upgrade notice through the correct channel:
+//   - headless: prepend NoticeLine to stdout (once per tag)
+//   - interactive: print banner to stderr + fire macOS toast
+//
+// s is the state being built for persistence; notify updates the
+// appropriate notified-tag field.
+func (r *Runner) notify(latest, url string, s *state) {
+	if r.isHeadless() {
+		r.injectHeadlessNotice(s)
+	} else {
+		r.printBanner(latest, url)
+		s.NotifiedTag = latest
+		sendToast()
+	}
+}
+
+// injectHeadlessNotice prepends NoticeLine to stdout. The literal is
+// a compile-time constant — no release server content interpolated.
+// Updates s.HeadlessNotifiedTag so the notice only fires once per tag.
+func (r *Runner) injectHeadlessNotice(s *state) {
+	w := r.Stdout
+	if w == nil {
+		w = os.Stdout
+	}
+	fmt.Fprint(w, NoticeLine)
+	s.HeadlessNotifiedTag = s.LatestTag
+}
+
+// printBanner writes the upgrade notice to stderr. Uses ANSI bold
+// unless NO_COLOR is set; always exits silently.
 func (r *Runner) printBanner(latest, url string) {
 	w := r.Out
 	if w == nil {
@@ -172,7 +225,7 @@ func (r *Runner) printBanner(latest, url string) {
 	}
 	fmt.Fprintf(w,
 		"%s[thlibo] update available: %s -> %s%s  (%s)\n"+
-			"          upgrade: curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | bash\n",
+			"          run: thlibo upgrade\n",
 		bold, r.Current, latest, reset, url)
 }
 
