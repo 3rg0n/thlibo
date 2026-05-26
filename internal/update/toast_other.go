@@ -1,8 +1,8 @@
-//go:build !darwin
+//go:build !darwin && !linux
 
 package update
 
-// sendToast is a no-op on non-Darwin platforms. Desktop notification
-// support for Linux (libnotify) and Windows (PowerShell toast) can be
-// added if needed; for now only macOS is wired.
+// sendToast is a no-op on platforms without a wired notification
+// channel. macOS uses osascript; Linux uses notify-send. Windows
+// toast support is deferred (needs an AUMID and a registered shortcut).
 func sendToast() {}

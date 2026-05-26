@@ -6,15 +6,18 @@ import (
 	"io"
 	"os"
 
-	"golang.org/x/sys/windows"
+	"golang.org/x/term"
 )
 
+// isTTY reports whether f is a console handle on Windows. x/term
+// wraps GetConsoleMode for us so the implementation matches the
+// Unix file.
 func isTTY(f io.Writer) bool {
 	file, ok := f.(*os.File)
 	if !ok {
 		return false
 	}
-	var mode uint32
-	err := windows.GetConsoleMode(windows.Handle(file.Fd()), &mode)
-	return err == nil
+	// #nosec G115 — Windows HANDLEs fit in int per MSDN; this is the
+	// canonical x/term invocation pattern.
+	return term.IsTerminal(int(file.Fd()))
 }

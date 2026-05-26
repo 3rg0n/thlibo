@@ -12,8 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Headless detection** (`internal/update.IsHeadless`) — explicit
-  `THLIBO_HEADLESS=1/0` override, falls back to `CI=true` and
-  stderr-TTY check. Used to select the right update-notice channel.
+  `THLIBO_HEADLESS=1/0` override; otherwise headless if any of
+  `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`, `CIRCLECI`,
+  `JENKINS_URL`, `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX`,
+  or `CODEX_SESSION_ID` is set, with a stderr-TTY fallback. The
+  agent markers (`CLAUDECODE` / `CODEX*`) are load-bearing for
+  thlibo's primary use case — without them the headless notice
+  would never fire when an AI assistant pipes tool output through
+  the binary. TTY detection now uses `golang.org/x/term`, which
+  works uniformly on Linux (TCGETS), macOS/BSD (TIOCGETA), and
+  Windows (`GetConsoleMode`).
 - **Headless update notice** — when running non-interactively (hooks,
   pipes, CI), a `[thlibo] new update available, run: thlibo upgrade`
   line is prepended to stdout once per new release tag. The literal
@@ -23,8 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   script (`bash -c "curl -fsSL … | bash"` on Unix; PowerShell
   `Invoke-Expression` on Windows). Accepts `--version v0.X.Y` to
   pin a specific tag; supports `THLIBO_VERSION` env passthrough.
-- **macOS toast notification** (`osascript display notification`)
-  fires alongside the interactive stderr banner. No-op on non-macOS.
+- **Desktop toast notifications** — macOS via `osascript display
+  notification`, Linux via `notify-send --app-name=thlibo
+  --icon=dialog-information` (libnotify; gracefully no-ops if
+  `notify-send` is missing or DBus is unavailable, with a 2 s
+  timeout to guard against a stuck notification daemon). Title and
+  body are compile-time constants (prompt-injection guard). Windows
+  toast support is deferred — needs an AUMID and registered
+  shortcut.
 - **Per-channel notification de-dup** — `NotifiedTag` for interactive
   stderr banner, `HeadlessNotifiedTag` for stdout injection; each
   channel fires at most once per new tag.
