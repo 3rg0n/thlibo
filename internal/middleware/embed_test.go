@@ -33,6 +33,12 @@ func TestEmbeddedFSContainsAllBuiltins(t *testing.T) {
 		"ndjson-filter",
 		// v0.7 — PDF → Markdown
 		"pdf-to-md",
+		// v0.7.0 — cordon-filter (semantic anomaly surfacer)
+		"cordon-filter",
+		// v0.7.1 — lint-filter
+		"lint-filter",
+		// v0.7.2 — trivy-filter
+		"trivy-filter",
 	}
 	for _, name := range want {
 		if d := r.Get(name); d == nil {

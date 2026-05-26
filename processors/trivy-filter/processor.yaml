@@ -1,0 +1,20 @@
+name: trivy-filter
+type: script
+entry: run.py
+match: "(?m)^Total:\\s+\\d+\\s+\\(.*?(?:CRITICAL|HIGH|MEDIUM|LOW|UNKNOWN):\\s+\\d+|Library.*Vulnerability.*Severity.*(?:Status.*)?Installed Version.*Fixed Version.*Title"
+description: >
+  Distills Trivy's default box-drawing vulnerability tables into a
+  TSV-per-CVE feed. Parses the Library / Vulnerability / Severity /
+  Status / Installed Version / Fixed Version / Title columns,
+  merges multi-row title wraps, drops the URL suffix appended to
+  each title, and emits one finding per CVE sorted by severity
+  (criticals first).
+
+  Output schema (5 tab-separated columns):
+    severity \t lib@installed \t CVE \t fixed-version \t title
+
+  Severity letters: C=critical, H=high, M=medium, L=low, U=unknown.
+
+  Falls back to input verbatim on any unhandled exception or if the
+  distilled output would be larger than the input (monotonic
+  guarantee — never grow the bytes the AI client receives).

@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-05-26
+
+### Added
+
+- **`trivy-filter` processor** — distills Trivy's default box-drawing
+  vulnerability tables into one TSV line per CVE. Parses the
+  `Library / Vulnerability / Severity / Status / Installed Version /
+  Fixed Version / Title` columns, merges multi-row title wraps,
+  carries the library name across blank-cell continuation rows,
+  drops the URL suffix appended to each title, and emits findings
+  sorted by severity (criticals first). Output schema:
+  `severity-letter \t lib@installed \t CVE \t fixed \t title`.
+  On the demo `trivy fs requirements.txt` fixture (61 CVEs, 5 libs):
+  54.6 KB → 7.2 KB, **86.8 % savings**.
+  Match-driven on the `Library | Vulnerability | Severity` header
+  row or the `Total: N (UNKNOWN: …, CRITICAL: …)` banner. Reads
+  stdin as UTF-8 (Windows code-page fix for the box-drawing chars).
+  10-case unit test covers single + multi-finding tables, lib
+  carry-forward across separators, URL stripping, severity sort,
+  monotonic-guarantee passthrough, and tiny / empty inputs.
+
+### Changed
+
+- **`lint-filter` rewrite — verbose-distill, terse-passthrough,
+  monotonic guarantee.** v0.7.1 only meaningfully compressed gcc
+  verbose; everything else either grew the input or left the
+  format unparsed. v0.7.2 splits the input into two paths:
+  - **Verbose-shape detection.** A new `_VERBOSE_HINT` regex
+    catches rustc / clippy / ruff multi-line block openers,
+    `--> file:line:col` location continuations, gcc / rustc
+    source-snippet lines (`   N | source`), and eslint stylish
+    indented `line:col level msg rule` rows.
+  - **Verbose path** (`_parse_verbose`) walks the buffer
+    statefully, collapsing each multi-line block into one
+    finding. Captures the `= note: \`#[warn(rule_name)]\``
+    rule on rustc / clippy and the `[*] CODE msg` opener on
+    ruff verbose. `= help: …` (or `help: …`) suggestion lines
+    become a `-`-prefixed continuation row immediately under
+    the finding so the AI sees the fix-suggestion verbatim.
+  - **Terse path** parses single-line shapes (eslint compact /
+    unix, golangci, ruff concise, mypy, shellcheck, rubocop,
+    stylelint, tsc) and re-emits them — never overrides the
+    model's flag choice when the linter already chose terse.
+  - **Output schema is TSV**: `severity-letter \t loc \t rule
+    \t msg`, four columns. Severity letters: E / W / I / N /
+    S / C / R. Replaces the old fixed-width columnar formatter.
+  - **Monotonic guarantee.** End of `compress()` compares
+    distilled UTF-8 byte count against the input; if distillation
+    didn't shrink the bytes, the input is returned verbatim.
+    No code path can grow what the AI client receives.
+  - **`MAX_PER_RULE` defaults to 0** (no cap) — was 5 in v0.7.1.
+    The cap now exists only as an opt-in knob via
+    `LINT_MAX_PER_RULE` for callers who want it.
+
+  End-to-end against 13 captured outputs (rustc, clippy verbose +
+  short, gcc verbose, ruff verbose + concise, mypy, golangci,
+  staticcheck, go vet, tsc, eslint stylish + compact + unix):
+  **77.0 % aggregate savings** (66.6 KB → 15.3 KB), with no
+  individual format showing negative savings. Verbose-default
+  formats compress 43–56 %; terse-default formats passthrough
+  cleanly at 0–10 % (CRLF→LF normalisation only). 29-case unit
+  test covers every format plus the monotonic-guarantee fallback.
+
+### Fixed
+
+- **`lint-filter` negative-savings on terse formats** — v0.7.1's
+  TSV reformatter could grow short inputs (staticcheck 74 → 161 B,
+  golangci 279 → 395 B, mypy 137 → 211 B) because column letters
+  and rule grouping added overhead the linter's own format
+  already lacked. The monotonic guarantee in the rewrite
+  eliminates this: if the rewrite isn't a strict win, the input
+  is returned unchanged.
+
+- **`lint-filter` format gaps** — clippy / ruff multi-line blocks,
+  tsc parens-format, and eslint stylish file-header rows were not
+  matched by any v0.7.1 parser, so those buffers passed through
+  verbatim with zero compression. v0.7.2 parses all three.
+
 ## [0.7.1] - 2026-05-26
 
 ### Added

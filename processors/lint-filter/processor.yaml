@@ -1,21 +1,33 @@
 name: lint-filter
 type: script
 entry: run.py
-match: "(?m)^(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+(?:warning|error|note|info|style|[CWERF]):\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[EWFCBI]\\d{2,4}\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[A-Z]+\\d{3,4}:\\s|(?:[^\\n:]+):\\s*line\\s+\\d+,\\s*col\\s+\\d+,\\s+(?:warning|error)\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[^\\n]+\\s\\([\\w./-]+\\)$"
+match: "(?m)^(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+(?:warning|error|note|info|style|[CWERF]):\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[EWFCBI]\\d{2,4}\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[A-Z]+\\d{3,4}:\\s|(?:[^\\n:]+):\\s*line\\s+\\d+,\\s*col\\s+\\d+,\\s+(?:warning|error)\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[^\\n]+\\s\\([\\w./-]+\\)$|(?:[^\\n:]+)\\(\\d+,\\d+\\):\\s+(?:error|warning)\\s+TS\\d+:\\s|^\\s*(?:warning|error|note|help)(?:\\[[\\w:]+\\])?:\\s+\\S|^\\s*-->\\s+\\S+:\\d+:\\d+\\s*$|^\\s*[A-Z]{1,3}\\d{2,4}(?:\\s+\\[\\*\\])?\\s+\\S"
 description: >
-  Compresses output from the major linting / static-analysis tools:
-  clang, gcc, clippy (rustc-style), eslint (default + compact +
-  unix), golangci-lint, shellcheck, flake8, ruff, mypy, rubocop,
-  stylelint. Parses each finding into (severity, file:line:col,
-  rule-id, message), groups by rule-id, dedupes identical findings
-  across files, sorts errors-before-warnings, and caps to N findings
-  per rule (default 5). Drops surrounding context lines (source
-  excerpts, `--^` carets, `= help:` / `= note:` prose blocks) and
-  ANSI colour codes. Tail line records the original total per rule
-  so the AI can see what was elided.
+  Distills lint output for an AI client. Two paths:
+    - Verbose (multi-line block) inputs are parsed and collapsed
+      into one TSV row per finding, plus a `-`-prefixed help-row
+      continuation when the linter offered a suggestion.
+      Covers rustc / clippy / ruff verbose blocks (` --> file:line:col`
+      style), gcc / clang verbose with source-snippet + caret, and
+      eslint stylish (file-header + indented rows).
+    - Terse (single-line) inputs are parsed and re-emitted in the
+      same TSV schema. Covers eslint compact + unix, golangci-lint,
+      ruff concise, mypy, shellcheck, rubocop, stylelint, tsc
+      (parens format), clippy --message-format=short.
+
+  Output schema (4 tab-separated columns):
+    severity-letter \t loc \t rule \t msg
+
+  Severity letters: E / W / I / N / S / C / R. A `-` row immediately
+  beneath any finding carries the linter's `help: ...` suggestion
+  verbatim, so the AI can write a fix without re-running the linter.
+
+  Monotonic guarantee: distilled output is returned only when its
+  UTF-8 byte count is strictly smaller than the input's. Otherwise
+  the input is passed through unchanged. No code path can grow what
+  the AI client receives.
 
   Knobs:
-    LINT_MAX_PER_RULE  cap per rule-id           default 5
-    LINT_KEEP_CONTEXT  =1 keep source excerpts   default 0
+    LINT_MAX_PER_RULE  cap per rule-id (0 = no cap)  default 0
 
   Falls back to input verbatim on any unhandled exception.

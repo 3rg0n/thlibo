@@ -1,42 +1,46 @@
 #!/usr/bin/env python3
-"""lint-filter: compress lint / static-analysis output for an AI client.
+"""lint-filter: distill verbose lint output for an AI client.
 
-Reads stdin, parses each line as a lint finding using format-specific
-regexes for the major linters, groups by rule id, dedupes identical
-findings, sorts errors-first, and caps each rule to N findings.
+Reads stdin, parses lint findings into a TSV row per finding, drops
+source-snippet noise (carets, fenced source lines), preserves help
+suggestions where the linter offers a fix, and returns it. If
+distillation can't beat the input byte-count, returns the input
+verbose. Never grows the output.
 
-Supported formats:
-  - GCC / Clang     `file:line:col: warning: msg [-Wflag]`
-  - Clippy / rustc  `file:line:col: warning: msg` (lint name in trailing note)
-  - ESLint default  table form (file header + indented `line:col level msg rule`)
-  - ESLint compact  `file: line N, col N, severity - msg (rule)`
-  - ESLint unix     `file:line:col: msg [Error/level/rule]`
-  - golangci-lint   `file:line:col: msg (linter)`
-  - shellcheck      `file:line:col: level: msg [SCxxxx]`
-  - flake8 / ruff   `file:line:col: CODE msg`            (E/W/F/C/B/I/...)
-  - mypy            `file:line: error: msg [code]`        (no col)
-  - rubocop         `file:line:col: C: Rule/Name: msg`    (single-letter sev)
-  - stylelint       `file:line:col: level  msg [rule]`
+Output schema (4 columns, tab-separated):
+    severity \\t file:line[:col] \\t rule-id \\t message
 
-Lossless guarantees:
-  - Every distinct rule id appears in the output at least once.
-  - The first N findings per rule are kept verbatim — so every
-    distinct file:line ref for an early-bucket finding survives.
-  - Total counts per rule are preserved as a `× N` annotation when
-    the cap fires. The tail line records original-rule-count too.
+Optional 5th-column help row appears immediately under any finding
+that had a `help: ...` suggestion in the original output, marked with
+`-` in the severity column:
+    - \\t same-loc \\t same-rule \\t help: msg
 
-What gets compressed:
-  - Findings beyond LINT_MAX_PER_RULE per rule (default 5).
-  - Source-excerpt context lines (the `   |` and `   ^` rustc-style
-    carets, gcc's repeated source line, clippy's help / note
-    suggestion blocks, eslint's per-file blank lines).
-  - ANSI colour codes.
-  - Blank-line runs.
+The AI consumes this naturally: severity-rule-loc-message in one
+line, fix-suggestion (when present) on the next.
 
-Set LINT_KEEP_CONTEXT=1 to keep source-excerpt context (debugging
-the filter itself).
+Supported input shapes:
+  Verbose (multi-line; we distill):
+    - clippy / rustc default      `warning: msg \\n --> file:line:col \\n  | ... \\n = help: ...`
+    - ruff default                same as clippy
+    - gcc / clang default         `file:line:col: warning: msg [-Wflag] \\n source-line \\n   ^`
+    - eslint stylish              file header + indented `line:col level msg rule`
 
-Fail-open contract: any unhandled exception → input verbatim.
+  Terse (single-line; we PASSTHROUGH):
+    - eslint -f compact / -f unix
+    - clippy --message-format=short
+    - ruff --output-format=concise
+    - golangci-lint, staticcheck, go vet
+    - mypy, flake8, shellcheck, rubocop, stylelint
+    - tsc
+
+Verbose detection is conservative: if any line in the buffer looks
+like a verbose block-opener (`warning: msg` *without* a leading
+`file:line:col:` prefix, OR a `--> file:line:col` continuation),
+we enter the distill path. Otherwise we passthrough verbatim.
+
+Monotonic guarantee: distilled output is returned only if its byte-
+count is smaller than the input. Otherwise the input is returned
+unchanged. No input is ever made larger by this processor.
 """
 
 from __future__ import annotations
@@ -44,24 +48,106 @@ from __future__ import annotations
 import os
 import re
 import sys
-from typing import Iterable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
-# Preserve LF on Windows (matches every other thlibo script processor).
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(newline="")
 
-MAX_PER_RULE = int(os.environ.get("LINT_MAX_PER_RULE", "5"))
-KEEP_CONTEXT = bool(int(os.environ.get("LINT_KEEP_CONTEXT", "0") or "0"))
+MAX_PER_RULE = int(os.environ.get("LINT_MAX_PER_RULE", "0") or "0")  # 0 = no cap
 
-# Strip terminal colour escapes — eslint, golangci-lint, clippy all
-# emit them by default when stdout is a TTY; pipes vary.
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
-# ---- per-format finding parsers --------------------------------------
-#
-# Each parser is a (regex, parser_fn) pair. parser_fn returns a Finding
-# dict on match, or None to skip. The dispatcher tries them in order;
-# first hit wins. Order matters: more-specific patterns first.
+# ---- terse-shape parsers (one line = one finding) --------------------
+
+_TERSE_DISPATCH: List[Tuple[re.Pattern, str]] = []
+
+
+def _t(pattern: str, kind: str) -> None:
+    _TERSE_DISPATCH.append((re.compile(pattern), kind))
+
+
+# shellcheck: file:line:col: level: msg [SCxxxx]
+_t(r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
+   r"(?P<sev>warning|error|info|style|note):\s+"
+   r"(?P<msg>.+?)\s+\[(?P<rule>SC\d+)\]\s*$",
+   "shellcheck")
+
+# rubocop: file:line:col: C: [Correctable] Rule/Name: msg
+_t(r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
+   r"(?P<sev>[CWERF]):\s+(?:\[Correctable\]\s+)?"
+   r"(?P<rule>[A-Z][\w/]*):\s+(?P<msg>.+?)\s*$",
+   "rubocop")
+
+# stylelint: file:line:col: level  msg [rule]   (double space)
+_t(r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
+   r"(?P<sev>warning|error)\s{2,}(?P<msg>.+?)\s+\[(?P<rule>[\w-]+)\]\s*$",
+   "stylelint")
+
+# eslint compact: file: line N, col N, sev - msg (rule)
+_t(r"^(?P<file>[^:\s][^:\n]*?):\s+line\s+(?P<line>\d+),\s+col\s+(?P<col>\d+),\s+"
+   r"(?P<sev>warning|error|Warning|Error)\s+-\s+(?P<msg>.+?)\s+\((?P<rule>[\w/@.-]+)\)\s*$",
+   "eslint-compact")
+
+# eslint unix: file:line:col: msg [Sev/rule]
+_t(r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
+   r"(?P<msg>.+?)\s+\[(?P<sev>Error|Warning)/(?P<rule>[\w/@.-]+)\]\s*$",
+   "eslint-unix")
+
+# golangci-lint: file:line:col: msg (linter)
+_t(r"^(?P<file>[^:\s][^:\n]*?\.go):(?P<line>\d+):(?P<col>\d+):\s+"
+   r"(?P<msg>.+?)\s+\((?P<linter>[\w./-]+)\)\s*$",
+   "golangci")
+
+# flake8 / ruff concise: file:line:col: CODE msg
+_t(r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
+   r"(?P<rule>[A-Z]{1,3}\d{2,4})\s+(?P<msg>.+?)\s*$",
+   "flake")
+
+# clippy --message-format=short / generic gcc-style: file:line:col: sev: msg [-Wflag]?
+_t(r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
+   r"(?P<sev>warning|error|note|help|fatal\s+error):\s+"
+   r"(?P<msg>.+?)"
+   r"(?:\s+\[(?P<rule>-[WD][^\]]+|clippy::[\w:]+)\])?\s*$",
+   "gcc-short")
+
+# mypy: file:line: sev: msg [code]    (no col)
+_t(r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):\s+"
+   r"(?P<sev>error|warning|note):\s+"
+   r"(?P<msg>.+?)(?:\s+\[(?P<rule>[\w-]+)\])?\s*$",
+   "mypy")
+
+# tsc: file(line,col): sev TSxxxx: msg
+_t(r"^(?P<file>[^()\s][^()\n]*?)\((?P<line>\d+),(?P<col>\d+)\):\s+"
+   r"(?P<sev>error|warning)\s+(?P<rule>TS\d+):\s+(?P<msg>.+?)\s*$",
+   "tsc")
+
+
+def _terse_parse(line: str) -> Optional[dict]:
+    for pattern, kind in _TERSE_DISPATCH:
+        m = pattern.match(line)
+        if not m:
+            continue
+        gd = m.groupdict()
+        sev = (gd.get("sev") or ("error" if kind == "golangci" else "info")).lower()
+        rule = gd.get("rule") or gd.get("linter") or ""
+        if not rule and kind == "gcc-short":
+            if sev in ("note", "help"):
+                return None
+            rule = f"-W{sev}"
+        if not rule:
+            return None
+        return {
+            "kind": kind,
+            "sev": _norm_sev(sev),
+            "file": gd["file"].strip(),
+            "line": int(gd["line"]),
+            "col": int(gd["col"]) if gd.get("col") else 0,
+            "rule": rule,
+            "msg": gd["msg"].strip(),
+            "help": "",
+        }
+    return None
+
 
 _SEV_NORMAL = {
     "fatal": "error", "panic": "error", "crit": "error", "critical": "error",
@@ -76,231 +162,320 @@ def _norm_sev(raw: str) -> str:
     return _SEV_NORMAL.get(raw.lower(), raw.lower())
 
 
-# 1. GCC / Clang / Clippy / rustc:
-#    /tmp/test.c:2:9: warning: msg [-Wflag]
-#    src/main.rs:14:13: warning: msg
-_GCC_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
-    r"(?P<sev>warning|error|note|help|fatal\s+error):\s+"
-    r"(?P<msg>.+?)"
-    r"(?:\s+\[(?P<rule>-[WD][^\]]+|clippy::[\w:]+)\])?\s*$"
+# ---- verbose-shape detection -----------------------------------------
+
+# A verbose block opens with `severity: msg` (no file prefix) followed
+# by ` --> file:line:col` on the next non-empty line. Or gcc verbose:
+# `file:line:col: warning: msg [-Wflag]` followed by source-snippet.
+
+_RUSTC_OPENER = re.compile(r"^\s*(?P<sev>warning|error|note|help)(?:\[(?P<code>[\w:]+)\])?:\s+(?P<msg>.+?)\s*$")
+_RUSTC_LOC = re.compile(r"^\s*-->\s+(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+)\s*$")
+_RUSTC_HELP = re.compile(r"^\s*=?\s*help:\s+(?P<msg>.+?)\s*$")
+_RUSTC_NOTE = re.compile(r"^\s*=\s+note:\s+`#\[\w+\((?P<rule>[\w:]+)\)\]`")
+_RUSTC_RULE_TAIL = re.compile(r"\[(?P<rule>-[WD][^\]]+|clippy::[\w:]+)\]\s*$")
+
+# Ruff verbose opener: `RULECODE [*] message` (the `[*]` marker is
+# optional and means "auto-fixable"). Followed by ` --> file:line:col`.
+_RUFF_OPENER = re.compile(
+    r"^\s*(?P<rule>[A-Z]{1,3}\d{2,4})(?:\s+\[\*\])?\s+(?P<msg>.+?)\s*$"
 )
 
-# 2. Shellcheck default (gcc-format):
-#    /tmp/script.sh:5:12: warning: msg [SC2086]
-_SHELLCHECK_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
-    r"(?P<sev>warning|error|info|style|note):\s+"
-    r"(?P<msg>.+?)\s+\[(?P<rule>SC\d+)\]\s*$"
+# gcc verbose: gcc-short matches the finding line; the source/caret
+# lines that follow are dropped. We detect "verbose gcc" by the
+# presence of a `   N | source` line or `      | ^^^` line near a
+# gcc-short hit.
+_GCC_SOURCE_RE = re.compile(r"^\s*\d+\s*\|\s")
+_GCC_CARET_RE = re.compile(r"^\s*\|[\s~^]+$|^\s+\^[\s~^]*$")
+
+# eslint stylish: file path on its own line, then indented rows.
+_ESLINT_FILE_RE = re.compile(r"^(?P<file>[A-Za-z]:\\|/|\\\\|\.[\\/])\S.*$")
+_ESLINT_ROW_RE = re.compile(
+    r"^\s+(?P<line>\d+):(?P<col>\d+)\s+(?P<sev>error|warning)\s+(?P<msg>.+?)\s+(?P<rule>[\w/@.-]+)\s*$"
 )
 
-# 3. ESLint compact:
-#    /tmp/test.js: line 2, col 7, error - msg (rule)
-_ESLINT_COMPACT_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?):\s+line\s+(?P<line>\d+),\s+col\s+(?P<col>\d+),\s+"
-    r"(?P<sev>warning|error)\s+-\s+(?P<msg>.+?)\s+\((?P<rule>[\w/@.-]+)\)\s*$"
+# A buffer is "verbose-shape" if any line matches a verbose block
+# opener that the terse parsers don't handle.
+_VERBOSE_HINT = re.compile(
+    r"(?m)"
+    r"^\s*(?:warning|error|note|help)(?:\[[\w:]+\])?:\s+\S"  # rustc/clippy opener
+    r"|^\s*-->\s+\S+:\d+:\d+\s*$"                            # rustc/ruff loc continuation
+    r"|^\s*\d+\s*\|\s"                                       # gcc/rustc source line
+    r"|^\s+(?:\d+):(?:\d+)\s+(?:error|warning)\s"            # eslint stylish row
+    r"|^\s*[A-Z]{1,3}\d{2,4}(?:\s+\[\*\])?\s+\S"             # ruff verbose opener
 )
 
-# 4. ESLint unix:
-#    /tmp/test.js:2:7: msg [Error/no-unused-vars]
-_ESLINT_UNIX_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
-    r"(?P<msg>.+?)\s+\[(?P<sev>Error|Warning)/(?P<rule>[\w/@.-]+)\]\s*$"
-)
 
-# 5. mypy: `file:line: error: msg [code]` (no col)
-#    Also matches: `file:line: note: msg` (no code)
-_MYPY_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):\s+"
-    r"(?P<sev>error|warning|note):\s+"
-    r"(?P<msg>.+?)"
-    r"(?:\s+\[(?P<rule>[\w-]+)\])?\s*$"
-)
-
-# 6. flake8 / ruff: `file:line:col: CODE msg`
-#    CODE = letter prefix + digits (E302, W291, F841, B007, I001, ...)
-_FLAKE_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
-    r"(?P<rule>[A-Z]{1,3}\d{2,4})\s+(?P<msg>.+?)\s*$"
-)
-
-# 7. rubocop: `file:line:col: C: [Correctable] Rule/Name: msg`
-_RUBOCOP_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
-    r"(?P<sev>[CWERF]):\s+"
-    r"(?:\[Correctable\]\s+)?"
-    r"(?P<rule>[A-Z][\w/]*):\s+(?P<msg>.+?)\s*$"
-)
-
-# 8. stylelint: `file:line:col: level  msg [rule]`
-#    Note the double space — stylelint pads severity column.
-_STYLELINT_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
-    r"(?P<sev>warning|error)\s{2,}(?P<msg>.+?)\s+\[(?P<rule>[\w-]+)\]\s*$"
-)
-
-# 9. golangci-lint: `file:line:col: msg (linter)`
-#    No explicit severity — treated as "error" (its convention).
-_GOLANGCI_RE = re.compile(
-    r"^(?P<file>[^:\s][^:\n]*?\.go):(?P<line>\d+):(?P<col>\d+):\s+"
-    r"(?P<msg>.+?)\s+\((?P<linter>[\w./-]+)\)\s*$"
-)
-
-# Dispatch order: most-specific first. shellcheck before gcc (both
-# match `:N:N: warning:`); rubocop before flake (both have `:N:N:`
-# prefix); mypy last among `file:line:` patterns since it's column-less.
-_DISPATCH: List[Tuple[re.Pattern, str]] = [
-    (_SHELLCHECK_RE, "shellcheck"),
-    (_RUBOCOP_RE, "rubocop"),
-    (_STYLELINT_RE, "stylelint"),
-    (_ESLINT_COMPACT_RE, "eslint-compact"),
-    (_ESLINT_UNIX_RE, "eslint-unix"),
-    (_GOLANGCI_RE, "golangci"),
-    (_FLAKE_RE, "flake"),
-    (_GCC_RE, "gcc"),
-    (_MYPY_RE, "mypy"),
-]
+def _is_verbose(raw: str) -> bool:
+    return bool(_VERBOSE_HINT.search(raw))
 
 
-def _parse(line: str) -> Optional[dict]:
-    """Try every parser; return the first hit's normalised finding."""
-    for pattern, kind in _DISPATCH:
-        m = pattern.match(line)
-        if not m:
+# ---- verbose-shape parser --------------------------------------------
+
+def _parse_verbose(raw: str) -> List[dict]:
+    """Walk the buffer line-by-line; return list of findings.
+
+    We carry forward state across lines because each finding spans
+    multiple lines in verbose output.
+    """
+    lines = raw.splitlines()
+    findings: List[dict] = []
+    i = 0
+    n = len(lines)
+
+    # eslint-stylish state: last seen file header.
+    eslint_file: Optional[str] = None
+
+    while i < n:
+        line = lines[i]
+        stripped = line.rstrip()
+
+        # 1. rustc/clippy/ruff multi-line block.
+        m = _RUSTC_OPENER.match(stripped)
+        if m and i + 1 < n and _RUSTC_LOC.match(lines[i + 1]):
+            sev = m.group("sev").lower()
+            msg = m.group("msg").strip()
+            code_in_brackets = m.group("code")  # rustc style: error[E0382]
+            # rule may also be in trailing `[clippy::...]` on the msg
+            rule_match = _RUSTC_RULE_TAIL.search(msg)
+            if rule_match:
+                rule = rule_match.group("rule")
+                msg = msg[: rule_match.start()].rstrip()
+            elif code_in_brackets:
+                rule = code_in_brackets
+            else:
+                rule = ""
+
+            loc = _RUSTC_LOC.match(lines[i + 1])
+            file = loc.group("file")
+            line_no = int(loc.group("line"))
+            col = int(loc.group("col"))
+
+            # Walk forward past source/caret/blank/help/note lines to
+            # collect a help suggestion if present, and pick up the
+            # rule from `= note: #[warn(rule_name)]` if we don't have
+            # one yet. Stop at the next opener or non-context line.
+            j = i + 2
+            help_text = ""
+            while j < n:
+                nxt = lines[j]
+                if not nxt.strip():
+                    j += 1
+                    continue
+                hm = _RUSTC_HELP.match(nxt)
+                if hm and not help_text:
+                    help_text = hm.group("msg").strip()
+                    j += 1
+                    continue
+                nm = _RUSTC_NOTE.match(nxt)
+                if nm and not rule:
+                    rule = nm.group("rule")
+                    j += 1
+                    continue
+                # context line (source / caret / continuation)
+                if (_GCC_SOURCE_RE.match(nxt) or _GCC_CARET_RE.match(nxt)
+                        or nxt.lstrip().startswith("|")
+                        or nxt.lstrip().startswith("=")
+                        or nxt.lstrip().startswith("...")):
+                    j += 1
+                    continue
+                # next finding opener — stop
+                if _RUSTC_OPENER.match(nxt) and j + 1 < n and _RUSTC_LOC.match(lines[j + 1]):
+                    break
+                # gcc verbose finding (file:line:col: ...) — stop
+                if _terse_parse(nxt.rstrip()):
+                    break
+                # something else — skip it; it's noise
+                j += 1
+
+            if not rule:
+                rule = f"-W{sev}"
+
+            findings.append({
+                "kind": "verbose-rustc",
+                "sev": _norm_sev(sev),
+                "file": file,
+                "line": line_no,
+                "col": col,
+                "rule": rule,
+                "msg": msg,
+                "help": help_text,
+            })
+            i = j
             continue
-        gd = m.groupdict()
-        sev = _norm_sev(gd.get("sev") or ("error" if kind == "golangci" else "info"))
-        rule = gd.get("rule") or gd.get("linter") or ""
-        if kind == "gcc" and not rule:
-            # Bare gcc/clang note without a flag — skip to avoid
-            # swallowing every "note: ..." continuation line.
-            if sev in ("note", "help"):
-                return None
-            rule = f"-W{sev}"  # synthetic bucket so rule grouping still works
-        if not rule:
-            return None
-        return {
-            "kind": kind,
-            "sev": sev,
-            "file": gd["file"].strip(),
-            "line": int(gd["line"]),
-            "col": int(gd["col"]) if gd.get("col") else 0,
-            "rule": rule,
-            "msg": gd["msg"].strip(),
-        }
-    return None
+
+        # 1b. ruff verbose: `CODE [*] msg` + ` --> file:line:col` + source/help.
+        rm = _RUFF_OPENER.match(stripped)
+        if rm and i + 1 < n and _RUSTC_LOC.match(lines[i + 1]):
+            rule = rm.group("rule")
+            msg = rm.group("msg").strip()
+            loc = _RUSTC_LOC.match(lines[i + 1])
+            file = loc.group("file")
+            line_no = int(loc.group("line"))
+            col = int(loc.group("col"))
+
+            j = i + 2
+            help_text = ""
+            while j < n:
+                nxt = lines[j]
+                if not nxt.strip():
+                    j += 1
+                    continue
+                hm = _RUSTC_HELP.match(nxt)
+                if hm and not help_text:
+                    help_text = hm.group("msg").strip()
+                    j += 1
+                    continue
+                if (_GCC_SOURCE_RE.match(nxt) or _GCC_CARET_RE.match(nxt)
+                        or nxt.lstrip().startswith("|")
+                        or nxt.lstrip().startswith("=")
+                        or nxt.lstrip().startswith("...")):
+                    j += 1
+                    continue
+                # next ruff opener
+                if _RUFF_OPENER.match(nxt) and j + 1 < n and _RUSTC_LOC.match(lines[j + 1]):
+                    break
+                if _RUSTC_OPENER.match(nxt) and j + 1 < n and _RUSTC_LOC.match(lines[j + 1]):
+                    break
+                if _terse_parse(nxt.rstrip()):
+                    break
+                j += 1
+
+            findings.append({
+                "kind": "verbose-ruff",
+                "sev": "warning",
+                "file": file,
+                "line": line_no,
+                "col": col,
+                "rule": rule,
+                "msg": msg,
+                "help": help_text,
+            })
+            i = j
+            continue
+
+        # 2. gcc verbose: terse-parsable opener followed by source lines.
+        f = _terse_parse(stripped)
+        if f:
+            # Look ahead, swallow source-snippet/caret lines.
+            j = i + 1
+            help_text = ""
+            while j < n:
+                nxt = lines[j]
+                if (_GCC_SOURCE_RE.match(nxt)
+                        or _GCC_CARET_RE.match(nxt)
+                        or not nxt.strip()):
+                    j += 1
+                    continue
+                hm = _RUSTC_HELP.match(nxt)
+                if hm and not help_text:
+                    help_text = hm.group("msg").strip()
+                    j += 1
+                    continue
+                break
+            f["help"] = help_text
+            findings.append(f)
+            i = j
+            continue
+
+        # 3. eslint stylish: file header + indented rows.
+        if _ESLINT_FILE_RE.match(stripped) and not stripped.endswith(":"):
+            eslint_file = stripped
+            i += 1
+            continue
+        em = _ESLINT_ROW_RE.match(stripped)
+        if em and eslint_file:
+            findings.append({
+                "kind": "eslint-stylish",
+                "sev": _norm_sev(em.group("sev")),
+                "file": eslint_file,
+                "line": int(em.group("line")),
+                "col": int(em.group("col")),
+                "rule": em.group("rule"),
+                "msg": em.group("msg").strip(),
+                "help": "",
+            })
+            i += 1
+            continue
+
+        i += 1
+
+    return findings
 
 
-# ---- context detection -----------------------------------------------
-#
-# After a finding, gcc/clang/rustc/clippy emit source-excerpt context:
-#   2 |     int x;
-#     |         ^
-# eslint default emits per-file headers and indented rows we already
-# parsed. The simplest safe rule: any line that doesn't itself parse
-# as a finding *and* sits between two findings (or after the last
-# finding) is context. Drop unless KEEP_CONTEXT.
+# ---- output formatter (TSV) ------------------------------------------
 
-_CONTEXT_RE = re.compile(
-    r"^\s*(?:\d+\s*\||\||\s+\^|\s+=\s+(?:help|note):|\s+\.\.\.|\s+-->|\s*$)"
-)
+_SEV_LETTER = {"error": "E", "warning": "W", "info": "I", "note": "N",
+               "style": "S", "convention": "C", "refactor": "R", "help": "H"}
+_SEV_RANK = {"error": 4, "warning": 3, "info": 2, "style": 1, "note": 1,
+             "convention": 1, "refactor": 1, "help": 0}
 
 
-def _is_context(line: str) -> bool:
-    """Heuristic: looks like a gcc/clippy/rustc context excerpt."""
-    return bool(_CONTEXT_RE.match(line))
+def _emit_tsv(findings: List[dict]) -> str:
+    """Group by rule, sort errors-first, emit TSV. One help row per
+    finding that has one, marked `-` in severity column."""
+    if not findings:
+        return ""
+
+    # Group by rule for cap + sort.
+    groups: dict[str, List[dict]] = {}
+    rule_sev: dict[str, str] = {}
+    for f in findings:
+        groups.setdefault(f["rule"], []).append(f)
+        cur = rule_sev.get(f["rule"], "")
+        if _SEV_RANK.get(f["sev"], 0) > _SEV_RANK.get(cur, 0):
+            rule_sev[f["rule"]] = f["sev"]
+
+    ordered = sorted(groups.items(),
+                     key=lambda kv: (-_SEV_RANK.get(rule_sev[kv[0]], 0),
+                                     -len(kv[1]),
+                                     kv[0]))
+
+    out: List[str] = []
+    for rule, items in ordered:
+        kept = items if MAX_PER_RULE == 0 else items[:MAX_PER_RULE]
+        for f in kept:
+            loc = f"{f['file']}:{f['line']}"
+            if f["col"]:
+                loc += f":{f['col']}"
+            sev_letter = _SEV_LETTER.get(f["sev"], f["sev"][:1].upper() or "?")
+            out.append(f"{sev_letter}\t{loc}\t{rule}\t{f['msg']}")
+            if f.get("help"):
+                out.append(f"-\t{loc}\t{rule}\thelp: {f['help']}")
+        elided = len(items) - len(kept)
+        if elided > 0:
+            out.append(f"-\t\t{rule}\t+{elided} more {rule}")
+
+    return "\n".join(out) + "\n"
 
 
-# ---- compress --------------------------------------------------------
-
-_SEV_RANK = {"error": 4, "fatal": 4, "warning": 3, "info": 2,
-             "style": 1, "note": 1, "convention": 1, "refactor": 1, "help": 0}
-
+# ---- main entry: distill or passthrough ------------------------------
 
 def compress(raw: str) -> str:
     try:
-        raw = ANSI_RE.sub("", raw)
-        # Group by rule. Each group keeps the first MAX_PER_RULE
-        # findings verbatim; further hits increment count only.
-        groups: dict[str, dict] = {}
-        passthrough: List[str] = []
-        any_parsed = False
+        cleaned = ANSI_RE.sub("", raw)
 
-        for line in raw.splitlines():
-            stripped = line.rstrip()
-            if not stripped:
-                continue
-            f = _parse(stripped)
-            if f is None:
-                if _is_context(line):
-                    if KEEP_CONTEXT:
-                        passthrough.append(stripped)
-                    # else: drop
-                else:
-                    # Unrecognised non-context line — keep it. eslint's
-                    # default formatter emits a per-file path header
-                    # ("/tmp/test.js") on its own line; summary lines
-                    # like "✖ 12 problems (3 errors, 9 warnings)" live
-                    # here too. They're useful context for the AI.
-                    passthrough.append(stripped)
-                continue
+        if _is_verbose(cleaned):
+            findings = _parse_verbose(cleaned)
+        else:
+            # Single-line shapes only. Try to parse but if the result
+            # would be larger, the byte-count check at the end falls
+            # us back to passthrough.
+            findings = []
+            for line in cleaned.splitlines():
+                f = _terse_parse(line.rstrip())
+                if f:
+                    findings.append(f)
 
-            any_parsed = True
-            rule = f["rule"]
-            g = groups.setdefault(rule, {
-                "rule": rule,
-                "sev": f["sev"],
-                "kind": f["kind"],
-                "findings": [],
-                "total": 0,
-                "msg": f["msg"],
-            })
-            g["total"] += 1
-            # Promote highest severity if we see a worse one for this rule.
-            if _SEV_RANK.get(f["sev"], 0) > _SEV_RANK.get(g["sev"], 0):
-                g["sev"] = f["sev"]
-            if len(g["findings"]) < MAX_PER_RULE:
-                g["findings"].append(f)
-
-        if not any_parsed:
-            # No lint shape detected — pass everything through.
+        if not findings:
             return raw
 
-        # Sort: errors first, then by occurrence count desc, then by
-        # rule-id alpha so the order is stable across runs.
-        ordered = sorted(
-            groups.values(),
-            key=lambda g: (-_SEV_RANK.get(g["sev"], 0), -g["total"], g["rule"]),
-        )
+        distilled = _emit_tsv(findings)
 
-        out: List[str] = []
-        for g in ordered:
-            for f in g["findings"]:
-                loc = f"{f['file']}:{f['line']}"
-                if f["col"]:
-                    loc += f":{f['col']}"
-                out.append(f"{g['sev']:7} {loc:40} {g['rule']:24} {f['msg']}")
-            elided = g["total"] - len(g["findings"])
-            if elided > 0:
-                out.append(
-                    f"{'':7} {'':40} {g['rule']:24} … +{elided} more {g['rule']} hit(s)"
-                )
-
-        # Tally line at the end. Useful for the AI to know the
-        # original size before its context-window-friendly summary.
-        total_findings = sum(g["total"] for g in groups.values())
-        total_rules = len(groups)
-        out.append("")
-        out.append(f"lint={total_findings} findings; {total_rules} rules; cap={MAX_PER_RULE}/rule")
-
-        # Append the passthrough section (per-file headers, summary
-        # lines, anything we didn't recognise as a finding) so it
-        # reaches the AI too.
-        if passthrough:
-            out.append("")
-            out.extend(passthrough)
-
-        return "\n".join(out) + "\n"
+        # Monotonic guarantee: never grow the output. If distillation
+        # didn't shrink the bytes, return the original verbatim.
+        if len(distilled.encode("utf-8")) >= len(raw.encode("utf-8")):
+            return raw
+        return distilled
     except Exception:
         return raw
 
