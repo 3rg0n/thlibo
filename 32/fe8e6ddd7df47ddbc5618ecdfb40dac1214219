@@ -1,0 +1,55 @@
+cmd/thlibo/compresscmd/compress.go
+  s_5811b7f24eccc0::t_02388e9d5b74c6 80-83,86-95
+  s_5811b7f24eccc0::t_10bf65229200b7 25-26,96
+internal/middleware/notice_test.go
+  s_5811b7f24eccc0::t_f91e7ed993f79e 1-128
+internal/update/runner.go
+  s_5811b7f24eccc0::t_ba0a576160949f 136-140
+  s_5811b7f24eccc0::t_31b174ae92eb17 163-165,183,185-191
+  s_5811b7f24eccc0::t_184d9110432de4 32-38
+cmd/thlibo/upgradecmd/upgrade.go
+  s_5811b7f24eccc0::t_5e7987024495e9 1-159
+internal/update/notice.go
+  s_5811b7f24eccc0::t_fe602c67b490bd 1-80
+internal/update/headless_test.go
+  s_5811b7f24eccc0::t_c9d6390fb484f2 1-97
+cmd/thlibo/execcmd/exec.go
+  s_5811b7f24eccc0::t_0c38a576d632b6 245-249
+  s_5811b7f24eccc0::t_f08f234883a801 37-38
+cmd/thlibo/upgradecmd/upgrade_test.go
+  s_5811b7f24eccc0::t_61665a17adb892 1-168
+internal/update/toast.go
+  s_5811b7f24eccc0::t_8ac4b977386f11 1-69
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_205d10ff50b823 53-54
+  s_5811b7f24eccc0::t_d4476bd844a11c 74-75
+  s_5811b7f24eccc0::t_322d3c0fede656 32
+internal/update/headless.go
+  s_5811b7f24eccc0::t_b7e35739f3cb1e 27-28,33-34,67-69,72-75,78
+  s_5811b7f24eccc0::t_25f2024bde8156 1-26,29-32,35-66,70-71,76-77,79
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_6470081d23f481 109-111,116-136
+  s_5811b7f24eccc0::t_db5597120e6f99 64-85,137-138
+CHANGELOG.md
+  s_5811b7f24eccc0::t_084f01366e5a24 10-61
+internal/update/notice_test.go
+  s_5811b7f24eccc0::t_a7b337cf302431 7
+  s_5811b7f24eccc0::t_6fc40773fa634e 80-84,87-88,93-111
+  s_5811b7f24eccc0::t_48838eae062ba9 1-6,8-79,85-86,89-92,112-149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "32fe8e6ddd7df47ddbc5618ecdfb40dac1214219",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
