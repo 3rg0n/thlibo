@@ -30,14 +30,18 @@ func TestRunnerBannerOnFreshUpgrade(t *testing.T) {
 
 	var out bytes.Buffer
 	r := &Runner{
-		Current: "v0.2.0",
-		Fetcher: &stubFetcher{rel: &release{TagName: "v0.3.0", HTMLURL: "https://x"}},
-		Out:     &out,
+		Current:  "v0.2.0",
+		Fetcher:  &stubFetcher{rel: &release{TagName: "v0.3.0", HTMLURL: "https://x"}},
+		Out:      &out,
+		Headless: boolPtr(false), // force interactive so banner goes to Out
 	}
 	<-r.Run(context.Background())
 
 	if !strings.Contains(out.String(), "update available: v0.2.0 -> v0.3.0") {
 		t.Fatalf("banner missing / malformed:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "thlibo upgrade") {
+		t.Fatalf("banner must reference 'thlibo upgrade':\n%s", out.String())
 	}
 	// State persisted with NotifiedTag so we don't re-banner.
 	statePath := filepath.Join(home, ".thlibo", "state", "update-check.json")
@@ -102,8 +106,9 @@ func TestRunnerRebannersUnacknowledgedUpgradeWithinCooldown(t *testing.T) {
 	called := false
 	var out bytes.Buffer
 	r := &Runner{
-		Current: "v0.2.0",
-		Out:     &out,
+		Current:  "v0.2.0",
+		Out:      &out,
+		Headless: boolPtr(false), // force interactive so banner goes to Out
 		Fetcher: fetcherFn(func(ctx context.Context) (*release, error) {
 			called = true
 			return &release{TagName: "v0.3.0"}, nil
@@ -198,6 +203,89 @@ func TestRunnerFetchFailureIsSilent(t *testing.T) {
 	_ = json.Unmarshal(raw, &s)
 	if s.LastErr == "" {
 		t.Error("LastErr should be populated on failure")
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestRunnerHeadlessNoticeInjectedOnce(t *testing.T) {
+	home := isolateEnv(t)
+	statePath := filepath.Join(home, ".thlibo", "state", "update-check.json")
+
+	var stdout bytes.Buffer
+	r := &Runner{
+		Current:   "v0.7.2",
+		Fetcher:   &stubFetcher{rel: &release{TagName: "v0.7.3", HTMLURL: "https://x"}},
+		Stdout:    &stdout,
+		Headless:  boolPtr(true),
+		StatePath: statePath,
+	}
+	<-r.Run(context.Background())
+
+	if stdout.String() != NoticeLine {
+		t.Fatalf("headless notice = %q, want %q", stdout.String(), NoticeLine)
+	}
+
+	// Second run within cooldown: HeadlessNotifiedTag is set;
+	// notice must NOT fire again.
+	stdout.Reset()
+	r2 := &Runner{
+		Current:   "v0.7.2",
+		Fetcher:   &stubFetcher{rel: &release{TagName: "v0.7.3", HTMLURL: "https://x"}},
+		Stdout:    &stdout,
+		Headless:  boolPtr(true),
+		StatePath: statePath,
+		Interval:  24 * time.Hour, // keep in cooldown window
+	}
+	<-r2.Run(context.Background())
+	if stdout.String() != "" {
+		t.Fatalf("headless notice fired twice; got %q", stdout.String())
+	}
+}
+
+func TestRunnerHeadlessDoesNotFireBanner(t *testing.T) {
+	isolateEnv(t)
+
+	var stderr bytes.Buffer
+	r := &Runner{
+		Current:  "v0.7.2",
+		Fetcher:  &stubFetcher{rel: &release{TagName: "v0.7.3", HTMLURL: "https://x"}},
+		Out:      &stderr,
+		Headless: boolPtr(true),
+	}
+	<-r.Run(context.Background())
+
+	if strings.Contains(stderr.String(), "update available") {
+		t.Errorf("headless mode must not print banner to stderr; got %q", stderr.String())
+	}
+}
+
+func TestRunnerInteractiveBannerPointsAtUpgrade(t *testing.T) {
+	isolateEnv(t)
+
+	var stderr bytes.Buffer
+	r := &Runner{
+		Current:  "v0.7.2",
+		Fetcher:  &stubFetcher{rel: &release{TagName: "v0.7.3", HTMLURL: "https://x"}},
+		Out:      &stderr,
+		Headless: boolPtr(false),
+	}
+	<-r.Run(context.Background())
+
+	banner := stderr.String()
+	if !strings.Contains(banner, "thlibo upgrade") {
+		t.Errorf("banner must reference 'thlibo upgrade'; got:\n%s", banner)
+	}
+	if strings.Contains(banner, "curl") {
+		t.Errorf("banner must NOT contain raw curl one-liner; got:\n%s", banner)
+	}
+}
+
+func TestRunnerNoticeLiteralIsConstant(t *testing.T) {
+	// Verify NoticeLine contains no format verbs and is byte-identical
+	// across invocations (no tag interpolation).
+	if NoticeLine != "[thlibo] new update available, run: thlibo upgrade\n" {
+		t.Errorf("NoticeLine changed: %q", NoticeLine)
 	}
 }
 

@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-05-26
+
+### Added
+
+- **Headless detection** (`internal/update.IsHeadless`) — explicit
+  `THLIBO_HEADLESS=1/0` override; otherwise headless if any of
+  `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`, `CIRCLECI`,
+  `JENKINS_URL`, `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX`,
+  or `CODEX_SESSION_ID` is set, with a stderr-TTY fallback. The
+  agent markers (`CLAUDECODE` / `CODEX*`) are load-bearing for
+  thlibo's primary use case — without them the headless notice
+  would never fire when an AI assistant pipes tool output through
+  the binary. TTY detection now uses `golang.org/x/term`, which
+  works uniformly on Linux (TCGETS), macOS/BSD (TIOCGETA), and
+  Windows (`GetConsoleMode`).
+- **Headless update notice** — when running non-interactively (hooks,
+  pipes, CI), a `[thlibo] new update available, run: thlibo upgrade`
+  line is prepended to stdout once per new release tag. The literal
+  is a compile-time constant so no release-server content reaches
+  the AI client.
+- **`thlibo upgrade` subcommand** — shells out to the signed install
+  script (`bash -c "curl -fsSL … | bash"` on Unix; PowerShell
+  `Invoke-Expression` on Windows). Accepts `--version v0.X.Y` to
+  pin a specific tag; supports `THLIBO_VERSION` env passthrough.
+- **Desktop toast notifications** — macOS via `osascript display
+  notification`, Linux via `notify-send --app-name=thlibo
+  --icon=dialog-information` (libnotify; gracefully no-ops if
+  `notify-send` is missing or DBus is unavailable, with a 2 s
+  timeout to guard against a stuck notification daemon). Title and
+  body are compile-time constants (prompt-injection guard). Windows
+  toast support is deferred — needs an AUMID and registered
+  shortcut.
+- **Per-channel notification de-dup** — `NotifiedTag` for interactive
+  stderr banner, `HeadlessNotifiedTag` for stdout injection; each
+  channel fires at most once per new tag.
+- **Headless sync in main** — when `IsHeadless()` is true the runner
+  goroutine is awaited before the subcommand runs, guaranteeing the
+  notice line appears first in piped output.
+
+### Changed
+
+- Interactive banner now says `run: thlibo upgrade` instead of the
+  raw curl one-liner (reduces noise; upgrade subcommand handles it).
+
 ## [0.7.2] - 2026-05-26
 
 ### Added

@@ -29,6 +29,7 @@ import (
 	"github.com/3rg0n/thlibo/cmd/thlibo/rewritecmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/shorthandcmd"
 	"github.com/3rg0n/thlibo/cmd/thlibo/uninstallcmd"
+	"github.com/3rg0n/thlibo/cmd/thlibo/upgradecmd"
 	"github.com/3rg0n/thlibo/internal/logx"
 	"github.com/3rg0n/thlibo/internal/update"
 	"github.com/3rg0n/thlibo/internal/version"
@@ -55,7 +56,14 @@ func main() {
 			Out:     os.Stderr,
 			Logger:  logx.New("thlibo-update", "", 0),
 		}
-		_ = r.Run(context.Background())
+		done := r.Run(context.Background())
+		// In headless mode the runner may prepend NoticeLine to stdout.
+		// Wait for it to complete so the notice is guaranteed to appear
+		// before any subcommand output. Interactive mode keeps the
+		// original async (fire-and-forget) behaviour.
+		if update.IsHeadless() {
+			<-done
+		}
 	}
 
 	switch os.Args[1] {
@@ -84,6 +92,8 @@ func main() {
 		// whether to rewrite, emits hookSpecificOutput JSON. Always
 		// exits 0 — never breaks Claude Code on failure.
 		os.Exit(shorthandcmd.RunWriteHook(os.Args[2:]))
+	case "upgrade":
+		os.Exit(upgradecmd.Run(os.Args[2:]))
 	case "config":
 		os.Exit(configcmd.Run(os.Args[2:]))
 	case "version", "-v", "--version":
@@ -118,6 +128,9 @@ Usage:
                              ~/.thlibo/cases/ for a large log file.
                              Invoked by the Read PreToolUse hook and
                              by the /caselog skill.
+  thlibo upgrade             Download and install the latest release
+                             using the signed installer. Pass
+                             --version v0.X.Y to pin a specific tag.
   thlibo config              Walk through ~/.thlibo/config.yaml
                              interactively (or use --show, --path,
                              --set k=v, --reset).
