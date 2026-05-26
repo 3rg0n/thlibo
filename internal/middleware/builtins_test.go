@@ -21,7 +21,8 @@ import (
 // v0.1: cargo-filter, casefolder, compress, git-filter, npm-filter
 // v0.4: + shorthand
 // v0.5: + stacktrace-filter, pytest-filter, ndjson-filter
-// v0.7: + cordon-filter
+// v0.7.0: + cordon-filter
+// v0.7.1: + lint-filter
 func TestBuiltinsLoadedWithNoUserDir(t *testing.T) {
 	reg, warnings, err := BuildRegistry("")
 	if err != nil {
@@ -32,8 +33,8 @@ func TestBuiltinsLoadedWithNoUserDir(t *testing.T) {
 	}
 	want := []string{
 		"cargo-filter", "casefolder", "compress", "cordon-filter", "git-filter",
-		"ndjson-filter", "npm-filter", "pdf-to-md", "pytest-filter",
-		"shorthand", "stacktrace-filter",
+		"lint-filter", "ndjson-filter", "npm-filter", "pdf-to-md",
+		"pytest-filter", "shorthand", "stacktrace-filter",
 	}
 	for _, n := range want {
 		if reg.Get(n) == nil {
@@ -56,8 +57,8 @@ func TestBuiltinsLoadedWithMissingUserDir(t *testing.T) {
 	}
 	// Count must match the embedded set; see the named list in
 	// TestBuiltinsLoadedWithNoUserDir for what's expected.
-	if reg.Len() != 11 {
-		t.Errorf("registry has %d processors, want 11", reg.Len())
+	if reg.Len() != 12 {
+		t.Errorf("registry has %d processors, want 12", reg.Len())
 	}
 }
 

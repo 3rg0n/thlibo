@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-05-26
+
+### Added
+
+- **`lint-filter` processor** — compresses output from the major
+  linting / static-analysis tools: clang, gcc, clippy (rustc-style),
+  eslint (default + compact + unix formats), golangci-lint,
+  shellcheck, flake8, ruff, mypy, rubocop, stylelint. Parses each
+  finding into (severity, file:line:col, rule-id, message), groups
+  by rule, dedupes identical findings across files, sorts errors-
+  before-warnings, and caps to N findings per rule (default 5,
+  override via `LINT_MAX_PER_RULE`). Drops surrounding context lines
+  (rustc carets, gcc source excerpts, eslint per-file blank lines,
+  `= help:` / `= note:` prose) and ANSI colour codes. Tail line
+  records the original total per rule so the AI can see what was
+  elided. Match-driven (auto-fires on lint-shaped output); no
+  `commands` whitelist because lint output flows from many wrappers
+  (`npx eslint`, `python -m flake8`, `cargo clippy`, etc.).
+  21-case unit test covers each format + cap behavior + ANSI strip
+  + passthrough on non-lint inputs.
+
 ## [0.7.0] - 2026-05-26
 
 ### Added

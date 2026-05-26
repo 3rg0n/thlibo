@@ -1,0 +1,21 @@
+name: lint-filter
+type: script
+entry: run.py
+match: "(?m)^(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+(?:warning|error|note|info|style|[CWERF]):\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[EWFCBI]\\d{2,4}\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[A-Z]+\\d{3,4}:\\s|(?:[^\\n:]+):\\s*line\\s+\\d+,\\s*col\\s+\\d+,\\s+(?:warning|error)\\s|(?:[^\\n:]+):\\d+(?::\\d+)?:\\s+[^\\n]+\\s\\([\\w./-]+\\)$"
+description: >
+  Compresses output from the major linting / static-analysis tools:
+  clang, gcc, clippy (rustc-style), eslint (default + compact +
+  unix), golangci-lint, shellcheck, flake8, ruff, mypy, rubocop,
+  stylelint. Parses each finding into (severity, file:line:col,
+  rule-id, message), groups by rule-id, dedupes identical findings
+  across files, sorts errors-before-warnings, and caps to N findings
+  per rule (default 5). Drops surrounding context lines (source
+  excerpts, `--^` carets, `= help:` / `= note:` prose blocks) and
+  ANSI colour codes. Tail line records the original total per rule
+  so the AI can see what was elided.
+
+  Knobs:
+    LINT_MAX_PER_RULE  cap per rule-id           default 5
+    LINT_KEEP_CONTEXT  =1 keep source excerpts   default 0
+
+  Falls back to input verbatim on any unhandled exception.

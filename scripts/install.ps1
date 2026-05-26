@@ -4,7 +4,7 @@
 #   irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 #
 # Or pinned to a specific version:
-#   $env:THLIBO_VERSION='v0.7.0'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+#   $env:THLIBO_VERSION='v0.7.1'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 #
 # Or against a local archive (CI / release verification):
 #   $env:THLIBO_LOCAL_ARCHIVE='C:\path\to\thlibo-windows-amd64.zip'
