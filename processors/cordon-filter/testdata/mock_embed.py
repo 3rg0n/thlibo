@@ -75,7 +75,9 @@ def serve_unix(path: str) -> int:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(path)
-    # 0o660 matches inferd's published embed-socket permissions (ADR 0017).
+    # 0o660 matches inferd's published embed-socket permissions (ADR 0017):
+    # owner + group, no world. Test-only mock; never ships to users.
+    # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
     os.chmod(path, 0o660)  # nosec B103
     srv.listen(4)
     sys.stderr.write(f"mock-embed listening at {path}\n")
