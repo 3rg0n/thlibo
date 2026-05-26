@@ -1,0 +1,69 @@
+processors/cordon-filter/testdata/run_fixtures.sh
+  s_5811b7f24eccc0::t_469e7db2e8ce14 35,54
+  s_5811b7f24eccc0::t_9ab05c4a312e6f 1-34,36-50,52-53,55-70
+  s_5811b7f24eccc0::t_f1bb980467d0b7 51
+processors/cordon-filter/testdata/synthetic.expected
+  s_5811b7f24eccc0::t_8b730dfefa2fad 1-50
+processors/cordon-filter/testdata/synthetic.log
+  s_5811b7f24eccc0::t_8b730dfefa2fad 1-1000
+internal/middleware/builtins_test.go
+  s_5811b7f24eccc0::t_0a0ebb09f72163 59-60
+  s_5811b7f24eccc0::t_7ce7f5003e4881 24,34
+processors/cordon-filter/testdata/mock_embed.py
+  s_5811b7f24eccc0::t_b77028dbc22bd1 78-79
+  s_5811b7f24eccc0::t_b2b98eeb5beaba 1-36,38,40-77,80-121
+  s_5811b7f24eccc0::t_8e65eb366927fc 37,39
+docs/adr/README.md
+  s_5811b7f24eccc0::t_c74588db042fdb 15
+docs/adr/0008-numpy-as-processor-dep.md
+  s_5811b7f24eccc0::t_eb876fdfd86def 1-145
+docs/site/index.html
+  s_5811b7f24eccc0::t_e427d5da5fcf2a 655-717
+  s_5811b7f24eccc0::t_962b7044356be8 721-722
+  s_5811b7f24eccc0::t_7196bb834d0f0a 587
+processors/cordon-filter/testdata/test_signature.py
+  s_5811b7f24eccc0::t_fde679637a6edb 1-180
+CHANGELOG.md
+  s_5811b7f24eccc0::t_0cf05925232df5 10-11
+  s_5811b7f24eccc0::t_2b7f47b9cee03f 12-47
+processors/cordon-filter/processor.yaml
+  s_5811b7f24eccc0::t_61637ba3862acb 1-19
+processors/cordon-filter/run.py
+  s_5811b7f24eccc0::t_fe307209a488cb 441,444-445,452-453,457-458
+  s_5811b7f24eccc0::t_ce4318edb61d0a 205-209,214,218
+  s_5811b7f24eccc0::t_23d64070c0f4a2 1-34,36-39,47-53,55-63,65,67-88,91-204,269,294-296,306,337-342,344-349,357-359,367-370,372-440,442-443,446-451,454-456,459-461,469-472,477-500,504-514
+  s_5811b7f24eccc0::t_3b8f4e3d1bb613 272-274,281-291
+  s_5811b7f24eccc0::t_8c4209ae3ad5dd 210-213,215-217,219-268,270-271,275-280,292-293,297-305,307-334,336,343,350-356,360-366,371
+  s_5811b7f24eccc0::t_099106422b19bb 41-46
+  s_5811b7f24eccc0::t_17f3008e0cfdd4 54
+  s_5811b7f24eccc0::t_debf2208901683 89-90
+  s_5811b7f24eccc0::t_8743c13e318258 462-468
+  s_5811b7f24eccc0::t_35066dec1ec358 335
+  s_5811b7f24eccc0::t_8a0708635cf4fa 40
+  s_5811b7f24eccc0::t_7d22dcf0cc19d7 501-503
+  s_5811b7f24eccc0::t_34c8594335ff62 35
+  s_5811b7f24eccc0::t_b8c48811f099b2 473-476
+  s_5811b7f24eccc0::t_5781762636b9dc 64,66
+.gitignore
+  s_5811b7f24eccc0::t_c7462aa3178bf2 62-69
+processors/embed.go
+  s_5811b7f24eccc0::t_fab8135e802c72 20
+processors/cordon-filter/testdata/generate.py
+  s_5811b7f24eccc0::t_8d54eba70a872b 1-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "44275e9728db8f1b404fee32a8a33d8d4c8809c5",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
