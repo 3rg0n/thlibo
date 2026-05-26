@@ -1,0 +1,36 @@
+internal/update/headless_windows.go
+  s_5811b7f24eccc0::t_7d303919527350 20-21
+  s_5811b7f24eccc0::t_ae7d0fbcbf36e4 9,12-14,22
+internal/update/toast_linux.go
+  s_5811b7f24eccc0::t_48c5458710188c 1-38
+internal/update/headless_test.go
+  s_5811b7f24eccc0::t_7a668089d19b63 7-18,21,28-29,31-34,36,41,48-61
+go.mod
+  s_5811b7f24eccc0::t_117ee437dbf3cb 7,11
+  s_5811b7f24eccc0::t_efca06e32cefdd 5,8-10
+CHANGELOG.md
+  s_5811b7f24eccc0::t_8b3d6cf875c422 15-24
+  s_5811b7f24eccc0::t_8fa380e3151024 34-41
+internal/update/toast_other.go
+  s_5811b7f24eccc0::t_a7e691737d0be1 1,5-7
+internal/update/headless.go
+  s_5811b7f24eccc0::t_b4cb09acefe646 14-42,46-53,61-64
+internal/update/headless_unix.go
+  s_5811b7f24eccc0::t_f40dd76561cc5d 8-9,12-14,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "43bd123d3c4818497594541ebf627ae21f23c9b3",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
