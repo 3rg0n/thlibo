@@ -35,12 +35,20 @@ import (
 
 // Exit codes — stable so scripts can key on them.
 const (
-	ExitOK           = 0
-	ExitUsage        = 2
+	ExitOK            = 0
+	ExitUsage         = 2
 	ExitSourceMissing = 3
-	ExitNotRegular   = 4
-	ExitWriteFailed  = 5
-	ExitPruneFailed  = 7
+	ExitNotRegular    = 4
+	ExitWriteFailed   = 5
+	// ExitLowValue — case was created but compressed.log carries no
+	// usable signal (e.g. a scanned PDF where every page produced an
+	// "OCR not yet supported" placeholder). The case dir is still
+	// written to disk for forensics, but stdout stays empty so the
+	// Read PreToolUse hook treats this as "no match" and lets the
+	// original read pass through to Claude Code's native reader.
+	// See issue #31.
+	ExitLowValue    = 6
+	ExitPruneFailed = 7
 )
 
 // Run is the subcommand entry. argv is everything after "thlibo case".
@@ -130,7 +138,22 @@ Flags:
 		logx.Int64("compressed_bytes", res.Meta.CompressedSize),
 		logx.Any("reduction_pct", res.Meta.ReductionPercent),
 		logx.Bool("fallback", res.Meta.Fallback),
+		logx.Bool("low_value", res.Meta.LowValue),
 	)
+
+	// Low-value short-circuit. The case is on disk for forensics
+	// (so an operator can see what we got), but stdout stays empty
+	// and we exit non-zero so the Read PreToolUse hook treats this
+	// as no-match and lets Claude's native reader handle the file.
+	// See issue #31.
+	if res.Meta.LowValue {
+		if !quiet {
+			fmt.Fprintf(os.Stderr,
+				"thlibo case: %s\n  source:     %d bytes\n  compressed: %d bytes\n  note: low-value output (e.g. scanned PDF without OCR); upstream reader will handle the original.\n",
+				res.Dir, res.Meta.SourceSize, res.Meta.CompressedSize)
+		}
+		return ExitLowValue
+	}
 
 	// Primary output is the case dir path so the hook (and shell
 	// pipelines) can parse it trivially.

@@ -54,8 +54,13 @@ _HEADING_RE = re.compile(
 # Preserve LF on Windows: Python's default text-mode stdout
 # translates \n -> \r\n which corrupts byte-identity for downstream
 # tools that compare bytes. Same fix every Python processor uses.
+#
+# Force UTF-8 too: Python on Windows defaults stdout to the legacy
+# ANSI code page (cp1252), which raises UnicodeEncodeError on common
+# PDF text like → em-dashes, and smart quotes — crashing the
+# processor and forcing the pipeline to fall back to the raw PDF.
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(newline="")
+    sys.stdout.reconfigure(encoding="utf-8", newline="")
 
 
 def emit_error(msg: str, raw: bytes) -> None:
@@ -273,6 +278,7 @@ def main() -> int:
         return 0
 
     page_blocks: list[str] = []
+    text_pages = 0
     with pdf:
         for i, page in enumerate(pdf.pages, start=1):
             text = page.extract_text() or ""
@@ -288,6 +294,7 @@ def main() -> int:
             strategy = page_strategy(text, has_images)
             block: list[str] = [f"## Page {i}"]
             if strategy == "text":
+                text_pages += 1
                 block.append(promote_headings(text.strip()))
                 if tables:
                     for j, t in enumerate(tables, start=1):
@@ -318,6 +325,18 @@ def main() -> int:
             page_blocks.append("\n\n".join(block))
 
     md_parts.extend(page_blocks)
+
+    # Low-value sentinel. If no page produced extractable text, the
+    # output is just placeholders ("scanned page N — OCR not yet
+    # supported") and the consumer can't do anything with it. Emit a
+    # marker on the LAST line so casefile.Create can detect this and
+    # bail out — letting Claude Code's native multimodal PDF reader
+    # take over instead of feeding it 200 bytes of "OCR not supported".
+    # See issue #31. The sentinel format is intentionally noisy so
+    # nothing else accidentally produces it.
+    if n_pages > 0 and text_pages == 0:
+        md_parts.append("<!-- thlibo-pdf-low-value: no extractable text -->")
+
     sys.stdout.write("\n\n".join(md_parts))
     sys.stdout.write("\n")
     return 0

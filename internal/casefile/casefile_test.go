@@ -108,6 +108,56 @@ func TestPruneMissingRootIsNoop(t *testing.T) {
 	}
 }
 
+// TestStripSentinelLine: the helper deletes any line containing the
+// pdf-to-md low-value marker, leaves the rest of the buffer alone,
+// and is a no-op when the marker is absent. Trailing newline shape
+// follows what bytes.Split + bytes.Join produces; we don't trim it
+// because compressed.log keeps its trailing newline.
+func TestStripSentinelLine(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		// preserved is content the strip operation must leave intact.
+		// We don't pin exact whitespace because bytes.Split/Join
+		// handles trailing newlines in a way that doesn't matter for
+		// the consumer (compressed.log gets read whole).
+		preserved []string
+	}{
+		{
+			name:      "marker as the only line",
+			in:        "<!-- thlibo-pdf-low-value: no extractable text -->\n",
+			preserved: nil,
+		},
+		{
+			name:      "marker on its own line after content",
+			in:        "## Page 1\n\n_[scanned]_\n<!-- thlibo-pdf-low-value: x -->\n",
+			preserved: []string{"## Page 1", "_[scanned]_"},
+		},
+		{
+			name:      "no marker at all is a no-op",
+			in:        "regular content\nwith newlines\n",
+			preserved: []string{"regular content", "with newlines"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := stripSentinelLine([]byte(tc.in))
+			if strings.Contains(string(got), lowValueSentinel) {
+				t.Errorf("output still contains marker: %q", got)
+			}
+			for _, want := range tc.preserved {
+				if !strings.Contains(string(got), want) {
+					t.Errorf("expected %q to survive strip; got %q", want, got)
+				}
+			}
+			// No-marker case must round-trip byte-for-byte.
+			if !strings.Contains(tc.in, lowValueSentinel) && string(got) != tc.in {
+				t.Errorf("no-marker input must be unchanged:\n  in:  %q\n  out: %q", tc.in, got)
+			}
+		})
+	}
+}
+
 // ReductionPercent math and rounding.
 func TestReductionPct(t *testing.T) {
 	cases := []struct {

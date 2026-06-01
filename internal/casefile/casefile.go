@@ -63,10 +63,23 @@ type Meta struct {
 	// Set by callers that can distinguish fallback from success;
 	// Create leaves it at the zero value.
 	Fallback bool `json:"fallback,omitempty"`
+	// LowValue is true iff the pipeline produced output that's
+	// structurally a success but carries no usable signal — e.g. a
+	// scanned-image PDF where every page returns an "OCR not yet
+	// supported" placeholder. Callers (the Read hook) should treat
+	// LowValue cases as "don't divert the read; let the upstream
+	// reader handle it natively." See issue #31.
+	LowValue bool `json:"low_value,omitempty"`
 	// ThliboVersion is the build tag of the tool that wrote the
 	// case. Filled in from internal/version.Tag by callers.
 	ThliboVersion string `json:"thlibo_version,omitempty"`
 }
+
+// lowValueSentinel is the line pdf-to-md emits when every page is
+// scanned/blank/chart with no extractable text. Format is loud
+// enough that nothing else produces it accidentally; matched
+// substring-wise so we don't have to care about trailing whitespace.
+const lowValueSentinel = "<!-- thlibo-pdf-low-value:"
 
 // Result bundles the directory and meta back to the caller.
 type Result struct {
@@ -183,6 +196,17 @@ func Create(ctx context.Context, sourcePath string, opts Options) (*Result, erro
 		compressed = raw
 	}
 
+	// Detect and strip the low-value sentinel emitted by pdf-to-md
+	// when every page is a placeholder. We strip it so a downstream
+	// reader (humans opening the case dir; the /caselog skill) sees
+	// only the real content; the LowValue flag in meta.json carries
+	// the signal forward for tooling that needs it.
+	lowValue := false
+	if bytes.Contains(compressed, []byte(lowValueSentinel)) {
+		lowValue = true
+		compressed = stripSentinelLine(compressed)
+	}
+
 	// #nosec G703 -- gosec's taint analysis follows compressedPath
 	// back to sourcePath (user-supplied). The actual string at this
 	// line is filepath.Join(<casesRoot>, caseID(...), "compressed.log")
@@ -201,6 +225,7 @@ func Create(ctx context.Context, sourcePath string, opts Options) (*Result, erro
 		ReductionPercent: reductionPct(info.Size(), int64(len(compressed))),
 		CreatedAt:        now,
 		Fallback:         fallback,
+		LowValue:         lowValue,
 		ThliboVersion:    opts.ThliboVersion,
 	}
 
@@ -249,6 +274,10 @@ func writeSummary(dir string, meta Meta) error {
 	if meta.Fallback {
 		fbNote = "- **Note:** compression pipeline unavailable; compressed.log is a verbatim copy of the source.\n"
 	}
+	lvNote := ""
+	if meta.LowValue {
+		lvNote = "- **Note:** compressed.log contains placeholder content only (e.g. scanned PDF, OCR not yet supported). The Read hook should have let the original read pass through.\n"
+	}
 	body := fmt.Sprintf(`# thlibo case %s
 
 - source: %s
@@ -256,11 +285,31 @@ func writeSummary(dir string, meta Meta) error {
 - source size: %d bytes
 - compressed size: %d bytes
 - reduction: %.2f%%
-%s%s`,
+%s%s%s`,
 		meta.ID, meta.SourcePath, meta.CreatedAt.Format(time.RFC3339),
 		meta.SourceSize, meta.CompressedSize, meta.ReductionPercent,
-		verLine, fbNote)
+		verLine, fbNote, lvNote)
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(body), 0o600)
+}
+
+// stripSentinelLine removes any line containing lowValueSentinel
+// from buf and returns the remainder. We strip whole lines (not
+// just the marker) so the surrounding text doesn't read as if a
+// trailing comment got cut off mid-stream.
+func stripSentinelLine(buf []byte) []byte {
+	marker := []byte(lowValueSentinel)
+	if !bytes.Contains(buf, marker) {
+		return buf
+	}
+	lines := bytes.Split(buf, []byte("\n"))
+	out := make([][]byte, 0, len(lines))
+	for _, line := range lines {
+		if bytes.Contains(line, marker) {
+			continue
+		}
+		out = append(out, line)
+	}
+	return bytes.Join(out, []byte("\n"))
 }
 
 func reductionPct(source, compressed int64) float64 {

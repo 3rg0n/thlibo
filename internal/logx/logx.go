@@ -1,14 +1,19 @@
 // Package logx is thlibo's NDJSON activity logger. One JSON record
 // per line, written to ~/.thlibo/logs/<component>.ndjson, with a
-// small built-in rotation cap. Suitable for `jq`-based inspection
-// when something's misbehaving, not a full observability stack —
-// anything more elaborate belongs in an external OTEL exporter.
+// daily-rotation + age-based retention sweep. Suitable for `jq`-based
+// inspection when something's misbehaving, not a full observability
+// stack — anything more elaborate belongs in an external OTEL exporter.
 //
 // Verbosity is controlled by THLIBO_LOG:
 //
 //	unset, 0, false, off     warnings + errors only (default)
 //	1, true, on, info        + activity records (one per request)
 //	debug, 2                 + detailed per-step records
+//
+// Retention is controlled by THLIBO_LOG_RETAIN_DAYS (default 7):
+// historic files (`<component>-YYYY-MM-DD.ndjson`) older than the
+// retention window are deleted on the first write of each day. The
+// live `<component>.ndjson` is never deleted by the sweep.
 //
 // Records are free-form JSON objects. Callers build them via Record
 // constructors to keep field names stable across the codebase.
@@ -44,13 +49,16 @@ const (
 // Logger writes NDJSON records. Zero value is nil; nil is safe to
 // call — every method is a no-op. Use New to produce a working one.
 type Logger struct {
-	component string
-	path      string
-	rotateAt  int64
-	verbosity verbosity
+	component   string
+	dir         string
+	path        string
+	retainDays  int
+	verbosity   verbosity
+	now         func() time.Time // injectable for tests; defaults to time.Now
 
-	mu sync.Mutex
-	f  *os.File // lazily opened so tests that never emit don't leave tmp files behind
+	mu     sync.Mutex
+	f      *os.File // lazily opened so tests that never emit don't leave tmp files behind
+	openOn string   // YYYY-MM-DD the live file was opened against; "" = not yet open
 }
 
 type verbosity int
@@ -95,35 +103,57 @@ func DefaultDir() string {
 // first write so non-logging invocations (short-circuited requests,
 // `thlibo help`) leave the filesystem untouched.
 //
-// Rotation: when the file grows past rotateBytes, it's rotated into
-// a numbered sequence (.ndjson.old → .ndjson.old.1 → .ndjson.old.2
-// → dropped) and a fresh file is started. Keeping three generations
-// preserves a forensics window long enough to resist "trigger
-// rotation twice to erase the audit trail" attacks. See
-// THREAT_MODEL.md finding #13. Default rotateBytes is 10 MiB; pass
-// 0 for no rotation.
-func New(component, dir string, rotateBytes int64) *Logger {
+// Rotation: when the calendar day rolls over, the live file is
+// renamed to `<component>-YYYY-MM-DD.ndjson` (the closing day's
+// date) and a fresh live file is opened. On each rotation the
+// directory is swept for archives older than retainDays and any
+// stale ones are deleted. retainDays <= 0 means use the
+// THLIBO_LOG_RETAIN_DAYS env var or fall back to defaultRetainDays
+// (7). Pass a positive int to override per-call.
+//
+// Why daily, not size-based: operators expect "the last week of
+// activity, broken up by day" for jq-friendly debugging. A size cap
+// would either truncate a busy day mid-stream or accumulate noise
+// indefinitely on a quiet host.
+func New(component, dir string, retainDays int) *Logger {
 	if dir == "" {
 		dir = DefaultDir()
 	}
-	if rotateBytes == 0 {
-		rotateBytes = 10 << 20
+	if retainDays <= 0 {
+		retainDays = retainDaysFromEnv()
 	}
 	return &Logger{
-		component: component,
-		path:      filepath.Join(dir, component+".ndjson"),
-		rotateAt:  rotateBytes,
-		verbosity: parseVerbosity(os.Getenv("THLIBO_LOG")),
+		component:  component,
+		dir:        dir,
+		path:       filepath.Join(dir, component+".ndjson"),
+		retainDays: retainDays,
+		verbosity:  parseVerbosity(os.Getenv("THLIBO_LOG")),
+		now:        time.Now,
 	}
 }
 
-// maxRotatedGenerations is the number of historic .old files kept.
-// N=3 means at rotation time we cascade .old.2 → dropped, .old.1 →
-// .old.2, .old → .old.1, current → .old. An attacker with same-UID
-// write access would need to force three rotations to erase the
-// oldest record, which at the default 10 MiB cap is ~30 MiB of log
-// volume per forensics window.
-const maxRotatedGenerations = 3
+// defaultRetainDays is the FIFO window: archives older than this
+// many days from the current local-day boundary are deleted. Seven
+// matches "show me last week" and bounds disk use even on chatty
+// hosts (typical activity record is ~200 bytes; 7 days * 1 file/day
+// keeps the directory tidy).
+const defaultRetainDays = 7
+
+// retainDaysFromEnv reads THLIBO_LOG_RETAIN_DAYS, falling back to
+// defaultRetainDays when the env var is unset, malformed, or non-
+// positive. We deliberately ignore parse errors silently — a typo'd
+// retention value should not break logging.
+func retainDaysFromEnv() int {
+	v := strings.TrimSpace(os.Getenv("THLIBO_LOG_RETAIN_DAYS"))
+	if v == "" {
+		return defaultRetainDays
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return defaultRetainDays
+	}
+	return n
+}
 
 // Error writes an error-level record. Always emitted.
 func (l *Logger) Error(msg string, fields ...Field) {
@@ -239,7 +269,8 @@ func (l *Logger) write(level Level, msg string, fields []Field) {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if err := l.ensureOpen(); err != nil {
+	today := l.now().Format("2006-01-02")
+	if err := l.ensureOpenLocked(today); err != nil {
 		fmt.Fprintf(os.Stderr, "logx: open %s: %v\n", l.path, err)
 		return
 	}
@@ -247,74 +278,128 @@ func (l *Logger) write(level Level, msg string, fields []Field) {
 		fmt.Fprintf(os.Stderr, "logx: write %s: %v\n", l.path, err)
 		return
 	}
-	l.maybeRotateLocked()
 }
 
-// ensureOpen creates the directory + file on first write. Called
-// under l.mu.
-func (l *Logger) ensureOpen() error {
-	if l.f != nil {
+// ensureOpenLocked creates the directory + opens the live file on
+// first write, and rotates+sweeps when the calendar day rolls over.
+// Caller holds l.mu. The today argument is the current local day in
+// "2006-01-02" form; passing it in (rather than calling l.now()
+// here) keeps the test seam at one place.
+//
+// Day-rollover behaviour:
+//  1. If the file is already open and openOn matches today, no-op.
+//  2. If the file is already open and openOn != today, close it,
+//     rename `<component>.ndjson` → `<component>-<openOn>.ndjson`
+//     (the closing day's date), and open a fresh live file.
+//  3. If the file is not open yet, infer the prior day from the
+//     existing file's mtime: if it's not today, do the same rename
+//     before opening. This makes rotation correct even when thlibo
+//     wasn't running at midnight.
+//
+// The retention sweep runs once per Logger lifetime, on the first
+// rotation we trigger, so a hot path that writes 1k records in a
+// burst doesn't rescan the directory 1k times.
+func (l *Logger) ensureOpenLocked(today string) error {
+	if l.f != nil && l.openOn == today {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(l.path), 0o750); err != nil {
+	if err := os.MkdirAll(l.dir, 0o750); err != nil {
 		return err
+	}
+	if l.f != nil && l.openOn != "" && l.openOn != today {
+		_ = l.f.Close()
+		l.f = nil
+		l.archiveLocked(l.openOn)
+		l.sweepLocked(today)
+	} else if l.f == nil {
+		if info, err := os.Stat(l.path); err == nil {
+			fileDay := info.ModTime().Local().Format("2006-01-02")
+			if fileDay != today {
+				l.archiveLocked(fileDay)
+				l.sweepLocked(today)
+			}
+		}
 	}
 	f, err := os.OpenFile(l.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) // #nosec G304 -- path is component-derived, not user input
 	if err != nil {
 		return err
 	}
 	l.f = f
+	l.openOn = today
 	return nil
 }
 
-// maybeRotateLocked checks file size and rotates if we're past the
-// threshold. Caller holds l.mu. Rotation is best-effort: a failure
-// just means the file keeps growing, which is strictly less bad
-// than losing writes.
-//
-// Rotation cascades through a bounded history so multiple rotations
-// don't erase the forensics window. Concretely, for N = 3:
-//
-//	.old.2   -> deleted
-//	.old.1   -> .old.2
-//	.old     -> .old.1
-//	current  -> .old
-func (l *Logger) maybeRotateLocked() {
-	if l.rotateAt <= 0 || l.f == nil {
+// archiveLocked renames the live `<component>.ndjson` to a
+// date-suffixed archive. Missing-source is fine (a brand-new
+// component never had a live file). If the target name already
+// exists (someone manually rotated, or two thlibo processes
+// raced through the same midnight), we leave the archive as-is
+// and let the live file truncate — preserving the older record
+// is more useful than overwriting it.
+func (l *Logger) archiveLocked(day string) {
+	src := l.path
+	dst := l.archivePath(day)
+	if _, err := os.Stat(src); err != nil {
 		return
 	}
-	info, err := l.f.Stat()
-	if err != nil || info.Size() < l.rotateAt {
+	if _, err := os.Stat(dst); err == nil {
+		// Append today's content to the existing archive instead of
+		// clobbering. Best-effort; on failure we leave src in place
+		// (the next call will retry).
+		if data, rerr := os.ReadFile(src); rerr == nil { // #nosec G304 -- path is component-derived
+			if f, oerr := os.OpenFile(dst, os.O_APPEND|os.O_WRONLY, 0o600); oerr == nil { // #nosec G304 -- path is component-derived
+				_, _ = f.Write(data)
+				_ = f.Close()
+				_ = os.Remove(src)
+			}
+		}
 		return
 	}
-	_ = l.f.Close()
-	l.f = nil
-
-	// Cascade from oldest to newest. Missing files are fine.
-	base := l.path
-	oldestIdx := maxRotatedGenerations - 1
-	// Drop the oldest if it exists.
-	oldest := rotatedName(base, oldestIdx)
-	_ = os.Remove(oldest)
-	// Shift each generation up by one.
-	for i := oldestIdx - 1; i >= 0; i-- {
-		from := rotatedName(base, i)
-		to := rotatedName(base, i+1)
-		_ = os.Rename(from, to)
-	}
-	// Current -> .old (generation 0).
-	_ = os.Rename(base, rotatedName(base, 0))
-	// Next write will reopen and recreate.
+	_ = os.Rename(src, dst)
 }
 
-// rotatedName returns the on-disk name for generation i. Generation 0
-// is "<base>.old" (matches the pre-rolling naming for compatibility);
-// later generations are "<base>.old.N".
-func rotatedName(base string, i int) string {
-	if i == 0 {
-		return base + ".old"
+// sweepLocked deletes archives older than retainDays from today.
+// Best-effort: a failed Remove just leaves the file in place, which
+// is strictly less bad than dropping live writes. We only touch
+// files matching the `<component>-YYYY-MM-DD.ndjson` pattern so we
+// can't delete unrelated user files even if THLIBO_LOGS_DIR is
+// pointed at a shared directory.
+func (l *Logger) sweepLocked(today string) {
+	cutoff, err := time.ParseInLocation("2006-01-02", today, time.Local)
+	if err != nil {
+		return
 	}
-	return base + ".old." + strconv.Itoa(i)
+	cutoff = cutoff.AddDate(0, 0, -l.retainDays)
+	entries, err := os.ReadDir(l.dir)
+	if err != nil {
+		return
+	}
+	prefix := l.component + "-"
+	const suffix = ".ndjson"
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+			continue
+		}
+		dateStr := strings.TrimSuffix(strings.TrimPrefix(name, prefix), suffix)
+		t, err := time.ParseInLocation("2006-01-02", dateStr, time.Local)
+		if err != nil {
+			continue
+		}
+		if t.Before(cutoff) {
+			_ = os.Remove(filepath.Join(l.dir, name))
+		}
+	}
+}
+
+// archivePath returns the on-disk name for an archived day. Format
+// is `<component>-YYYY-MM-DD.ndjson` so jq-friendly globbing works
+// (`cat ~/.thlibo/logs/thlibo-exec-*.ndjson | jq -c .`).
+func (l *Logger) archivePath(day string) string {
+	return filepath.Join(l.dir, l.component+"-"+day+".ndjson")
 }
 
 // Close flushes any pending write and releases the underlying file.

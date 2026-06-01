@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestNilLoggerIsNoOp: a nil *Logger on every public method must
@@ -107,37 +108,126 @@ func TestLazyOpen(t *testing.T) {
 	_ = l.Close()
 }
 
-// TestRotation: past rotateAt, the file is renamed to .old and a
-// fresh file is started. We only keep one generation of .old
-// (rotation is a best-effort size cap, not an archive). Assertion
-// is "some data lives in .old, recent data lives in the live file."
-func TestRotation(t *testing.T) {
-	t.Setenv("THLIBO_LOG", "debug")
+// TestDailyRotation: when the calendar day rolls over, the live
+// file is renamed to `<component>-<previous-day>.ndjson` and a
+// fresh live file is opened. Records emitted on the new day land
+// in the new live file; records emitted on the previous day live
+// in the archive.
+func TestDailyRotation(t *testing.T) {
+	t.Setenv("THLIBO_LOG", "1")
 	dir := t.TempDir()
-	// Tiny rotate threshold so we trip it in-test.
-	l := New("test", dir, 200)
+	l := New("test", dir, 0)
 	defer l.Close()
 
-	for i := 0; i < 10; i++ {
-		l.Info("message", Int("i", i))
-	}
+	day1 := time.Date(2026, 5, 26, 12, 0, 0, 0, time.Local)
+	day2 := day1.Add(24 * time.Hour)
+	l.now = func() time.Time { return day1 }
+	l.Info("yesterday")
 
-	oldPath := filepath.Join(dir, "test.ndjson.old")
-	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
-		t.Fatal("rotation did not produce .old file")
+	l.now = func() time.Time { return day2 }
+	l.Info("today")
+
+	archive := filepath.Join(dir, "test-2026-05-26.ndjson")
+	if _, err := os.Stat(archive); err != nil {
+		t.Fatalf("archive %s not created: %v", archive, err)
+	}
+	old := readRecords(t, archive)
+	if len(old) != 1 || old[0]["msg"] != "yesterday" {
+		t.Errorf("archive contents wrong: %+v", old)
 	}
 	live := readRecords(t, filepath.Join(dir, "test.ndjson"))
-	old := readRecords(t, oldPath)
-	if len(live) == 0 {
-		t.Error("live file empty after rotation; expected recent records")
+	if len(live) != 1 || live[0]["msg"] != "today" {
+		t.Errorf("live contents wrong: %+v", live)
 	}
-	if len(old) == 0 {
-		t.Error(".old file empty; rotation never flushed anything")
+}
+
+// TestRetentionSweep: archives older than retainDays are deleted
+// on the first write of a day that triggers rotation. Younger
+// archives, the live file, and unrelated files in the directory
+// must all survive the sweep.
+func TestRetentionSweep(t *testing.T) {
+	t.Setenv("THLIBO_LOG", "1")
+	dir := t.TempDir()
+
+	old8 := filepath.Join(dir, "test-2026-05-18.ndjson") // 8 days ago
+	old3 := filepath.Join(dir, "test-2026-05-23.ndjson") // 3 days ago
+	other := filepath.Join(dir, "other-component-2020-01-01.ndjson")
+	for _, p := range []string{old8, old3, other} {
+		if err := os.WriteFile(p, []byte("{}\n"), 0o600); err != nil {
+			t.Fatalf("seed %s: %v", p, err)
+		}
 	}
-	// Sanity: the single-generation design discards older-than-.old
-	// records, so the total is *at most* 10 and we don't claim more.
-	if total := len(live) + len(old); total > 10 {
-		t.Errorf("more records than emitted: %d > 10", total)
+
+	l := New("test", dir, 7)
+	defer l.Close()
+	day1 := time.Date(2026, 5, 25, 12, 0, 0, 0, time.Local)
+	day2 := day1.Add(24 * time.Hour)
+	l.now = func() time.Time { return day1 }
+	l.Info("seed live file")
+	l.now = func() time.Time { return day2 }
+	l.Info("trigger sweep")
+
+	if _, err := os.Stat(old8); !os.IsNotExist(err) {
+		t.Errorf("8-day-old archive not swept: err=%v", err)
+	}
+	if _, err := os.Stat(old3); err != nil {
+		t.Errorf("3-day-old archive should have survived: %v", err)
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Errorf("foreign component file must not be touched: %v", err)
+	}
+}
+
+// TestRetainDaysFromEnv: THLIBO_LOG_RETAIN_DAYS overrides the
+// 7-day default, including malformed values that should fall back
+// to the default rather than disable retention silently.
+func TestRetainDaysFromEnv(t *testing.T) {
+	cases := []struct {
+		env  string
+		want int
+	}{
+		{"", defaultRetainDays},
+		{"14", 14},
+		{"0", defaultRetainDays},   // non-positive falls back, never disables
+		{"-3", defaultRetainDays},  // negative falls back
+		{"abc", defaultRetainDays}, // malformed falls back
+	}
+	for _, tc := range cases {
+		t.Setenv("THLIBO_LOG_RETAIN_DAYS", tc.env)
+		if got := retainDaysFromEnv(); got != tc.want {
+			t.Errorf("env=%q: got %d, want %d", tc.env, got, tc.want)
+		}
+	}
+}
+
+// TestRotationFromMtime: when the live file already exists from a
+// prior process and we open it on a later day, the prior content
+// is archived under the file's mtime date — not lost into today's
+// log.
+func TestRotationFromMtime(t *testing.T) {
+	t.Setenv("THLIBO_LOG", "1")
+	dir := t.TempDir()
+	livePath := filepath.Join(dir, "test.ndjson")
+	if err := os.WriteFile(livePath, []byte(`{"msg":"prior-day"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("seed live: %v", err)
+	}
+	priorDay := time.Date(2026, 5, 20, 9, 0, 0, 0, time.Local)
+	if err := os.Chtimes(livePath, priorDay, priorDay); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	l := New("test", dir, 7)
+	defer l.Close()
+	l.now = func() time.Time { return time.Date(2026, 5, 26, 12, 0, 0, 0, time.Local) }
+	l.Info("today")
+
+	archive := filepath.Join(dir, "test-2026-05-20.ndjson")
+	if _, err := os.Stat(archive); err != nil {
+		t.Errorf("archive for prior day not created: %v", err)
+	}
+	live := readRecords(t, livePath)
+	if len(live) != 1 || live[0]["msg"] != "today" {
+		t.Errorf("live should contain only today's record: %+v", live)
 	}
 }
 

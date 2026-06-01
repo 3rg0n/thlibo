@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Daily log rotation + 7-day FIFO retention** in `internal/logx`.
+  Replaces the previous size-based `.old` cascade. Live file is
+  `<component>.ndjson`; archives are `<component>-YYYY-MM-DD.ndjson`.
+  Retention is configurable via `THLIBO_LOG_RETAIN_DAYS` (default 7).
+  The first write of a new day rotates the previous live file under
+  the closing day's date and sweeps any archives older than the
+  retention window. Live records and unrelated files in the directory
+  are never touched by the sweep.
+
+### Changed
+
+- **`thlibo case` exits 6 (`ExitLowValue`) when compressed output is
+  placeholder-only.** The case directory is still written for
+  forensics, but stdout is empty so the Read PreToolUse hook treats
+  it as no-match and lets Claude Code's native PDF reader handle
+  the original. Unblocks the scanned-PDF flow that previously caused
+  Claude to fall back to manual `pip install pypdf` + PNG rendering
+  (issue [#31](https://github.com/3rg0n/thlibo/issues/31)).
+  - `pdf-to-md` emits `<!-- thlibo-pdf-low-value: ... -->` when no
+    page yields extractable text.
+  - `casefile.Meta.LowValue` carries the flag forward to `meta.json`
+    and `summary.md`.
+  - The activity log records `low_value=true/false` per case.
+
+### Fixed
+
+- **`pdf-to-md` crashed on Windows for text PDFs containing non-ANSI
+  characters.** Python on Windows defaults stdout to the legacy
+  cp1252 code page, so a PDF with `→`, em-dashes, or smart quotes
+  raised `UnicodeEncodeError`, the processor exited non-zero, and the
+  pipeline fell back to emitting the raw PDF bytes (0% reduction). The
+  processor now forces `sys.stdout` to UTF-8 alongside the existing LF
+  reconfigure. Output is byte-identical across Windows, WSL, and
+  Linux. (Linux/macOS were unaffected — their stdout already defaults
+  to UTF-8.)
+
 ## [0.7.3] - 2026-05-26
 
 ### Added
