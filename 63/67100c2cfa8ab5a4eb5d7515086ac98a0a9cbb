@@ -1,0 +1,24 @@
+CLAUDE.md
+  s_5811b7f24eccc0::t_6ce73244034d49 9-20,24-26,30-45,57,83,87
+  s_5811b7f24eccc0::t_01b251ba3955de 49-55,58-70
+  s_5811b7f24eccc0::t_5678795e4f2f65 88-94
+  s_5811b7f24eccc0::t_159824e13e7a98 96-102,105-109
+  s_5811b7f24eccc0::t_fe9a40dcb86651 114-115,119-129,131-134,137-141
+  s_5811b7f24eccc0::t_8386410887c9e8 149-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6367100c2cfa8ab5a4eb5d7515086ac98a0a9cbb",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
