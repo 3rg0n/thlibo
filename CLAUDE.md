@@ -6,64 +6,68 @@ agents that need architectural context in a single shot.
 
 ## Status
 
-v0.2.0 released 2026-05-14. Two binaries shipped (`thlibo`,
-`thlibod`), Claude Code hooks for Bash + PowerShell + Read tools,
-Codex PostToolUse hook, full test + scanner CI on linux/macOS/Windows,
-signed releases via Sigstore keyless, CycloneDX SBOM.
+v0.7.3 (current). Single binary shipped (`thlibo`); inference runs in
+a separate sidecar, **`inferd`** (its own repo, github.com/3rg0n/inferd),
+which `thlibo install` probe-or-installs. Claude Code hooks for Bash +
+PowerShell + Read + Write/Edit tools, Codex PostToolUse hook, full
+test + scanner CI on linux/macOS/Windows, signed releases via Sigstore
+keyless, CycloneDX SBOM.
+
+> History: through v0.5.x thlibo shipped a second binary, `thlibod`,
+> that spawned llamafile directly. ADR 0005 extracted all inference
+> into `inferd`; ADR 0006 made thlibo fail open during the inferd
+> bootstrap window. If you see `thlibod`, llamafile, or `thlibo pull`
+> referenced as live, that's stale — they're gone.
 
 Authoritative sources when they disagree:
 
-1. `.plan/thlibo-spec.md` — v0.1/v0.2 design document.
-2. `THREAT_MODEL.md` — security posture + threat decisions.
-3. `docs/adr/*.md` — cross-cutting architectural choices.
-4. This file — drift happens; fix it when you see it.
+1. `THREAT_MODEL.md` — security posture + threat decisions.
+2. `docs/adr/*.md` — cross-cutting architectural choices.
+3. This file — drift happens; fix it when you see it.
 
 ## What this project is
 
-Two-binary system that compresses AI-coding-assistant tool output
-using a locally-hosted Gemma 4 E4B model:
+A single binary plus PreToolUse hooks that compresses
+AI-coding-assistant tool output, backed by a locally-hosted Gemma 4
+E4B model served by a sidecar:
 
-- **`thlibod`** — inference daemon. Spawns `llamafile` as a private
-  HTTP backend on a per-user Unix socket (/Windows named pipe), loads
-  the model once, stays warm, serves newline-delimited JSON over IPC.
-  Knows only about inference.
-- **`thlibo`** — CLI + middleware. Subcommands: `rewrite`, `exec`,
-  `compress`, `case`, `install`, `uninstall`, `pull`, `version`.
-  Scans `~/.thlibo/processors/`, routes tool output to the right
-  processor (script or prompt), posts fully-formed requests to the
-  daemon, returns the compressed result. Knows only about routing.
+- **`thlibo`** — CLI + middleware (the whole repo). Subcommands:
+  `rewrite`, `exec`, `compress`, `case`, `shorthand`, `install`,
+  `uninstall`, `upgrade`, `config`, `version` (see `cmd/thlibo/main.go`
+  for the authoritative switch). Scans `~/.thlibo/processors/`, routes
+  tool output to the right processor (script or prompt), and — for
+  prompt processors — posts fully-formed requests to inferd. Knows
+  only about routing; never about model loading or inference
+  mechanics.
+- **`inferd`** — inference sidecar, separate project. Loads the model
+  once, stays warm, serves NDJSON over a per-user socket. thlibo talks
+  to it through `internal/inferdcli`. If inferd is unreachable, the
+  middleware fails open (passthrough) per ADR 0006.
 
 ## Architectural invariants (load-bearing — do not blur)
 
-1. **Daemon has zero knowledge of processors, hooks, routing, or
-   clients.** It accepts fully-formed `messages` arrays + sampling
-   params and streams tokens back.
-2. **Middleware has zero knowledge of llamafile, model loading, or
-   inference mechanics.** It speaks only the daemon's JSON protocol.
-3. **Fallback to original output on any error path.** The middleware
-   must never break the AI client. Script non-zero exit, daemon
+1. **Middleware has zero knowledge of model loading or inference
+   mechanics.** It speaks only inferd's JSON protocol via
+   `internal/inferdcli`. (Inference invariants — single warm model,
+   fixed concurrency, offline-only generation — now live in the
+   `inferd` repo, not here.)
+2. **Fallback to original output on any error path.** The middleware
+   must never break the AI client. Script non-zero exit, inferd
    unreachable, parse failure, timeout → pass through the original
-   bytes. Every hook script exits 0 on error.
-4. **Short-circuit before doing any work.** Input under 2000 chars
-   passes through without scanning processors or calling the daemon.
-5. **Fast-path before routing.** Each processor's `match` regex is
-   checked before the daemon is asked to route — a regex hit
-   dispatches immediately, no routing call.
-6. **Single daemon instance.** Enforced by lock file with
-   non-regular-file rejection. The daemon never restarts the model
-   on its own; only `llamafile` crashes trigger restart (max 3).
-7. **Concurrency is fixed: 1 active generation + 10 queued + 4 per
-   caller.** `ErrFull` / `ErrCallerFull` returned immediately; client
-   disconnect cancels the job.
-8. **Thinking mode is owned by the processor prompt, not the
-   daemon.** The daemon has no `thinking` toggle; Gemma 4's
-   `<|channel>thought` block is stripped by `processors.Strip` before
-   output reaches the AI client.
-9. **Daemon is offline-only.** It does not reach the network.
-   `thlibo pull` is the one network touch, by explicit user action.
-10. **All hook scripts are SHA-stamped and survive reinstall.** User
-    edits are preserved; new versions land at `<path>.new` on
-    conflict.
+   bytes. Every hook script exits 0 on error. (ADR 0006 — fail open.)
+3. **Short-circuit before doing any work.** Input under
+   `middleware.MinBytesForRouting` (2000 bytes) passes through without
+   scanning processors or calling inferd.
+4. **Fast-path before routing.** Each processor's `match` regex is
+   checked before inferd is asked to route — a regex hit dispatches
+   immediately, no routing call.
+5. **Thinking mode is owned by the processor prompt, not inferd.**
+   Gemma 4's `<|channel>thought` block is stripped by the
+   `internal/processors` thinking filter (`thinking.go`) before output
+   reaches the AI client.
+6. **All hook scripts are SHA-stamped and survive reinstall.** User
+   edits are preserved; new versions land at `<path>.new` on
+   conflict.
 
 ## Processors
 
@@ -76,64 +80,65 @@ Live in `~/.thlibo/processors/<name>/`. Two kinds:
   dispatch — TOCTOU guard.
 - `processor.md` → **prompt processor**. YAML frontmatter is config
   (`temperature`, `max_tokens`, `match`, `thinking`, etc.); the
-  markdown body is the system prompt, sent to the daemon verbatim.
+  markdown body is the system prompt, sent to inferd verbatim.
 - Both present → yaml wins for type, md body is the system prompt.
 - Neither → folder ignored.
 
-Built-ins (`compress`, `casefolder`, `git-filter`, `npm-filter`,
-`cargo-filter`) are embedded via `go:embed`. A user processor of
-the same name overrides a built-in; the registry emits a
-`ShadowWarning` at load time so it's visible.
+Built-ins are embedded via `go:embed` under `processors/` (see
+`processors/embed.go`): `compress`, `casefolder`, `shorthand` (prompt
+processors) plus the deterministic script filters `git-filter`,
+`npm-filter`, `cargo-filter`, `pytest-filter`, `ndjson-filter`,
+`stacktrace-filter`, `lint-filter`, `trivy-filter`, `cordon-filter`,
+and `pdf-to-md`. A user processor of the same name overrides a
+built-in; the registry emits a `ShadowWarning` at load time so it's
+visible.
 
-## IPC
+## Talking to inferd
 
-| Platform | Inference endpoint              | Admin endpoint                  |
-|----------|---------------------------------|---------------------------------|
-| Linux    | `/run/thlibo/infer.sock`        | `/run/thlibo/admin.sock`        |
-| macOS    | `$TMPDIR/thlibo/infer.sock`     | `$TMPDIR/thlibo/admin.sock`     |
-| Windows  | `\\.\pipe\thlibo-infer`         | `\\.\pipe\thlibo-admin`         |
-| Fallback | `127.0.0.1:47320` (loopback)    | —                               |
+thlibo is a *client* of inferd; it does not own the socket, the
+model, or the IPC framing. All of that lives in the `inferd` repo.
+On this side the surface is `internal/inferdcli` — dial logic
+(`dial_unix.go` / `dial_windows.go`), the endpoint address resolution
+(`addr.go`), and the request/response types. If you need to change
+how thlibo *reaches* inference, that's here; if you need to change
+inference behaviour (model, sampling, concurrency, queueing), that's
+the inferd repo, not this one.
 
-Permissions: infer socket mode `0660`, group `thlibo-users` (if the
-group exists; graceful degrade to user-only if not). Admin socket
-`0600`. Sockets are not created until the daemon emits
-`{"status":"ready"}`. On connect, the daemon does a second identity
-check via `SO_PEERCRED` (Linux) / `GetNamedPipeClientProcessId` +
-`OpenProcessToken` (Windows) and rejects UID/SID mismatches.
-
-NDJSON frames have a 64 MiB per-frame cap; oversized frames get
-`ipc.ErrFrameTooLarge` and the connection is dropped.
-
-## Model
-
-`unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-UD-Q4_K_XL.gguf`
-(HuggingFace). 5.1 GB. SHA-256 pinned into the binary at build time
-via `-ldflags -X`. Not attached to GitHub releases (exceeds 2 GiB
-cap); users fetch via `thlibo pull`.
-
-Sampling defaults from the Gemma 4 model card: `temperature=1.0`,
-`top_p=0.95`, `top_k=64`. Context 128K. `thlibod -ctx` defaults to
-32768; overridable. Stop tokens `<turn|>` + `<end_of_turn>` passed
-to llamafile via `--stop`.
-
-Inference engine is **llamafile (Mozilla)** running in `--server`
-mode, bound to a private Unix socket. thlibod speaks HTTP to it over
-the socket. Do not write a custom inference engine.
+The middleware sends prompt-processor work to inferd as a
+fully-formed request and gets compressed text back. On any failure to
+reach or parse, it fails open (ADR 0006).
 
 ## Adapters
 
 - **`internal/adapters/claudecode/`** — PreToolUse hooks for Bash,
-  PowerShell, and Read tools. Settings merger. /caselog skill.
+  PowerShell, Read, and Write/Edit tools. Settings merger. /caselog
+  skill.
 - **`internal/adapters/codex/`** — PostToolUse hook using
   `decision: block` + `reason` to substitute the tool result.
 
+## Build, test, scan
+
+```
+go build ./...                 # build all
+go build -ldflags "-X github.com/3rg0n/thlibo/internal/version.Tag=v0.X.Y" -o thlibo ./cmd/thlibo
+go test ./...                  # full suite
+go test ./internal/middleware/... -run TokenSavings   # the savings benchmark
+go vet ./...                   # required before commit
+staticcheck ./...              # required — blocks CI
+gosec ./...                    # required — blocks CI
+```
+
+The version tag is injected via `-ldflags -X …/internal/version.Tag`;
+an un-injected build reports `dev` and skips the background
+update-check.
+
 ## When adding code
 
-- Repo layout: `cmd/thlibo`, `cmd/thlibod`, `internal/*` (adapters,
-  casefile, daemon, execpolicy, install, ipc, logx, middleware,
-  processors, promptsan, queue, router, shellcmd, update, version),
-  `processors/` for embedded built-ins, `skills/` for Claude Code
-  skill definitions.
+- Repo layout: `cmd/thlibo` (the only binary), `internal/*`
+  (adapters, casefile, config, execpolicy, inferdcli, install, logx,
+  middleware, processors, promptsan, router, shellcmd, shorthand,
+  update, version), `processors/` for embedded built-ins, `skills/`
+  for Claude Code skill definitions.
 - New user-facing features: add a scanner annotation if one fires
   (gosec / semgrep / staticcheck all block CI). Keep `#nosec` and
   `nosemgrep` reasons short but honest.
@@ -141,8 +146,10 @@ the socket. Do not write a custom inference engine.
   usage string, and exclude from the update-check short-circuit
   only if the subcommand should NOT trigger a background update
   fetch (like `version`).
-- When the spec and this file disagree, the spec wins — and update
-  this file.
+- `.plan/thlibo-spec.md` is the original v0.1/v0.2 design doc — useful
+  history, but the ADRs (`docs/adr/`) outrank it for anything the
+  inferd extraction touched. When an ADR and this file disagree, the
+  ADR wins — and update this file.
 
 ## Two Claude sessions?
 
