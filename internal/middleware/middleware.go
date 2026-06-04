@@ -111,6 +111,10 @@ func (p *Pipeline) decide(ctx context.Context, raw string) string {
 			p.warn("fast-path " + d.Name + ": " + err.Error())
 			return raw // B8d/B8e fallback
 		}
+		if out == "" {
+			p.warn("fast-path " + d.Name + ": empty output")
+			return raw
+		}
 		return out
 	}
 
@@ -129,6 +133,10 @@ func (p *Pipeline) decide(ctx context.Context, raw string) string {
 	if err != nil {
 		p.warn("chain " + joinNames(decision.Chain) + ": " + err.Error())
 		return raw // B8d/B8e/B8f fallback
+	}
+	if out == "" {
+		p.warn("chain " + joinNames(decision.Chain) + ": empty output")
+		return raw
 	}
 	return out
 }
