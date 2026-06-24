@@ -246,6 +246,13 @@ jobs:
             dist/*.cosign-bundle
           generate_release_notes: true
           draft: false
+          # Mark any tag carrying a pre-release suffix (e.g. v0.7.4-rc.1,
+          # v0.7.4-beta.2) as a GitHub pre-release. This keeps it OUT of
+          # the /releases/latest endpoint thlibo's update check + fresh
+          # installs read, so an RC is never auto-pulled by real users —
+          # it can only be installed by explicit --version pin. Stable
+          # tags (no hyphen) publish as normal latest releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
             # thlibo ${{ github.ref_name }}
 
