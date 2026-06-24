@@ -33,9 +33,8 @@ import (
 	"os"
 	"strings"
 
-	inferd "github.com/3rg0n/inferd/clients/go"
 	"github.com/3rg0n/thlibo/cmd/thlibo/compresscmd"
-	"github.com/3rg0n/thlibo/internal/inferdcli"
+	"github.com/3rg0n/thlibo/internal/inferd"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/shorthand"
 )
@@ -237,7 +236,7 @@ func readInput(path string) ([]byte, error) {
 // "shorthand" prompt processor. The engine package is transport-
 // agnostic; this is the production wiring.
 func buildEngine() (*shorthand.Engine, error) {
-	client := &inferdcli.Client{Address: inferdcli.DefaultInferenceAddress()}
+	client := &inferd.Client{Address: inferd.DefaultGenerationAddress()}
 	pr := &daemonBackend{client: client}
 	return &shorthand.Engine{Backend: pr}, nil
 }
@@ -273,7 +272,7 @@ func emitOriginal(target, raw string, inPlace, _ bool, quiet bool) int {
 // embedded processor registry on first use; every call after that
 // reuses the cached descriptor for the inferd round-trip.
 type daemonBackend struct {
-	client *inferdcli.Client
+	client *inferd.Client
 	desc   *processors.Descriptor
 }
 
@@ -315,5 +314,5 @@ func (b *daemonBackend) Run(ctx context.Context, input string) (string, error) {
 	}
 	// Strip the Gemma <thought> block + leading/trailing whitespace
 	// the model sometimes adds.
-	return strings.TrimSpace(processors.Strip(out)), nil
+	return strings.TrimSpace(processors.Strip(out.Text)), nil
 }

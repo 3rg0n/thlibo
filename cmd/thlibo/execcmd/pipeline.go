@@ -1,7 +1,7 @@
 package execcmd
 
 import (
-	"github.com/3rg0n/thlibo/internal/inferdcli"
+	"github.com/3rg0n/thlibo/internal/inferd"
 	"github.com/3rg0n/thlibo/internal/processors"
 )
 
@@ -19,5 +19,5 @@ func newDispatcher(pr processors.PromptRunner) *processors.Dispatcher {
 // defaultDaemonAddress picks the platform's default inferd inference
 // endpoint.
 func defaultDaemonAddress() string {
-	return inferdcli.DefaultInferenceAddress()
+	return inferd.DefaultGenerationAddress()
 }

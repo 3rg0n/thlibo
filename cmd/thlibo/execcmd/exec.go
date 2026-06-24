@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/3rg0n/thlibo/internal/execpolicy"
-	"github.com/3rg0n/thlibo/internal/inferdcli"
+	"github.com/3rg0n/thlibo/internal/inferd"
 	"github.com/3rg0n/thlibo/internal/logx"
 	"github.com/3rg0n/thlibo/internal/middleware"
 	"github.com/3rg0n/thlibo/internal/router"
@@ -230,9 +230,8 @@ func defaultPipeline() (*middleware.Pipeline, error) {
 		return nil, fmt.Errorf("registry: %w", err)
 	}
 
-	client := &inferdcli.Client{
+	client := &inferd.Client{
 		Address: defaultDaemonAddress(),
-		UseTCP:  false,
 	}
 	promptRunner := &middleware.PromptRunner{Client: client}
 

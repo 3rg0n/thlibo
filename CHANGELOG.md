@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Migrated to the inferd v0.4+ unified IPC wire; thlibo now owns its
+  wire codec.** thlibo no longer depends on inferd's `clients/go`
+  reference client — `internal/inferdcli` (which spoke the removed
+  protocol-v1 NDJSON surface and dialed the now-defunct
+  `inferd-infer` socket) is deleted and replaced by `internal/inferd`,
+  a thin codec implemented directly against inferd's `protocol-v2.md`:
+  length-prefixed `0x01`/`0x02` framing, in-band `wire_version`, the
+  unified generation socket (`\\.\pipe\inferd` / `inferd.sock`), and a
+  stream→string collapse. Fail-open (ADR 0006) stays at the middleware
+  boundary. A pre-v0.4 daemon is no longer supported (the v1 socket was
+  removed daemon-side); thlibo works against inferd v0.4.0 and v0.5.0.
+  - **No inbound TCP transport.** inferd v0.5 (ADR 0022) binds no
+    network listener; the client's TCP path is removed accordingly —
+    UDS (Unix) / named pipe (Windows) only.
+  - **Router uses `response_format` JSON-Schema** (inferd v0.5) to
+    constrain routing output to `{"processors":[...]}`, restoring the
+    hard tool-call guarantee daemon-side (GBNF via the gateway) that the
+    removed v1 GBNF grammar field provided. Unparseable output or an
+    unknown processor name still falls back to passthrough (B8c).
+
 ### Added
 
 - **Daily log rotation + 7-day FIFO retention** in `internal/logx`.

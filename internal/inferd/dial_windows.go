@@ -1,6 +1,6 @@
 //go:build windows
 
-package inferdcli
+package inferd
 
 import (
 	"context"
@@ -12,17 +12,16 @@ import (
 	"time"
 )
 
-// dialNative opens a Windows named pipe. Same retry-on-busy posture
-// the inferd client's own DialPipe uses, kept inline so this package
-// stays a thin wrapper without depending on inferd's internal pipe
-// shim.
+// dialNative opens a Windows named pipe with a retry-on-busy loop, the
+// same posture inferd's own client uses — kept inline so this package
+// stays dependency-free.
 func dialNative(ctx context.Context, addr string) (net.Conn, error) {
 	deadline := time.Now().Add(10 * time.Second)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
 	for {
-		f, err := os.OpenFile(addr, os.O_RDWR, 0) // #nosec G304 -- addr is an inferd pipe path from DefaultInferenceAddress, a compile-time platform constant; not user input
+		f, err := os.OpenFile(addr, os.O_RDWR, 0) // #nosec G304 -- addr is an inferd pipe path from DefaultGenerationAddress, a compile-time platform constant; not user input
 		if err == nil {
 			return &pipeConn{File: f}, nil
 		}

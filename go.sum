@@ -1,5 +1,3 @@
-github.com/3rg0n/inferd/clients/go v0.0.0-20260520194820-1fe99d4f0446 h1:ga7FjIcmoS97z8p/9Jk2UYBQHiT6M3Q5am7xKzON8wk=
-github.com/3rg0n/inferd/clients/go v0.0.0-20260520194820-1fe99d4f0446/go.mod h1:1HZtej0Y1+T2+qfoKpyvFDMC6KcDRrX6GaTLL5lW4WQ=
 golang.org/x/sys v0.44.0 h1:ildZl3J4uzeKP07r2F++Op7E9B29JRUy+a27EibtBTQ=
 golang.org/x/sys v0.44.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/term v0.43.0 h1:S4RLU2sB31O/NCl+zFN9Aru9A/Cq2aqKpTZJ6B+DwT4=

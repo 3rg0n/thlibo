@@ -836,9 +836,9 @@ html.no-js .reveal{ opacity:1; transform:none }
 
       <pre class="local-diagram" aria-label="IPC endpoints by platform">
 <span class="c-x"># IPC endpoints, per platform (inferd sidecar)</span>
-<span class="c-k">linux  </span> <span class="c-p">$XDG_RUNTIME_DIR/inferd/infer.sock</span>
-<span class="c-k">darwin </span> <span class="c-p">$TMPDIR/inferd/infer.sock</span>
-<span class="c-k">windows</span> <span class="c-p">\\.\pipe\inferd-infer</span>
+<span class="c-k">linux  </span> <span class="c-p">$XDG_RUNTIME_DIR/inferd/inferd.sock</span>
+<span class="c-k">darwin </span> <span class="c-p">$TMPDIR/inferd/inferd.sock</span>
+<span class="c-k">windows</span> <span class="c-p">\\.\pipe\inferd</span>
 
 <span class="c-x"># permissions</span>
 infer <span class="c-n">0660</span> group <span class="c-p">inferd-users</span> (or user-only)

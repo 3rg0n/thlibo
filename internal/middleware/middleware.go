@@ -17,8 +17,7 @@ import (
 
 	builtins "github.com/3rg0n/thlibo/processors"
 
-	inferd "github.com/3rg0n/inferd/clients/go"
-	"github.com/3rg0n/thlibo/internal/inferdcli"
+	"github.com/3rg0n/thlibo/internal/inferd"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/promptsan"
 	"github.com/3rg0n/thlibo/internal/router"
@@ -162,11 +161,11 @@ func readAll(r io.Reader) (string, error) {
 	return string(b), nil
 }
 
-// PromptRunner adapts an inferdcli.Client into the
+// PromptRunner adapts an inferd.Client into the
 // processors.PromptRunner interface so prompt processors can call
 // inferd through the same transport as the router.
 type PromptRunner struct {
-	Client *inferdcli.Client
+	Client *inferd.Client
 }
 
 // Run sends a prompt processor invocation to inferd and returns the
@@ -208,5 +207,5 @@ func (p *PromptRunner) Run(ctx context.Context, d *processors.Descriptor, input 
 	if err != nil {
 		return "", err
 	}
-	return processors.Strip(out), nil
+	return processors.Strip(out.Text), nil
 }

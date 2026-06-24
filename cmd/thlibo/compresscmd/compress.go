@@ -18,7 +18,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/3rg0n/thlibo/internal/inferdcli"
+	"github.com/3rg0n/thlibo/internal/inferd"
 	"github.com/3rg0n/thlibo/internal/middleware"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/router"
@@ -69,8 +69,8 @@ func BuildPipeline() (*middleware.Pipeline, error) {
 		return nil, err
 	}
 
-	client := &inferdcli.Client{
-		Address: inferdcli.DefaultInferenceAddress(),
+	client := &inferd.Client{
+		Address: inferd.DefaultGenerationAddress(),
 	}
 	promptRunner := &middleware.PromptRunner{Client: client}
 

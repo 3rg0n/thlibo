@@ -47,7 +47,7 @@ func TestParseSemverTuple_Garbage(t *testing.T) {
 // (covered by the doc comment in inferd.go); the constant should not
 // drift via copy-paste of test fixtures.
 func TestMinInferdVersion_Floor(t *testing.T) {
-	const want = "v0.1.14"
+	const want = "v0.4.0" // floored at the unified-wire migration (inferd ADR 0021)
 	if MinInferdVersion != want {
 		t.Errorf("MinInferdVersion = %q, want %q (update both the constant's doc comment and this test if intentional)", MinInferdVersion, want)
 	}
