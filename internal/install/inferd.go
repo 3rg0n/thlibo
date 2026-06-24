@@ -95,7 +95,16 @@ const (
 	//     script has to re-run to rewrite the plist. Forcing the
 	//     fresh-install branch (which calls inferd's installer)
 	//     does both at once.
-	MinInferdVersion = "v0.1.14"
+	//   - v0.4.0: the unified IPC wire (inferd ADR 0021 / inferd#34).
+	//     v0.4 removed the protocol-v1 socket thlibo used to dial and
+	//     replaced newline-delimited framing with the length-prefixed
+	//     v2 wire. thlibo's codec (internal/inferd) now speaks ONLY
+	//     that wire, so any daemon below v0.4.0 is unreachable — the
+	//     gate must floor here, otherwise thlibo would accept an old
+	//     daemon at probe time and then silently fail open on every
+	//     request (ADR 0006) with no path to recovery. This is the
+	//     load-bearing floor as of the v0.4 wire migration.
+	MinInferdVersion = "v0.4.0"
 )
 
 // InferdInstallSpec captures what the installer needs to know.

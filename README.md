@@ -403,11 +403,10 @@ Every hook honours this flag and exits passthrough immediately.
   assignments). The redactor is a best-effort backstop, not a
   replacement for keeping secrets out of subprocess output.
 - **Inferd version gate.** thlibo refuses to delegate to inferd
-  binaries older than `MinInferdVersion` (currently v0.1.14). Older
-  versions had a tempdir-copy bug that crashed on /tmp-constrained
-  hosts (WSL) and a macOS launchagent that registered a mock daemon
-  silently. The gate detects them and triggers a fresh inferd
-  install instead of using a known-bad version.
+  binaries older than `MinInferdVersion` (currently v0.4.0 — the first
+  release with the unified IPC wire thlibo's codec speaks; earlier
+  daemons are unreachable). The gate detects an older daemon and
+  triggers a fresh inferd install instead of failing open forever.
 - **Supply chain.** Every GitHub Action in this repo is pinned by
   commit SHA. Every release archive, the `SHA256SUMS`, and the
   CycloneDX SBOM are signed with cosign via Sigstore's keyless flow
@@ -469,14 +468,15 @@ internal/
   casefile/           `thlibo case` directory builder (compressed.log + summary + meta).
   config/             ~/.thlibo/config.yaml read/write.
   execpolicy/         `thlibo exec` allow/deny policy.
-  inferdcli/          Thin wrapper over inferd's Go client.
+  inferd/             thlibo's own codec for inferd's v2 IPC wire
+                      (length-prefixed framing); no client dependency.
   install/            Disk mirror + per-platform inferd sidecar installer
                       (probe-then-delegate) + v0.5 → v0.6 migration.
   logx/               NDJSON activity log with rolling rotation + secret redactor.
   middleware/         Main flow: short-circuit → fast-path → router → chain.
   processors/         Registry, descriptors, script+prompt dispatch, thought-stripping.
   promptsan/          Gemma marker sanitiser for untrusted tool output.
-  router/             Gemma native tool-call routing + GBNF grammar.
+  router/             Processor routing via inferd response_format (JSON-Schema).
   shellcmd/           Minimal shell-command argv[0] extractor.
   shorthand/          LLM-facing prose compression (SKILL.md / CLAUDE.md).
   update/             Background release check + upgrade banner.

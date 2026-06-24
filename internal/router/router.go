@@ -1,21 +1,27 @@
 // Package router asks the daemon which processor should handle a tool
-// output. The routing call uses Gemma 4's native tool-call format
-// (see https://ai.google.dev/gemma/docs/capabilities/text/function-calling-gemma4)
-// constrained by a GBNF grammar, so the model's response is guaranteed
-// to conform to the trained-for token pattern:
+// output. Under the inferd v0.4 wire (ADR 0021) the routing call uses
+// the structured tools mechanism (protocol-v2.md §3.6): the request
+// carries a `route` tool definition and the model replies with a
+// structured `tool_use` block whose `input` is parsed for the processor
+// chain.
 //
-//	<|tool_call>call:route{processors:[<|"|>name<|"|>,...]}<tool_call|>
+// Note: v2 removed the GBNF `grammar` field that previously *hard*-
+// constrained Gemma's tool-call tokens, and the daemon does not enforce
+// the tool's input_schema against emitted arguments (protocol-v2.md
+// §3.6). So routing output is no longer guaranteed structurally — any
+// malformed or absent tool_use, or an unknown processor name, produces
+// a passthrough Decision (B8c). The lost hard guarantee's proper home
+// is the daemon (constrained decoding), tracked separately; here we
+// fail open.
 package router
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
-	"regexp"
 	"strings"
 
-	inferd "github.com/3rg0n/inferd/clients/go"
-	"github.com/3rg0n/thlibo/internal/inferdcli"
+	"github.com/3rg0n/thlibo/internal/inferd"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/promptsan"
 )
@@ -42,7 +48,7 @@ const RouteInput = 200
 // Any error from the daemon (B8a/B8b) or an empty chain produces a
 // Passthrough decision so callers can uniformly treat "route failed"
 // and "route said none" the same way.
-func Ask(ctx context.Context, client *inferdcli.Client, reg *processors.Registry, input string) (Decision, error) {
+func Ask(ctx context.Context, client *inferd.Client, reg *processors.Registry, input string) (Decision, error) {
 	names := reg.Names()
 	if len(names) == 0 {
 		return Decision{}, nil
@@ -51,44 +57,48 @@ func Ask(ctx context.Context, client *inferdcli.Client, reg *processors.Registry
 	// Sanitize before truncating: the marker breaks lie at exact
 	// substring positions, so truncation after sanitize cannot split
 	// a ZWSP-separated pair. See THREAT_MODEL.md finding #3.
-	req := inferd.Request{
-		ID:       "route",
-		Messages: buildRoutingMessages(reg, truncate(promptsan.Sanitize(input), RouteInput)),
-		Grammar:  buildGrammar(names),
-	}
-	// Low temperature for a classification task.
-	t := 0.0
-	req.Temperature = &t
-	maxTok := 128
-	req.MaxTokens = &maxTok
-	s := false
-	req.Stream = &s
+	req := buildRouteRequest(reg, truncate(promptsan.Sanitize(input), RouteInput))
 
-	raw, err := client.Post(ctx, req)
+	res, err := client.Post(ctx, req)
 	if err != nil {
 		return Decision{}, err
 	}
-	return parseRoutingResponse(raw, reg), nil
+	return parseRouteResult(res, reg).Decision, nil
 }
 
-// buildRoutingMessages constructs the system + user messages the
-// daemon sees. The system content embeds a Gemma 4 tool declaration
-// in the model's native format. The chat template in the GGUF will
-// wrap this into `<|turn>system\n<|tool>declaration:...<tool|><turn|>`
-// at tokenize time.
-//
-// We inject the declaration as plain text rather than relying on a
-// separate `tools` parameter because the daemon protocol carries a
-// messages array, and llamafile's /completion endpoint renders the
-// chat template directly. The tool-call output is still grammar-
-// enforced, so a misrendered declaration would just produce a valid
-// empty chain (passthrough) rather than garbage.
+// buildRouteRequest assembles the v0.5 routing request: the system+user
+// messages plus a response_format JSON-Schema constraint
+// (protocol-v2.md §3.2a). On a backend that supports structured output
+// (llamacpp compiles the schema to GBNF) the model is *guaranteed* to
+// emit JSON matching {"processors":[...]} — restoring the hard
+// guarantee the removed v0.4 GBNF grammar gave, but daemon-side
+// (ADR 0013). Backends without structured-output support ignore the
+// field and return unconstrained text, which parseRouteResult treats as
+// malformed -> passthrough (fail-open safety net). Low temperature for a
+// deterministic classification task; non-streaming for one whole answer.
+func buildRouteRequest(reg *processors.Registry, input string) inferd.Request {
+	t := 0.0
+	maxTok := 128
+	s := false
+	return inferd.Request{
+		ID:             "route",
+		Messages:       buildRoutingMessages(reg, input),
+		ResponseFormat: inferd.JSONSchemaFormat(routeSchema(reg)),
+		Temperature:    &t,
+		MaxTokens:      &maxTok,
+		Stream:         &s,
+	}
+}
+
+// buildRoutingMessages constructs the system + user messages the daemon
+// sees. Output is constrained to a JSON object via response_format
+// (protocol-v2.md §3.2a), so the system message instructs the model to
+// emit that object directly and lists the available processors.
 func buildRoutingMessages(reg *processors.Registry, input string) []inferd.Message {
 	var sysb strings.Builder
-	sysb.WriteString(toolDeclaration(reg))
-	sysb.WriteString("\n\nYou are a processor router. Given tool output, emit exactly one\n")
-	sysb.WriteString("tool call to `route` with the ordered processor chain. Emit an\n")
-	sysb.WriteString("empty processors array to pass the input through unchanged.\n\n")
+	sysb.WriteString("You are a processor router. Given tool output, reply with a JSON\n")
+	sysb.WriteString("object {\"processors\": [...]} naming the ordered processor chain.\n")
+	sysb.WriteString("Use an empty array to leave the input unchanged.\n\n")
 	sysb.WriteString("Available processors:\n")
 	for _, n := range reg.Names() {
 		d := reg.Get(n)
@@ -96,7 +106,11 @@ func buildRoutingMessages(reg *processors.Registry, input string) []inferd.Messa
 		if desc == "" {
 			desc = "(no description)"
 		}
-		fmt.Fprintf(&sysb, "  - %s: %s\n", n, singleLine(desc))
+		sysb.WriteString("  - ")
+		sysb.WriteString(n)
+		sysb.WriteString(": ")
+		sysb.WriteString(singleLine(desc))
+		sysb.WriteString("\n")
 	}
 
 	return []inferd.Message{
@@ -105,102 +119,62 @@ func buildRoutingMessages(reg *processors.Registry, input string) []inferd.Messa
 	}
 }
 
-// toolDeclaration builds Gemma's tool-declaration block for the `route`
-// tool. Format is the one documented in the function-calling
-// capability doc; the chat template will wrap it with `<|tool>` tags.
-func toolDeclaration(reg *processors.Registry) string {
-	// The declaration is embedded as Gemma's declaration:name{...}
-	// syntax. Quoting uses Gemma's `<|"|>` string delimiters.
-	return `<|tool>declaration:route{description:<|"|>Route tool output through the processor chain. Pass an empty processors array to leave the input unchanged.<|"|>,parameters:{properties:{processors:{description:<|"|>Ordered list of processor names to run, piped stdout->stdin.<|"|>,type:<|"|>ARRAY<|"|>,items:{type:<|"|>STRING<|"|>} } },required:[<|"|>processors<|"|>],type:<|"|>OBJECT<|"|>} }<tool|>`
+// routeSchema builds the JSON Schema the router constrains output to
+// (protocol-v2.md §3.2a): an object with a single `processors` array of
+// strings, enumerated to the registered names. On llamacpp this becomes
+// a GBNF grammar, so the model's text output is guaranteed valid JSON
+// matching this shape. parseRouteResult still validates names against
+// the registry and falls open on any mismatch (defence in depth, and
+// it covers backends that ignore response_format).
+func routeSchema(reg *processors.Registry) json.RawMessage {
+	names := reg.Names()
+	enum, _ := json.Marshal(names)
+	schema := `{"type":"object","properties":{"processors":{"type":"array","items":{"type":"string","enum":` +
+		string(enum) +
+		`}}},"required":["processors"],"additionalProperties":false}`
+	return json.RawMessage(schema)
 }
 
-// buildGrammar produces a GBNF that forces Gemma's native tool-call
-// output for `route`. The model is restricted to exactly one tool
-// call whose `processors` argument is an array of registry names (or
-// empty). The emitted tokens match the spec §Router tool-call format.
-//
-// Grammar shape (GBNF):
-//
-//	root       ::= "<|tool_call>call:route{processors:[" chain "]}<tool_call|>"
-//	chain      ::= "" | name ("," name)*
-//	name       ::= "<|\"|>" ("compress" | "casefolder" | ...) "<|\"|>"
-//
-// With the empty-registry case, chain is forced to "".
-func buildGrammar(names []string) string {
-	var b strings.Builder
-	b.WriteString(`root ::= "<|tool_call>call:route{processors:[" chain "]}<tool_call|>"` + "\n")
-	if len(names) == 0 {
-		b.WriteString(`chain ::= ""`)
-		return b.String()
-	}
-	b.WriteString(`chain ::= "" | name ("," name)*` + "\n")
-	b.WriteString(`name ::= "<|\"|>" (`)
-	for i, n := range names {
-		if i > 0 {
-			b.WriteString(" | ")
-		}
-		fmt.Fprintf(&b, "%q", n)
-	}
-	b.WriteString(`) "<|\"|>"`)
-	return b.String()
-}
-
-// toolCallRE matches Gemma's native tool-call pattern for our `route`
-// tool. We do not require a leading-bytes match because llamafile's
-// response may include surrounding whitespace from the chat template.
-var toolCallRE = regexp.MustCompile(
-	`<\|tool_call>call:route\{processors:\[(.*?)\]\}<tool_call\|>`,
-)
-
-// argValueRE extracts one string argument from Gemma's `<|"|>...<|"|>`
-// delimited form. The capability doc's own extract_tool_calls uses a
-// similar pattern; we're less permissive here since we only expect
-// processor-name strings.
-var argValueRE = regexp.MustCompile(`<\|"\|>([^<]*)<\|"\|>`)
-
-// ParseResult is returned from parseRoutingResponseDetailed. The
-// Decision is what dispatch uses; Unknown/Malformed carry diagnostic
-// info for the caller to log as a security-relevant event (an unknown
-// name in a grammar-constrained response is a signal, not noise). See
-// THREAT_MODEL.md finding #12.
+// ParseResult is returned from parseRouteResult. The Decision is what
+// dispatch uses; Unknown/Malformed carry diagnostic info for the caller
+// to log as a security-relevant event (an unknown name is a signal, not
+// noise). See THREAT_MODEL.md finding #12.
 type ParseResult struct {
 	Decision  Decision
-	Unknown   []string // names Gemma emitted that aren't in the registry
-	Malformed bool     // true when the tool-call envelope itself was unreadable
+	Unknown   []string // names the model emitted that aren't in the registry
+	Malformed bool     // true when the model's output wasn't usable JSON
 }
 
-// parseRoutingResponse preserves the (raw, reg) -> Decision signature
-// for existing callers; see parseRoutingResponseDetailed for the
-// diagnostics-rich form.
-func parseRoutingResponse(raw string, reg *processors.Registry) Decision {
-	return parseRoutingResponseDetailed(raw, reg).Decision
+// routeArgs is the parsed shape of the route response JSON.
+type routeArgs struct {
+	Processors []string `json:"processors"`
 }
 
-// parseRoutingResponseDetailed extracts the processor chain from
-// Gemma's native tool-call output AND surfaces any unknown names or
-// envelope parse failures. Any parse failure or unknown name produces
-// a passthrough decision (B8c) - partial chains are worse than no
-// run because they produce unexpected output shape.
-func parseRoutingResponseDetailed(raw string, reg *processors.Registry) ParseResult {
-	m := toolCallRE.FindStringSubmatch(raw)
-	if m == nil {
-		return ParseResult{Malformed: true} // B8c: no tool call -> passthrough
-	}
-
-	inner := strings.TrimSpace(m[1])
-	if inner == "" {
-		return ParseResult{} // Empty chain -> explicit passthrough
-	}
-
-	matches := argValueRE.FindAllStringSubmatch(inner, -1)
-	if matches == nil {
+// parseRouteResult extracts the processor chain from the model's
+// schema-constrained JSON text (protocol-v2.md §3.2a). On a
+// structured-output backend the text is guaranteed to match routeSchema;
+// on a backend that ignored response_format the text may be anything, so
+// any unparseable output or unknown processor name produces a
+// passthrough decision (B8c) — partial chains are worse than no run
+// because they produce an unexpected output shape.
+func parseRouteResult(res inferd.Result, reg *processors.Registry) ParseResult {
+	text := strings.TrimSpace(res.Text)
+	if text == "" {
 		return ParseResult{Malformed: true}
 	}
 
-	valid := make([]string, 0, len(matches))
+	var args routeArgs
+	if err := json.Unmarshal([]byte(text), &args); err != nil {
+		return ParseResult{Malformed: true}
+	}
+	if len(args.Processors) == 0 {
+		return ParseResult{} // explicit empty chain -> passthrough
+	}
+
+	valid := make([]string, 0, len(args.Processors))
 	var unknown []string
-	for _, mm := range matches {
-		name := strings.TrimSpace(mm[1])
+	for _, name := range args.Processors {
+		name = strings.TrimSpace(name)
 		if name == "" || reg.Get(name) == nil {
 			unknown = append(unknown, name)
 			continue
@@ -233,11 +207,11 @@ func singleLine(s string) string {
 // level.
 var ErrDaemonUnreachable = errors.New("router: daemon unreachable")
 
-// ClientAdapter wraps an inferdcli.Client so it satisfies the
+// ClientAdapter wraps an inferd.Client so it satisfies the
 // middleware's RouterClient interface without the middleware package
 // importing router's package-level Ask function.
 type ClientAdapter struct {
-	Client *inferdcli.Client
+	Client *inferd.Client
 	// OnUnknownProcessor, if set, is called when Gemma names a
 	// processor that isn't in the registry. Used by the middleware
 	// to log a security-relevant event; logging belongs to the
@@ -256,25 +230,15 @@ func (a *ClientAdapter) askDetailed(ctx context.Context, reg *processors.Registr
 	if len(names) == 0 {
 		return Decision{}, nil
 	}
-	req := inferd.Request{
-		ID:       "route",
-		Messages: buildRoutingMessages(reg, truncate(promptsan.Sanitize(input), RouteInput)),
-		Grammar:  buildGrammar(names),
-	}
-	t := 0.0
-	req.Temperature = &t
-	maxTok := 128
-	req.MaxTokens = &maxTok
-	s := false
-	req.Stream = &s
+	req := buildRouteRequest(reg, truncate(promptsan.Sanitize(input), RouteInput))
 
-	raw, err := a.Client.Post(ctx, req)
+	res, err := a.Client.Post(ctx, req)
 	if err != nil {
 		return Decision{}, err
 	}
-	result := parseRoutingResponseDetailed(raw, reg)
+	result := parseRouteResult(res, reg)
 	if len(result.Unknown) > 0 && a.OnUnknownProcessor != nil {
-		a.OnUnknownProcessor(result.Unknown, raw)
+		a.OnUnknownProcessor(result.Unknown, res.Text)
 	}
 	return result.Decision, nil
 }

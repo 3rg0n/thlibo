@@ -40,17 +40,19 @@ E4B model served by a sidecar:
   only about routing; never about model loading or inference
   mechanics.
 - **`inferd`** — inference sidecar, separate project. Loads the model
-  once, stays warm, serves NDJSON over a per-user socket. thlibo talks
-  to it through `internal/inferdcli`. If inferd is unreachable, the
-  middleware fails open (passthrough) per ADR 0006.
+  once, stays warm, serves the length-prefixed v2 wire over a per-user
+  socket. thlibo talks to it through `internal/inferd` — thlibo's own
+  codec implemented against inferd's `protocol-v2.md` (no dependency on
+  inferd's reference client). If inferd is unreachable, the middleware
+  fails open (passthrough) per ADR 0006.
 
 ## Architectural invariants (load-bearing — do not blur)
 
 1. **Middleware has zero knowledge of model loading or inference
-   mechanics.** It speaks only inferd's JSON protocol via
-   `internal/inferdcli`. (Inference invariants — single warm model,
-   fixed concurrency, offline-only generation — now live in the
-   `inferd` repo, not here.)
+   mechanics.** It speaks only inferd's wire protocol via
+   `internal/inferd` (thlibo's owned codec). (Inference invariants —
+   single warm model, fixed concurrency, offline-only generation — now
+   live in the `inferd` repo, not here.)
 2. **Fallback to original output on any error path.** The middleware
    must never break the AI client. Script non-zero exit, inferd
    unreachable, parse failure, timeout → pass through the original
@@ -95,18 +97,33 @@ visible.
 
 ## Talking to inferd
 
-thlibo is a *client* of inferd; it does not own the socket, the
-model, or the IPC framing. All of that lives in the `inferd` repo.
-On this side the surface is `internal/inferdcli` — dial logic
-(`dial_unix.go` / `dial_windows.go`), the endpoint address resolution
-(`addr.go`), and the request/response types. If you need to change
-how thlibo *reaches* inference, that's here; if you need to change
-inference behaviour (model, sampling, concurrency, queueing), that's
-the inferd repo, not this one.
+thlibo is a *client* of inferd; it does not own the model or the
+inference mechanics. But it **does** own its wire codec — implemented
+directly against inferd's `protocol-v2.md` (length-prefixed `0x01`/
+`0x02` framing, in-band `wire_version`, the unified generation socket),
+not via inferd's reference Go client. That's a deliberate decoupling
+(ADR-level: thlibo's release no longer waits on inferd's client
+cadence). The surface is `internal/inferd`:
+
+- `protocol.go` — wire types (`Request`/`Message`/`Result`/
+  `ResponseFormat`/`Tool`) + the length-prefixed frame reader/writer.
+- `client.go` — `Post(ctx, Request) (Result, error)`: dial, stream,
+  collapse to text + tool calls; fail-open on connect/parse failure.
+- `addr.go` — socket resolution per `protocol-v2.md` §1.1
+  (`\\.\pipe\inferd` / `inferd.sock`, XDG→$HOME→/tmp).
+- `dial_unix.go` / `dial_windows.go` — UDS / named-pipe dialers
+  (no TCP — inferd binds no network listener, ADR 0022).
+
+If you need to change how thlibo *reaches* or *frames* inference,
+that's here; if you need to change inference behaviour (model,
+sampling, concurrency, queueing), that's the inferd repo. If inferd
+bumps `wire_version`, the daemon fails the request loudly and this is
+where you update.
 
 The middleware sends prompt-processor work to inferd as a
-fully-formed request and gets compressed text back. On any failure to
-reach or parse, it fails open (ADR 0006).
+fully-formed request and gets compressed text back. The router uses
+`response_format` (JSON-Schema) to constrain routing output. On any
+failure to reach or parse, it fails open (ADR 0006).
 
 ## Adapters
 
@@ -135,7 +152,7 @@ update-check.
 ## When adding code
 
 - Repo layout: `cmd/thlibo` (the only binary), `internal/*`
-  (adapters, casefile, config, execpolicy, inferdcli, install, logx,
+  (adapters, casefile, config, execpolicy, inferd, install, logx,
   middleware, processors, promptsan, router, shellcmd, shorthand,
   update, version), `processors/` for embedded built-ins, `skills/`
   for Claude Code skill definitions.
