@@ -1,0 +1,53 @@
+internal/inferd/dial_windows.go
+  s_5811b7f24eccc0::t_9ca3b807f333e9 1-65
+internal/inferd/inferd_test.go
+  s_5811b7f24eccc0::t_9bb58c48737232 1-14,33-263
+  s_5811b7f24eccc0::t_8f36190e345edd 15-32
+internal/router/router.go
+  s_5811b7f24eccc0::t_a9e1035b02cac7 60-62,67-68,74-75,79,83-84,86-87,233
+  s_5811b7f24eccc0::t_2b3d439d20e4a1 20,24
+  s_5811b7f24eccc0::t_51c02a833b60d8 51,63-64,66,69-73,76-78,85,88-89,94-96
+  s_5811b7f24eccc0::t_4bc6f849aa5264 2-6,8-15,93
+  s_5811b7f24eccc0::t_3136519294db03 99-101
+CHANGELOG.md
+  s_5811b7f24eccc0::t_bc986b322b6469 10-22
+internal/router/router_test.go
+  s_5811b7f24eccc0::t_6227bbc3000ed7 36,44
+  s_5811b7f24eccc0::t_387f2b6629d7ef 5,11
+  s_5811b7f24eccc0::t_75d03603c179d4 61-63,65
+  s_5811b7f24eccc0::t_faf735a38eca86 35
+  s_5811b7f24eccc0::t_76d26acd0613a7 34,45
+internal/inferd/protocol.go
+  s_5811b7f24eccc0::t_a7c9d921911cbf 1-101,127-228
+  s_5811b7f24eccc0::t_a2b721f6a50933 102-126
+internal/inferd/dial_unix.go
+  s_5811b7f24eccc0::t_0ea67a84a22c5e 1-15
+internal/inferd/addr.go
+  s_5811b7f24eccc0::t_ebe536912e639d 1-59
+internal/inferd/client.go
+  s_5811b7f24eccc0::t_362314d473a818 6
+  s_5811b7f24eccc0::t_f2c6769157229b 157-158,168
+  s_5811b7f24eccc0::t_0ef231a944e8d9 1-5,7-19,25-27,32-46,54-73,75-122,124-156,159-167,169-179
+  s_5811b7f24eccc0::t_8e1456e1a64dc0 123
+  s_5811b7f24eccc0::t_e9c3acfcac54a9 47-49,51-53
+  s_5811b7f24eccc0::t_551566d3898947 20-24
+  s_5811b7f24eccc0::t_4dbb468ac6f1af 50
+  s_5811b7f24eccc0::t_f0a3b46bf81335 74
+  s_5811b7f24eccc0::t_5d881d3c611071 28-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "345e4a24194028b537c4819b299adbc21d9f44e8",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
