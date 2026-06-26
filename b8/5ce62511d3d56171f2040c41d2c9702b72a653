@@ -1,0 +1,53 @@
+cmd/thlibo/casecmd/ocr.go
+  s_5811b7f24eccc0::t_576bac25a35cd4 1-37
+internal/inferd/attachment_test.go
+  s_5811b7f24eccc0::t_b7a54d304ad648 1-220
+internal/inferd/protocol.go
+  s_5811b7f24eccc0::t_535071ee6a5cbf 50,62-67
+  s_5811b7f24eccc0::t_979ec1259ef019 96-103,109,192,210
+  s_5811b7f24eccc0::t_d66be4fd00ec1b 69-71,74-78,81-90,166
+  s_5811b7f24eccc0::t_02a34dd37a8eef 104-108
+  s_5811b7f24eccc0::t_1cf82a4003c2b9 110-112
+  s_5811b7f24eccc0::t_f13443293b8354 163-165
+  s_5811b7f24eccc0::t_7056d040022803 167-169,189-191
+  s_5811b7f24eccc0::t_2c3ddae86a19c9 193
+  s_5811b7f24eccc0::t_238b4fc7dd6b5e 207-209
+  s_5811b7f24eccc0::t_3d514a85590ff5 211
+  s_5811b7f24eccc0::t_c04ed063a9a1cd 113-119,135-139,144,154-162,170-188,204-206
+CHANGELOG.md
+  s_5811b7f24eccc0::t_f889141115450a 10-18
+  s_5811b7f24eccc0::t_37fd7eb3c55bde 19-21
+  s_5811b7f24eccc0::t_affa0e4c4a78ff 22-27
+internal/pdfocr/pdfocr.go
+  s_5811b7f24eccc0::t_dd1ed4344780b6 195-201,205-208,211
+  s_5811b7f24eccc0::t_80f9771d59fc7d 117-140
+  s_5811b7f24eccc0::t_4f4143446ac470 1-116,141-194,202-204,209-210,212
+docs/adr/0009-pdf-image-ocr-via-gemma-vision.md
+  s_5811b7f24eccc0::t_95fbda219fb739 1-117
+cmd/thlibo/casecmd/case.go
+  s_5811b7f24eccc0::t_02d3e65e49a08e 120
+docs/adr/README.md
+  s_5811b7f24eccc0::t_3824cf3f7290e3 14,16
+internal/casefile/casefile.go
+  s_5811b7f24eccc0::t_aaed951c8d4d4f 107-113,215-225
+internal/inferd/client.go
+  s_5811b7f24eccc0::t_7fce95a44daa3a 87-112
+processors/pdf-to-md/run.py
+  s_5811b7f24eccc0::t_4a0072711f8454 205-266,268-273
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "b85ce62511d3d56171f2040c41d2c9702b72a653",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
