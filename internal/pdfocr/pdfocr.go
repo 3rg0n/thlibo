@@ -26,7 +26,8 @@ import (
 	"context"
 	"fmt"
 	"image"
-	_ "image/png" // register PNG decoder for image.Decode
+	_ "image/png" // register PNG decoder for image.Decode/DecodeConfig
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -91,7 +92,11 @@ func Transcribe(ctx context.Context, client *inferd.Client, pdfBytes []byte, opt
 	}
 
 	var md strings.Builder
-	fmt.Fprintf(&md, "- pages: %d\n", opts.PageCount)
+	if dropped > 0 {
+		fmt.Fprintf(&md, "- pages: %d (OCR'd %d of %d; page cap %d)\n", opts.PageCount, pages, opts.PageCount, opts.MaxPages)
+	} else {
+		fmt.Fprintf(&md, "- pages: %d\n", opts.PageCount)
+	}
 	any := false
 	for n := 1; n <= pages; n++ {
 		fmt.Fprintf(&md, "\n## Page %d\n\n", n)
@@ -167,8 +172,22 @@ func ocrPage(ctx context.Context, client *inferd.Client, python, procDir string,
 	return res.Text, nil
 }
 
+// Resource bounds for rasterized pages. A decoded RGB page must fit the
+// inferd frame cap (64 MiB); maxPixels derives from that. maxPNGBytes
+// caps the *compressed* bytes we read from the render subprocess, so a
+// decompression-bomb PNG (tiny on disk, enormous decoded) can't OOM us
+// before we ever look at its dimensions.
+const (
+	maxPixels   = inferd.MaxFrameBytes / 3 // RGB is 3 bytes/px; ~22.3M px
+	maxPNGBytes = 64 << 20                 // generous cap on compressed render output
+)
+
 // renderPageRGB invokes the processor's --render-page mode to get a PNG,
-// then decodes it to interleaved RGB (width*height*3, no alpha).
+// then decodes it to interleaved RGB (width*height*3, no alpha). Every
+// step is bounded so a malicious PDF cannot exhaust memory:
+//   - the PNG bytes read from the subprocess are capped (maxPNGBytes);
+//   - dimensions are read from the PNG header (DecodeConfig) and checked
+//     against maxPixels BEFORE the full pixel decode allocates anything.
 func renderPageRGB(ctx context.Context, python, procDir string, pdfBytes []byte, page int) ([]byte, uint32, uint32, error) {
 	entry := filepath.Join(procDir, "run.py")
 	// #nosec G204 -- python + entry are thlibo-controlled (the mirrored
@@ -177,27 +196,52 @@ func renderPageRGB(ctx context.Context, python, procDir string, pdfBytes []byte,
 	cmd := exec.CommandContext(ctx, python, entry,
 		"--render-page", strconv.Itoa(page), "--dpi", strconv.Itoa(renderDPI))
 	cmd.Stdin = bytes.NewReader(pdfBytes)
-	var out, errb bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errb
-	if err := cmd.Run(); err != nil {
-		return nil, 0, 0, fmt.Errorf("pdfocr: render page %d: %w (%s)", page, err, strings.TrimSpace(errb.String()))
+	// Cap stdout: read at most maxPNGBytes+1 so we can detect overflow
+	// without buffering an unbounded gigabyte PNG.
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("pdfocr: render page %d: stdout pipe: %w", page, err)
 	}
-	img, _, err := image.Decode(&out)
+	var errb bytes.Buffer
+	cmd.Stderr = &errb
+	if err := cmd.Start(); err != nil {
+		return nil, 0, 0, fmt.Errorf("pdfocr: render page %d: start: %w", page, err)
+	}
+	pngBytes, readErr := io.ReadAll(io.LimitReader(stdout, maxPNGBytes+1))
+	// Always Wait to reap the process; combine with read/cap errors.
+	waitErr := cmd.Wait()
+	if readErr != nil {
+		return nil, 0, 0, fmt.Errorf("pdfocr: render page %d: read: %w", page, readErr)
+	}
+	if waitErr != nil {
+		return nil, 0, 0, fmt.Errorf("pdfocr: render page %d: %w (%s)", page, waitErr, strings.TrimSpace(errb.String()))
+	}
+	if len(pngBytes) > maxPNGBytes {
+		return nil, 0, 0, fmt.Errorf("pdfocr: render page %d: PNG exceeds %d byte cap", page, maxPNGBytes)
+	}
+
+	// Header-only dimension check BEFORE decoding pixels — defeats a
+	// decompression bomb (small PNG, huge canvas).
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(pngBytes))
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("pdfocr: decode page %d PNG header: %w", page, err)
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return nil, 0, 0, fmt.Errorf("pdfocr: page %d has empty dimensions", page)
+	}
+	if int64(cfg.Width)*int64(cfg.Height) > int64(maxPixels) {
+		return nil, 0, 0, fmt.Errorf("pdfocr: page %d %dx%d exceeds %d-pixel cap", page, cfg.Width, cfg.Height, maxPixels)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(pngBytes))
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("pdfocr: decode page %d PNG: %w", page, err)
 	}
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if w <= 0 || h <= 0 {
-		return nil, 0, 0, fmt.Errorf("pdfocr: page %d has empty bounds", page)
-	}
-	// Bound dimensions: rejects absurd renders before allocating and
-	// makes the uint32 conversions provably safe (a page at 200 DPI is
-	// ~a few thousand px/side; 1e6 is a generous ceiling).
-	const maxDim = 1_000_000
-	if w > maxDim || h > maxDim {
-		return nil, 0, 0, fmt.Errorf("pdfocr: page %d dimensions %dx%d exceed limit", page, w, h)
+	if w <= 0 || h <= 0 || int64(w)*int64(h) > int64(maxPixels) {
+		// Defensive: decoded bounds must agree with the header check.
+		return nil, 0, 0, fmt.Errorf("pdfocr: page %d decoded dimensions %dx%d invalid", page, w, h)
 	}
 	rgb := make([]byte, 0, w*h*3)
 	for y := b.Min.Y; y < b.Max.Y; y++ {
@@ -208,5 +252,7 @@ func renderPageRGB(ctx context.Context, python, procDir string, pdfBytes []byte,
 			rgb = append(rgb, byte((r>>8)&0xff), byte((g>>8)&0xff), byte((bl>>8)&0xff))
 		}
 	}
-	return rgb, uint32(w), uint32(h), nil //nolint:gosec // w,h bounded to maxDim above
+	// #nosec G115 -- w,h are each <= maxPixels (~22.3M) per the checks
+	// above, so both fit uint32 with no overflow.
+	return rgb, uint32(w), uint32(h), nil
 }

@@ -72,15 +72,28 @@ filters" invariant), the **Go middleware owns the image dispatch**:
   rasterizer — resolved at implementation time; the dispatch boundary
   (Go owns it) is the load-bearing decision here.
 
-**Fail-open, capability-gated.** The OCR path is best-effort:
+**Fail-open is the gate (lazy, not a pre-probe).** The OCR path is
+best-effort, and the gating is discovered by *attempting* the call
+rather than by pre-querying a capabilities frame:
 
-- If inferd is unreachable, or its capabilities frame reports
-  `vision: false` (no projector loaded), thlibo keeps today's `#31`
-  behaviour exactly — low-value passthrough, Claude's native reader
-  handles the original. No hard failure, ever (ADR 0006).
+- If inferd is unreachable, or the active backend has no vision
+  projector loaded, the image request fails (connect error, or a clean
+  daemon-side rejection of the attachment). thlibo catches that and
+  keeps today's `#31` behaviour exactly — low-value passthrough,
+  Claude's native reader handles the original. No hard failure, ever
+  (ADR 0006).
 - A page that fails to rasterize or whose vision call errors falls back
   to the placeholder for that page; partial transcription is still a
   win over none.
+
+We deliberately do **not** add a separate capabilities pre-probe in
+v1: the generation socket carries no capability query on thlibo's
+client surface, and the lazy "try and fall open" path is functionally
+equivalent for the user (correct fallback, no crash) at the cost of one
+wasted rasterize+dispatch when vision is absent. A pre-probe (e.g. via
+the admin socket) is a possible later optimisation, not a correctness
+requirement — recorded here so the absence is a decision, not an
+oversight. The bounded-resource guarantees below hold regardless.
 
 ## Consequences
 
