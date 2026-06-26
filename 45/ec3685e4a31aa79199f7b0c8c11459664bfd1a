@@ -1,0 +1,20 @@
+internal/pdfocr/pdfocr.go
+  s_5811b7f24eccc0::t_d1f1fc9c8e1e51 130
+  s_5811b7f24eccc0::t_95a8fbbcb6d0b2 194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "45ec3685e4a31aa79199f7b0c8c11459664bfd1a",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
