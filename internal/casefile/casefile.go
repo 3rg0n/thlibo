@@ -104,6 +104,13 @@ type Options struct {
 	// Meta.Fallback" — used when the daemon is unreachable so
 	// we can still produce a case directory.
 	Pipeline *middleware.Pipeline
+	// OCR, when non-nil, is called for a PDF that came back low-value
+	// (every page a scanned-image placeholder). It receives the raw
+	// source bytes and returns real transcription Markdown via inferd
+	// vision (ADR 0009). Injected as a func so casefile doesn't import
+	// inferd/pdfocr. A nil OCR, or any error/empty return, leaves the
+	// low-value passthrough behaviour unchanged (fail-open, ADR 0006).
+	OCR func(ctx context.Context, pdfBytes []byte) (string, error)
 }
 
 // DefaultCasesRoot returns ~/.thlibo/cases, or a tmp fallback if the
@@ -205,6 +212,17 @@ func Create(ctx context.Context, sourcePath string, opts Options) (*Result, erro
 	if bytes.Contains(compressed, []byte(lowValueSentinel)) {
 		lowValue = true
 		compressed = stripSentinelLine(compressed)
+		// Scanned PDF: try Go-side vision OCR (ADR 0009). On success
+		// the case carries real transcription and is no longer
+		// low-value. On any failure we keep the stripped placeholder
+		// output and the LowValue flag — fail-open passthrough as
+		// before (#31 / ADR 0006).
+		if opts.OCR != nil {
+			if md, oerr := opts.OCR(ctx, raw); oerr == nil && len(bytes.TrimSpace([]byte(md))) > 0 {
+				compressed = []byte(md)
+				lowValue = false
+			}
+		}
 	}
 
 	// #nosec G703 -- gosec's taint analysis follows compressedPath

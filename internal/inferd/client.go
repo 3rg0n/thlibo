@@ -84,6 +84,32 @@ func (c *Client) Post(ctx context.Context, req Request) (Result, error) {
 		return Result{}, fmt.Errorf("inferd: write request: %w", err)
 	}
 
+	// Attachments: per attachment in order, a JSON BlobDescriptor frame
+	// then its raw 0x02 BLOB frame (protocol-v2.md §3.1/§3.7). The bytes
+	// are raw decoded RGB (ADR 0016) — never base64.
+	for _, att := range req.Attachments {
+		desc, derr := json.Marshal(blobDescriptor{
+			Type:         "attachment_blob",
+			AttachmentID: att.ID,
+			Len:          uint64(len(att.RGB)),
+		})
+		if derr != nil {
+			return Result{}, fmt.Errorf("inferd: marshal blob descriptor: %w", derr)
+		}
+		if werr := writeFrame(conn, frameJSON, desc); werr != nil {
+			if isTransientConnect(werr) || errors.Is(werr, io.EOF) {
+				return Result{}, fmt.Errorf("%w: write blob desc: %v", ErrBackendNotReady, werr)
+			}
+			return Result{}, fmt.Errorf("inferd: write blob descriptor: %w", werr)
+		}
+		if werr := writeFrame(conn, frameBlob, att.RGB); werr != nil {
+			if isTransientConnect(werr) || errors.Is(werr, io.EOF) {
+				return Result{}, fmt.Errorf("%w: write blob: %v", ErrBackendNotReady, werr)
+			}
+			return Result{}, fmt.Errorf("inferd: write blob: %w", werr)
+		}
+	}
+
 	return readResult(ctx, bufio.NewReader(conn), req.ID)
 }
 

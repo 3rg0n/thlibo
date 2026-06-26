@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Scanned-PDF OCR via Gemma vision** ([ADR 0009](docs/adr/0009-pdf-image-ocr-via-gemma-vision.md),
+  supersedes ADR 0007's scanned-PDF deferral). Image-only PDFs — which
+  previously returned only `[scanned page N — OCR not yet supported]`
+  placeholders and a low-value passthrough (#31) — now return real
+  transcription. When `casefile.Create` detects the low-value sentinel
+  and a vision-capable inferd is reachable, the Go side rasterizes each
+  page (via the `pdf-to-md` processor's new `--render-page` / `--page-count`
+  modes), decodes to raw RGB, and sends it through the inferd v2 image
+  attachment path (`internal/inferd` BLOB frames; new `internal/pdfocr`)
+  with an OCR prompt. Capability-gated and fail-open per page (ADR 0006):
+  if vision is unavailable or a page errors, the prior placeholder
+  behaviour is preserved. Page-capped (default 25) to bound vision cost.
+  - `internal/inferd` gains the image attachment / BLOB-frame path
+    (protocol-v2.md §3.5/§3.7): metadata-only attachment JSON + raw RGB
+    in a `0x02` frame, never base64 (inferd ADR 0016).
+
 ## [0.7.4] - 2026-06-25
 
 ### Changed

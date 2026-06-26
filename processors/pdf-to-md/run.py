@@ -202,7 +202,75 @@ def render_outline(reader) -> str:  # noqa: ANN001  (pypdf type stubs)
     return "## Outline\n\n" + "\n".join(lines) + "\n"
 
 
+def render_page() -> int:
+    """`--render-page N [--dpi D]` mode: read a PDF on stdin, write page
+    N (1-based) as a PNG to stdout. Used by thlibo's Go-side OCR
+    dispatch (ADR 0009) to rasterize scanned pages for the vision
+    model; kept here so all PDF handling stays in one dependency set.
+    Emits nothing and returns non-zero on any failure so the Go caller
+    can fall back to the placeholder for that page.
+    """
+    n = 1
+    dpi = 200
+    args = sys.argv[1:]
+    for i, a in enumerate(args):
+        if a == "--render-page" and i + 1 < len(args):
+            try:
+                n = int(args[i + 1])
+            except ValueError:
+                return 2
+        elif a == "--dpi" and i + 1 < len(args):
+            try:
+                dpi = int(args[i + 1])
+            except ValueError:
+                return 2
+    raw = sys.stdin.buffer.read()
+    if not raw.startswith(b"%PDF-"):
+        return 2
+    try:
+        import pdfplumber
+    except ImportError:
+        return 3
+    try:
+        with pdfplumber.open(io.BytesIO(raw)) as pdf:
+            if n < 1 or n > len(pdf.pages):
+                return 2
+            page = pdf.pages[n - 1]
+            img = page.to_image(resolution=dpi)
+            img.original.convert("RGB").save(sys.stdout.buffer, format="PNG")
+        return 0
+    except Exception:  # noqa: BLE001 — any render failure → caller falls back
+        return 4
+
+
+def page_count() -> int:
+    """`--page-count` mode: read a PDF on stdin, print the page count
+    as a decimal integer to stdout. Used by the Go-side OCR dispatch
+    (ADR 0009) to know how many pages to rasterize. Returns non-zero on
+    any failure so the caller falls back.
+    """
+    raw = sys.stdin.buffer.read()
+    if not raw.startswith(b"%PDF-"):
+        return 2
+    try:
+        import pypdf
+    except ImportError:
+        return 3
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(raw))
+        sys.stdout.write(str(len(reader.pages)))
+        return 0
+    except Exception:  # noqa: BLE001
+        return 4
+
+
 def main() -> int:
+    # Render/count-only modes for the Go-side OCR dispatch (ADR 0009).
+    if "--page-count" in sys.argv:
+        return page_count()
+    if "--render-page" in sys.argv:
+        return render_page()
+
     raw = sys.stdin.buffer.read()
     if not raw.startswith(b"%PDF-"):
         emit_error("input does not look like a PDF (no %PDF- magic)", raw)
