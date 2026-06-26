@@ -127,6 +127,7 @@ func PageCount(ctx context.Context, python, procDir string, pdfBytes []byte) (in
 		python = "python3"
 	}
 	entry := filepath.Join(procDir, "run.py")
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- python is "python3"/installed interpreter, entry is the mirrored processor path, the only flag is a const; no caller-controlled argv, no shell.
 	// #nosec G204 -- python + entry are thlibo-controlled, no user argv.
 	cmd := exec.CommandContext(ctx, python, entry, "--page-count")
 	cmd.Stdin = bytes.NewReader(pdfBytes)
@@ -190,6 +191,7 @@ const (
 //     against maxPixels BEFORE the full pixel decode allocates anything.
 func renderPageRGB(ctx context.Context, python, procDir string, pdfBytes []byte, page int) ([]byte, uint32, uint32, error) {
 	entry := filepath.Join(procDir, "run.py")
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- python is "python3"/installed interpreter, entry is the mirrored processor path, page/dpi are ints via strconv; no caller-controlled argv, no shell.
 	// #nosec G204 -- python + entry are thlibo-controlled (the mirrored
 	// processor dir + fixed interpreter); page is an int. No shell, no
 	// user-controlled argv.
