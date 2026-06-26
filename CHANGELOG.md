@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-06-26
+
 ### Added
 
 - **Scanned-PDF OCR via Gemma vision** ([ADR 0009](docs/adr/0009-pdf-image-ocr-via-gemma-vision.md),
@@ -24,8 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `internal/inferd` gains the image attachment / BLOB-frame path
     (protocol-v2.md §3.5/§3.7): metadata-only attachment JSON + raw RGB
     in a `0x02` frame, never base64 (inferd ADR 0016).
-
-## [0.7.4] - 2026-06-25
 
 ### Changed
 
