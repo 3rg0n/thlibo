@@ -11,8 +11,9 @@ implementation choices aren't.
 | [0004](0004-no-windows-shim.md) | No Windows shim binary — plain PATH installation | Accepted |
 | [0005](0005-extract-inference-to-inferd.md) | Extract inference to a separate `inferd` service | Accepted |
 | [0006](0006-fail-open-during-inferd-bootstrap.md) | Fail open during the inferd bootstrap window | Accepted |
-| [0007](0007-pdf-to-markdown.md) | PDF → Markdown converter (pypdf + pdfplumber, Python script processor) | Accepted |
+| [0007](0007-pdf-to-markdown.md) | PDF → Markdown converter (pypdf + pdfplumber, Python script processor) | Accepted (scanned-PDF deferral superseded by [0009](0009-pdf-image-ocr-via-gemma-vision.md)) |
 | [0008](0008-numpy-as-processor-dep.md) | numpy as a processor dep, soft-imported with passthrough fallback | Accepted |
+| [0009](0009-pdf-image-ocr-via-gemma-vision.md) | Scanned-PDF OCR via Gemma vision, dispatched Go-side | Accepted |
 
 ## Writing a new ADR
 

@@ -47,7 +47,7 @@ const MaxFrameBytes = 64 << 20
 // frame-type tags for the length-prefixed framing (ADR 0021 §2).
 const (
 	frameJSON byte = 0x01
-	frameBlob byte = 0x02 // reserved for the attachment path; not emitted today
+	frameBlob byte = 0x02 // raw decoded media bytes (image RGB, etc.)
 )
 
 // Role is a conversation role in a Message. Lowercase on the wire.
@@ -59,30 +59,64 @@ const (
 	RoleAssistant Role = "assistant"
 )
 
-// Message is one turn in the v2 conversation. thlibo only sends
-// single-text-block turns, so this convenience type flattens
-// MessageV2's content array to a single text string and marshals to
-// the spec's `{role, content:[{type:"text", text:...}]}` shape.
+// Message is one turn in the v2 conversation. Content is the text of
+// the turn; ImageRefs, when non-empty, adds image content blocks
+// referencing attachment IDs present in Request.Attachments (the bytes
+// ride in BLOB frames, not here — protocol-v2.md §3.4/§3.5). A turn may
+// carry text, images, or both; ordering is text block first, then
+// images, matching how the daemon's mtmd path interleaves them.
 type Message struct {
-	Role    Role
-	Content string
+	Role      Role
+	Content   string
+	ImageRefs []string // attachment IDs (see Request.Attachments)
 }
 
-// MarshalJSON renders a Message as a protocol-v2 MessageV2 with a single
-// text ContentBlock (protocol-v2.md §3.3/§3.4).
+// MarshalJSON renders a Message as a protocol-v2 MessageV2 whose content
+// is a text block (when Content != "") followed by one image block per
+// ImageRef (protocol-v2.md §3.3/§3.4). At least one block is always
+// emitted (content MUST be non-empty per spec); a Message with neither
+// text nor images marshals as a single empty text block.
 func (m Message) MarshalJSON() ([]byte, error) {
 	type contentBlock struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type         string `json:"type"`
+		Text         string `json:"text,omitempty"`
+		AttachmentID string `json:"attachment_id,omitempty"`
+	}
+	blocks := make([]contentBlock, 0, 1+len(m.ImageRefs))
+	if m.Content != "" || len(m.ImageRefs) == 0 {
+		blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
+	}
+	for _, id := range m.ImageRefs {
+		blocks = append(blocks, contentBlock{Type: "image", AttachmentID: id})
 	}
 	type messageV2 struct {
 		Role    Role           `json:"role"`
 		Content []contentBlock `json:"content"`
 	}
-	return json.Marshal(messageV2{
-		Role:    m.Role,
-		Content: []contentBlock{{Type: "text", Text: m.Content}},
-	})
+	return json.Marshal(messageV2{Role: m.Role, Content: blocks})
+}
+
+// Attachment is one binary payload referenced by a Message image block.
+// Per ADR 0016 the consumer decodes media to raw bytes before sending;
+// the daemon links no image codec. RGB is width*height*3 interleaved
+// octets (no alpha). The bytes do NOT travel in the request JSON — they
+// ride in a 0x02 BLOB frame keyed by ID (protocol-v2.md §3.5/§3.7).
+type Attachment struct {
+	ID     string
+	Width  uint32
+	Height uint32
+	RGB    []byte // width*height*3, no alpha
+}
+
+// marshalMeta renders the attachment's JSON metadata object (no bytes)
+// for the request frame's attachments[] array (protocol-v2.md §3.5).
+func (a Attachment) marshalMeta() ([]byte, error) {
+	return json.Marshal(struct {
+		Kind   string `json:"kind"`
+		ID     string `json:"id"`
+		Width  uint32 `json:"width"`
+		Height uint32 `json:"height"`
+	}{Kind: "image", ID: a.ID, Width: a.Width, Height: a.Height})
 }
 
 // Tool is a tool definition the model may call (protocol-v2.md §3.6).
@@ -98,10 +132,16 @@ type Tool struct {
 // Request is a generation request (protocol-v2.md §3.2). WireVersion is
 // set by Post; callers leave it zero. Pointer sampling fields
 // distinguish "omitted" (daemon default) from "explicit zero".
+//
+// Attachments carries image (etc.) payloads referenced by Message
+// image blocks. Its RGB bytes are NOT serialised into the request JSON
+// (a custom MarshalJSON emits metadata only); client.Post writes each
+// attachment's bytes as a separate BLOB frame after the request frame.
 type Request struct {
 	WireVersion    uint32          `json:"wire_version"`
 	ID             string          `json:"id,omitempty"`
 	Messages       []Message       `json:"messages"`
+	Attachments    []Attachment    `json:"attachments,omitempty"`
 	Tools          []Tool          `json:"tools,omitempty"`
 	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
 	Temperature    *float64        `json:"temperature,omitempty"`
@@ -109,6 +149,46 @@ type Request struct {
 	TopK           *int            `json:"top_k,omitempty"`
 	MaxTokens      *int            `json:"max_tokens,omitempty"`
 	Stream         *bool           `json:"stream,omitempty"`
+}
+
+// MarshalJSON renders the request frame body. Attachments are emitted
+// as metadata-only objects (kind/id/width/height) — the RGB bytes ride
+// in BLOB frames (protocol-v2.md §3.5). A dedicated wire struct keeps
+// the byte-carrying Attachment type out of the JSON.
+func (r Request) MarshalJSON() ([]byte, error) {
+	metas := make([]json.RawMessage, 0, len(r.Attachments))
+	for _, att := range r.Attachments {
+		m, err := att.marshalMeta()
+		if err != nil {
+			return nil, err
+		}
+		metas = append(metas, m)
+	}
+	return json.Marshal(struct {
+		WireVersion    uint32            `json:"wire_version"`
+		ID             string            `json:"id,omitempty"`
+		Messages       []Message         `json:"messages"`
+		Attachments    []json.RawMessage `json:"attachments,omitempty"`
+		Tools          []Tool            `json:"tools,omitempty"`
+		ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
+		Temperature    *float64          `json:"temperature,omitempty"`
+		TopP           *float64          `json:"top_p,omitempty"`
+		TopK           *int              `json:"top_k,omitempty"`
+		MaxTokens      *int              `json:"max_tokens,omitempty"`
+		Stream         *bool             `json:"stream,omitempty"`
+	}{
+		WireVersion:    r.WireVersion,
+		ID:             r.ID,
+		Messages:       r.Messages,
+		Attachments:    metas,
+		Tools:          r.Tools,
+		ResponseFormat: r.ResponseFormat,
+		Temperature:    r.Temperature,
+		TopP:           r.TopP,
+		TopK:           r.TopK,
+		MaxTokens:      r.MaxTokens,
+		Stream:         r.Stream,
+	})
 }
 
 // ResponseFormat constrains generation to a structured output
@@ -119,6 +199,14 @@ type Request struct {
 type ResponseFormat struct {
 	Type   string          `json:"type"`
 	Schema json.RawMessage `json:"schema"`
+}
+
+// blobDescriptor is the JSON frame that precedes each 0x02 BLOB frame,
+// correlating the bytes to an attachment by id (protocol-v2.md §3.7).
+type blobDescriptor struct {
+	Type         string `json:"type"` // always "attachment_blob"
+	AttachmentID string `json:"attachment_id"`
+	Len          uint64 `json:"len"`
 }
 
 // JSONSchemaFormat builds a ResponseFormat for a JSON Schema object.

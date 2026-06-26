@@ -117,6 +117,7 @@ Flags:
 		CasesRoot:     casesDir,
 		ThliboVersion: version.Tag,
 		Pipeline:      p,
+		OCR:           pdfOCRFunc(),
 	})
 	if err != nil {
 		switch {
