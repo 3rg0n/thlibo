@@ -93,10 +93,13 @@ Claude Code: about to run `git status`
 Script processors (`git-filter`, `npm-filter`, `cargo-filter`,
 `pytest-filter`, `ndjson-filter`, `stacktrace-filter`,
 `lint-filter`, `pdf-to-md`) are deterministic Python scripts — they
-don't need inferd. Prompt processors (`compress`, `casefolder`,
-`shorthand`) dispatch through inferd for LLM-driven summarisation
-of unfamiliar output. `cordon-filter` (semantic anomaly surfacer)
-embeds windows via inferd and surfaces the rare ones.
+don't need inferd for their core path. (One exception: a *scanned*,
+image-only PDF has no extractable text, so `thlibo case` hands its
+pages to inferd's Gemma vision model for OCR — see below.) Prompt
+processors (`compress`, `casefolder`, `shorthand`) dispatch through
+inferd for LLM-driven summarisation of unfamiliar output.
+`cordon-filter` (semantic anomaly surfacer) embeds windows via inferd
+and surfaces the rare ones.
 
 Everything runs on your machine. No network calls during inference,
 no telemetry, nothing leaves localhost.
@@ -114,7 +117,7 @@ curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.s
 Pin to a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.7.3 bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.7.4 bash
 ```
 
 ### One-liner (Windows PowerShell)
@@ -126,7 +129,7 @@ irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | ie
 Or pinned:
 
 ```powershell
-$env:THLIBO_VERSION='v0.7.3'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+$env:THLIBO_VERSION='v0.7.4'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
 Both installers:
@@ -280,7 +283,7 @@ same name as a built-in override the built-in.
 | `ndjson-filter` | script | structured-log streams |
 | `stacktrace-filter` | script | Python / Go / Rust / Java / Node stack traces |
 | `lint-filter` | script | clang, gcc, clippy, eslint, golangci-lint, shellcheck, flake8, ruff, mypy, rubocop, stylelint |
-| `pdf-to-md` | script | PDF → GitHub-flavored markdown (text + tables; multimodal pages in v0.8) |
+| `pdf-to-md` | script | PDF → GitHub-flavored markdown (text + tables; scanned/image-only pages OCR'd via inferd Gemma vision) |
 | `shorthand` | prompt | LLM-facing prose compression (SKILL.md, CLAUDE.md, system prompts) |
 | `compress` | prompt | Generic verbose output, fallback |
 | `casefolder` | prompt | Stack traces, error logs, crash output |
