@@ -1,0 +1,28 @@
+docs/adr/0009-pdf-image-ocr-via-gemma-vision.md
+  s_5811b7f24eccc0::t_e147c3b05909de 75-84,89-96
+  s_5811b7f24eccc0::t_bdf64766383ce4 97
+internal/pdfocr/pdfocr_test.go
+  s_5811b7f24eccc0::t_79faf0753eb427 1-13,20-36,43,46-48,56-58,61,64-66,70,72-73,75-82,84-86
+  s_5811b7f24eccc0::t_f76591237eb07d 14-19,37-42,44-45,49-55,59-60,62-63,67-69,71,74,83
+internal/pdfocr/pdfocr.go
+  s_5811b7f24eccc0::t_7bb8788c6e13ae 175-184,186-190,199-205,207-208,210-236,242-244
+  s_5811b7f24eccc0::t_08acfc08505c87 29-30
+  s_5811b7f24eccc0::t_62e91803d3538e 95-99
+  s_5811b7f24eccc0::t_3621f805d208e3 255-257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "65850a301f7205740e3a9136303139ee19dc5df7",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
