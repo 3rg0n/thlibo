@@ -1,0 +1,45 @@
+processors/lint-filter/run.py
+  s_5811b7f24eccc0::t_f7169a7a051ce5 101-109
+  s_c41631b1e5a4a8::t_2477ab54d0f45e 167-168
+processors/lint-filter/testdata/test_lint.py
+  s_5811b7f24eccc0::t_c3cba3ee5a4bfb 142-190
+cmd/thlibo/rewritecmd/rewrite_test.go
+  s_5811b7f24eccc0::t_65b19f6275c9aa 75-126
+processors/lint-filter/processor.yaml
+  s_5811b7f24eccc0::t_722e893a3a2889 32
+  s_126aec4081f728::t_c78085fb6e7e91 4-21
+README.md
+  s_5811b7f24eccc0::t_87d8905d73e9c6 285,291-298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "2b07c29629216789764379c7ec3f2dcbc534373d",
+  "prompts": {},
+  "sessions": {
+    "s_126aec4081f728": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27423376-a69e-4c48-a6dc-36ba96a5574e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_c41631b1e5a4a8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6bf0639a-9adb-4edc-bdda-968dba0fa431",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
