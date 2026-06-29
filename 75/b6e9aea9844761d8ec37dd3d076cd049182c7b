@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_5bd3c711467942 12-14
+  s_5811b7f24eccc0::t_8be6d84a5ace39 15-17
+  s_5811b7f24eccc0::t_3dbcfe6cccee5c 18-25
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_11c445e0863d56 674-680,694-698,700,711-713,718-738,740-741,888-894,896,917-922,925-929,935-937
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "75b6e9aea9844761d8ec37dd3d076cd049182c7b",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
