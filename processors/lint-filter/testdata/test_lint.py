@@ -139,6 +139,55 @@ class TestGolangciLint(unittest.TestCase):
         self.assertIn("errcheck", rows[-1])
 
 
+class TestGosec(unittest.TestCase):
+    def test_bracket_format(self):
+        # gosec: [file:line] - Gxxx (CWE-nn): msg (Confidence: X, Severity: Y)
+        raw = "".join(
+            f"[cmd/m{i}.go:{10 + i}] - G304 (CWE-22): Potential file inclusion via variable "
+            f"(Confidence: HIGH, Severity: MEDIUM)\n"
+            for i in range(1, 8)
+        )
+        out = run.compress(raw)
+        rows = _findings(out)
+        self.assertEqual(len(rows), 7)
+        # MEDIUM → W; rule G304 preserved; Confidence/Severity tail dropped.
+        self.assertTrue(all(r.startswith("W\t") for r in rows))
+        self.assertIn("G304", rows[0])
+        self.assertNotIn("Confidence", out)
+        self.assertNotIn("Severity", out)
+
+    def test_severity_mapping(self):
+        raw = (
+            "[a.go:1] - G101 (CWE-798): Hardcoded credentials (Confidence: HIGH, Severity: HIGH)\n"
+            "[b.go:2] - G104 (CWE-703): Errors unhandled (Confidence: HIGH, Severity: LOW)\n"
+            "[c.go:3] - G304 (CWE-22): File inclusion (Confidence: HIGH, Severity: MEDIUM)\n"
+            "[d.go:4] - G101 (CWE-798): Hardcoded credentials (Confidence: HIGH, Severity: HIGH)\n"
+        )
+        out = run.compress(raw)
+        rows = _findings(out)
+        # HIGH→E, MEDIUM→W, LOW→I
+        sevs = {r.split("\t")[0] for r in rows}
+        self.assertTrue({"E", "W", "I"}.issubset(sevs))
+
+    def test_drops_source_snippets_and_summary(self):
+        # A realistic gosec run: findings interleaved with source-line
+        # context and a trailing Summary block — all noise must drop,
+        # output strictly smaller (monotonic guarantee).
+        raw = (
+            "[cmd/x.go:42] - G304 (CWE-22): Potential file inclusion via variable "
+            "(Confidence: HIGH, Severity: MEDIUM)\n"
+            "    41:\n  > 42:\tdata, err := os.ReadFile(path)\n    43:\n\n"
+            "[cmd/y.go:7] - G104 (CWE-703): Errors unhandled (Confidence: HIGH, Severity: LOW)\n"
+            "    6:\n  > 7:\tdefer f.Close()\n    8:\n\n"
+            "Summary:\n  Gosec  : dev\n  Files  : 50\n  Issues : 2\n"
+        )
+        out = run.compress(raw)
+        self.assertLessEqual(len(out.encode()), len(raw.encode()))
+        self.assertIn("G304", out)
+        self.assertNotIn("os.ReadFile", out)   # source snippet dropped
+        self.assertNotIn("Summary", out)        # summary dropped
+
+
 class TestFlakeRuff(unittest.TestCase):
     def test_flake_codes(self):
         raw = (
