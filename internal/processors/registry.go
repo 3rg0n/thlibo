@@ -278,3 +278,39 @@ func (r *Registry) MatchCommand(argv0 string) *Descriptor {
 	}
 	return nil
 }
+
+// MatchCommandLine resolves a processor for a full command token slice
+// (e.g. ["go","test","-v","./..."]). It first tries CommandPrefixes
+// (multi-token, leading-token match — so "go test" wraps but "go build"
+// does not), then falls back to exact argv[0] via MatchCommand. The
+// prefix check runs first because it is the more specific signal.
+//
+// tokens should be the command split on whitespace with argv[0] already
+// basename-normalised by the caller (so "/usr/bin/go test" arrives as
+// ["go","test",...]). A nil/empty slice returns nil.
+func (r *Registry) MatchCommandLine(tokens []string) *Descriptor {
+	if len(tokens) == 0 {
+		return nil
+	}
+	for _, n := range r.order {
+		d := r.byName[n]
+		for _, p := range d.CommandPrefixes {
+			pt := strings.Fields(p)
+			if len(pt) == 0 || len(pt) > len(tokens) {
+				continue
+			}
+			matched := true
+			for i, want := range pt {
+				if tokens[i] != want {
+					matched = false
+					break
+				}
+			}
+			if matched {
+				return d
+			}
+		}
+	}
+	// No prefix matched — fall back to exact argv[0].
+	return r.MatchCommand(tokens[0])
+}

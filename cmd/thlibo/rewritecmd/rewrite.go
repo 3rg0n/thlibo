@@ -61,7 +61,15 @@ func Run(argv []string) int {
 		return ExitInternal
 	}
 
-	d := reg.MatchCommand(base)
+	// Build the basename-normalised token slice for subcommand-aware
+	// matching: the program basename followed by its args. Argv0 has
+	// already stripped any leading VAR=val env prefix and bailed on
+	// compound commands, so the tokens from argv0 onward are this one
+	// invocation. This lets a processor wrap "go test" without wrapping
+	// "go build" (see Registry.MatchCommandLine).
+	tokens := tokensFrom(cmd, argv0, base)
+
+	d := reg.MatchCommandLine(tokens)
 	if d == nil {
 		return ExitPassthrough
 	}
@@ -80,6 +88,31 @@ func Run(argv []string) int {
 	self := selfPath()
 	fmt.Println(self + " exec -- " + cmd)
 	return ExitRewrite
+}
+
+// tokensFrom builds the basename-normalised token slice for
+// subcommand-aware matching. It splits cmd on whitespace, skips to the
+// first token equal to argv0 (so leading VAR=val env-prefix tokens are
+// dropped), replaces that token with base (the program basename), and
+// returns it plus the remaining args. Falls back to [base] if argv0
+// can't be located (defensive — shouldn't happen since Argv0 derived
+// from cmd).
+func tokensFrom(cmd, argv0, base string) []string {
+	fields := strings.Fields(cmd)
+	start := -1
+	for i, f := range fields {
+		if f == argv0 {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return []string{base}
+	}
+	out := make([]string, 0, len(fields)-start)
+	out = append(out, base)
+	out = append(out, fields[start+1:]...)
+	return out
 }
 
 // selfPath returns the path to the currently-running thlibo binary

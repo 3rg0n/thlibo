@@ -283,18 +283,18 @@ same name as a built-in override the built-in.
 | `ndjson-filter` | script | structured-log streams |
 | `stacktrace-filter` | script | Python / Go / Rust / Java / Node stack traces |
 | `lint-filter` | script | clang, gcc, clippy, eslint, golangci-lint, gosec, shellcheck, flake8, ruff, mypy, rubocop, stylelint. Auto-wraps `gosec`, `staticcheck`, `golangci-lint`, `shellcheck` (not `go`/`make`/`docker` — see below) |
+| `go-test-filter` | script | `go test -v` / `go test -json` — keeps failures + package tally, drops passing-test noise. Auto-wraps `go test` (only that subcommand) |
 | `pdf-to-md` | script | PDF → GitHub-flavored markdown (text + tables; scanned/image-only pages OCR'd via inferd Gemma vision) |
 | `shorthand` | prompt | LLM-facing prose compression (SKILL.md, CLAUDE.md, system prompts) |
 | `compress` | prompt | Generic verbose output, fallback |
 | `casefolder` | prompt | Stack traces, error logs, crash output |
 
-**Commands intentionally *not* wrapped** (a recorded decision, not an
-oversight): `go build` / `go run` / `go test` / `go vet`, `make`,
-`docker build`. The rewrite hook matches `argv[0]` exactly, and `go` is
-multiplexed — wrapping it would capture builds and runs too — so the
-whole `go` verb is left alone. (`go test` verbose output is tracked
-separately as a future `go-test-filter`.) `make` and `docker build`
-emit too many shapes for a single filter to compress safely.
+**`go` is matched per-subcommand.** `go test` wraps (→ `go-test-filter`),
+but `go build` / `go run` / `go vet` / `go generate` do **not** — `go`'s
+argv[0] is multiplexed, so a `command_prefixes: ["go test"]` rule wraps
+exactly the test verb and leaves the others alone. **Intentionally not
+wrapped at all** (a recorded decision): `make`, `docker build` — they
+emit too many output shapes for a single filter to compress safely.
 
 ---
 

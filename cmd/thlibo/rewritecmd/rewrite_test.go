@@ -99,23 +99,42 @@ func TestRewriteWrapsScanners(t *testing.T) {
 	}
 }
 
-// TestRewriteDoesNotWrapGo: `go` is multiplexed — go build/run/test must
-// NOT be wrapped (commands: matches argv[0]=go exactly, and we
-// deliberately omit it). go test routes to the separate go-test-filter
-// (#42); go vet awaits subcommand-aware matching. Guards against someone
-// "fixing" #43 by naively adding `go` to commands:.
-func TestRewriteDoesNotWrapGo(t *testing.T) {
+// TestRewriteWrapsGoTest: `go test` (and `go test -v`) wraps via the
+// go-test-filter's command_prefixes (#42 / subcommand-aware matching).
+func TestRewriteWrapsGoTest(t *testing.T) {
+	for _, argv := range [][]string{
+		{"go", "test", "./..."},
+		{"go", "test", "-v", "./..."},
+		{"go", "test", "-run", "TestX", "./pkg"},
+	} {
+		t.Run(strings.Join(argv, "_"), func(t *testing.T) {
+			var code int
+			out := captureStdout(t, func() { code = Run(argv) })
+			if code != ExitRewrite {
+				t.Errorf("%v: exit = %d, want %d (go test should wrap)", argv, code, ExitRewrite)
+			}
+			if !strings.Contains(out, " exec -- "+strings.Join(argv, " ")) {
+				t.Errorf("%v: stdout = %q", argv, out)
+			}
+		})
+	}
+}
+
+// TestRewriteDoesNotWrapOtherGo: `go` is multiplexed — only `go test`
+// wraps (via command_prefixes). go build/run/vet must NOT wrap.
+// Guards against someone broadening the prefix to a bare `go`.
+func TestRewriteDoesNotWrapOtherGo(t *testing.T) {
 	for _, argv := range [][]string{
 		{"go", "build", "./..."},
-		{"go", "test", "./..."},
 		{"go", "run", "main.go"},
 		{"go", "vet", "./..."},
+		{"go", "generate", "./..."},
 	} {
 		t.Run(strings.Join(argv, "_"), func(t *testing.T) {
 			var code int
 			out := captureStdout(t, func() { code = Run(argv) })
 			if code != ExitPassthrough {
-				t.Errorf("%v: exit = %d, want %d (go must not wrap)", argv, code, ExitPassthrough)
+				t.Errorf("%v: exit = %d, want %d (must not wrap)", argv, code, ExitPassthrough)
 			}
 			if out != "" {
 				t.Errorf("%v: stdout = %q, want empty", argv, out)
