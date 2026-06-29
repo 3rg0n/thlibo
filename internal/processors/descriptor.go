@@ -30,7 +30,14 @@ type Descriptor struct {
 	Entry       string   `yaml:"entry"       json:"entry,omitempty"` // script only
 	Match       string   `yaml:"match"       json:"match,omitempty"`
 	Commands    []string `yaml:"commands"    json:"commands,omitempty"` // argv[0] values this processor wraps (rewrite-time)
-	Description string   `yaml:"description" json:"description,omitempty"`
+	// CommandPrefixes are multi-token command prefixes this processor
+	// wraps, for cases where argv[0] alone is too coarse — e.g.
+	// "go test" should wrap but "go build" must not. Each entry is a
+	// space-separated token sequence matched against the command's
+	// leading tokens (exact, token-by-token). Checked in addition to
+	// Commands; a prefix match wins. See Registry.MatchCommandLine.
+	CommandPrefixes []string `yaml:"command_prefixes" json:"command_prefixes,omitempty"`
+	Description     string   `yaml:"description" json:"description,omitempty"`
 
 	// Prompt processor knobs (frontmatter fields). All optional;
 	// daemon defaults apply when zero.

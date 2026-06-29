@@ -1,0 +1,22 @@
+name: go-test-filter
+type: script
+entry: run.py
+# Match-driven (fires on go-test-shaped output from any source) plus
+# command-prefix wrapping. `command_prefixes` (not `commands`) because
+# argv[0]=go is multiplexed — only `go test` should wrap, never
+# `go build` / `go run` / `go vet`. See Registry.MatchCommandLine.
+match: "(?m)^\\s*=== RUN\\s|^\\s*--- (?:PASS|FAIL|SKIP):|^(?:ok|FAIL|\\?)\\s+\\S+\\s"
+command_prefixes:
+  - go test
+description: >
+  Compresses `go test -v` output. Drops the `=== RUN` / `--- PASS`
+  noise for passing tests; keeps every failing test's `--- FAIL` line
+  and its indented output (messages, file:line, got/want) verbatim,
+  plus build/compile errors and panics verbatim, plus the per-package
+  result lines (ok / FAIL / [no test files]). Handles both plain `-v`
+  text and `go test -json` event streams.
+
+  Output is the failures + the package tally — typically a fraction of
+  a large suite's verbose dump. Monotonic guarantee: distilled output
+  is returned only when strictly smaller than the input; otherwise the
+  input passes through unchanged. Non-go-test input is never touched.

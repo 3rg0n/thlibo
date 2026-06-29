@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`go-test-filter` processor** — compresses `go test -v` (and
+  `go test -json`) output: keeps every failing test's `--- FAIL` line +
+  its detail (file:line, got/want), build errors, and panics verbatim,
+  plus the per-package tally; drops the `=== RUN` / `--- PASS` noise for
+  passing tests. Monotonic guarantee (passthrough if not a strict byte
+  win). Closes the `go test` interception gap from the #41 macOS survey
+  (#42).
+- **Subcommand-aware command matching** (`command_prefixes` in a
+  processor descriptor + `Registry.MatchCommandLine`). The rewrite hook
+  can now wrap a specific subcommand — `go test` routes to
+  `go-test-filter` while `go build` / `go run` / `go vet` are left
+  unwrapped. (Previously `commands:` matched argv[0] exactly, which
+  couldn't distinguish `go` verbs.)
+
 ## [0.7.4] - 2026-06-26
 
 ### Added
