@@ -67,3 +67,4 @@ __pycache__/
 
 # Local working notes (stashed alongside repo, not source)
 .notes/
+.tmp-review.diff
