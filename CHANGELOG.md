@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Inferd download silently truncated → "not a valid zip" on every
+  fresh install.** `download`'s 200 MiB cap (a stale guard from the
+  llamafile-less era) clipped inferd's now-~633 MB release bundle (it
+  ships the ggml/CUDA/Metal backends), and `io.LimitReader` truncates
+  without error, so extraction failed on a corrupt archive. Raised the
+  cap to 2 GiB and made an over-cap response a loud error instead of a
+  silent truncation. Caught during v0.7.5-rc.1 fresh-install validation.
+- **Windows install was not zero-touch.** `runInferdInstaller`'s Windows
+  branch assumed inferd's `install.ps1` needed admin (registers a
+  service) and punted to a manual elevated step. The current `install.ps1`
+  is a no-admin per-user install (Startup-folder shortcut, same posture
+  as the macOS LaunchAgent / Linux systemd-user). thlibo now runs it
+  directly, so a fresh Windows install starts the daemon and registers
+  login autostart with no human step — matching macOS/Linux.
 - **Fresh install left the inferd daemon dead on macOS/Linux** (#47).
   `thlibo install` copied only the `inferd-daemon` binary to
   `~/.local/bin`, not the `backends/` ggml libs that must sit beside it.
