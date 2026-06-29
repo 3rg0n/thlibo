@@ -424,6 +424,12 @@ func findInstalledInferdBinary() string {
 			candidates = append(candidates, "/usr/local/bin/"+name)
 		case "windows":
 			if appData := os.Getenv("LOCALAPPDATA"); appData != "" {
+				// Current layout: install.ps1's $BinaryPath default is
+				// %LOCALAPPDATA%\inferd\inferd-daemon.exe (binary +
+				// backends as siblings). The older bin/ subdir is kept
+				// as a fallback so a re-run still finds a pre-0.7.5
+				// install instead of re-downloading.
+				candidates = append(candidates, filepath.Join(appData, "inferd", name))
 				candidates = append(candidates, filepath.Join(appData, "inferd", "bin", name))
 			}
 		}
@@ -933,6 +939,11 @@ func download(url, dest string, progress ProgressFunc) error {
 		n, readErr := body.Read(buf)
 		if n > 0 {
 			if written+int64(n) > maxBytes {
+				// Remove the partial file so a later step can't mistake a
+				// capped-off download for a valid (just corrupt) archive
+				// and emit a misleading "not a valid zip" instead.
+				_ = out.Close()
+				_ = os.Remove(dest)
 				return fmt.Errorf("inferd: download %s exceeded the %d-byte cap (response larger than expected)", url, int64(maxBytes))
 			}
 			if _, werr := out.Write(buf[:n]); werr != nil {
