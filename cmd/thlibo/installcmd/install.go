@@ -374,10 +374,14 @@ func reportInferdInstall(ir install.InferdInstallResult) {
 			fmt.Println("  inferd found installed; started")
 		}
 	case ir.InstalledFresh:
-		if ir.ResolvedVersion != "" {
-			fmt.Printf("  inferd %s installed via inferd's installer\n", ir.ResolvedVersion)
+		ver := ir.ResolvedVersion
+		if ver == "" {
+			ver = "(unknown version)"
+		}
+		if ir.Reachable {
+			fmt.Printf("  inferd %s installed and started (daemon reachable)\n", ver)
 		} else {
-			fmt.Println("  inferd installed via inferd's installer")
+			fmt.Printf("  inferd %s installed; daemon not reachable yet (see note below)\n", ver)
 		}
 	}
 	if ir.CosignVerified {

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Fresh install left the inferd daemon dead on macOS/Linux** (#47).
+  `thlibo install` copied only the `inferd-daemon` binary to
+  `~/.local/bin`, not the `backends/` ggml libs that must sit beside it.
+  inferd's `install-launchagent.sh` then aborted (`exit 1`, missing
+  `libllama.dylib`) *before* installing the LaunchAgent or starting the
+  daemon — so a "complete" install produced no autostart and no running
+  daemon. Now `runInferdInstaller` copies the whole `backends/` dir next
+  to the binary first (macOS + Linux + the Windows staged dir), so the
+  launchagent/systemd path completes and the daemon starts.
+- **thlibo installed a *pre-release* inferd.** inferd tags its RCs
+  (`v0.5.1-rc.1`) without GitHub's prerelease flag, so `/releases/latest`
+  returned the RC and thlibo's flag-based guard never tripped. Tag
+  resolution now scans the releases list and skips any hyphen-suffixed
+  (pre-release) tag, resolving the latest *stable* inferd (e.g. v0.5.0).
+  `--inferd-version` still pins an explicit RC when wanted.
+- **Install now verifies the daemon actually came up.** After a fresh
+  install, thlibo probes the admin socket (≤15s) and reports "installed
+  and started (daemon reachable)" vs. "installed; daemon not reachable
+  yet" + a hint — instead of a blanket "complete" that hid a dead
+  daemon.
+
 ### Added
 
 - **`go-test-filter` processor** — compresses `go test -v` (and

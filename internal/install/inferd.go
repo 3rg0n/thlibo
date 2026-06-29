@@ -62,9 +62,12 @@ import (
 )
 
 const (
-	// inferdLatestURL returns the JSON for the most recent
-	// non-prerelease tag.
-	inferdLatestURL = "https://api.github.com/repos/3rg0n/inferd/releases/latest"
+	// inferdReleasesURL returns the JSON list of releases (newest
+	// first). We scan it for the latest STABLE tag rather than trusting
+	// /releases/latest, because inferd tags its RCs ("-rc.N") WITHOUT
+	// setting GitHub's prerelease flag, so /releases/latest can return
+	// an RC. See fetchLatestInferdTag.
+	inferdReleasesURL = "https://api.github.com/repos/3rg0n/inferd/releases?per_page=30"
 
 	// inferdReleaseDLBase is the per-tag asset download root.
 	inferdReleaseDLBase = "https://github.com/3rg0n/inferd/releases/download"
@@ -146,6 +149,14 @@ type InferdInstallResult struct {
 	// CosignVerified: only meaningful on the InstalledFresh path.
 	// True if cosign was on PATH and the .cosign.bundle validated.
 	CosignVerified bool
+
+	// Reachable: set on the InstalledFresh / StartedExisting paths
+	// after a short post-install probe. True iff the daemon's admin
+	// socket answered within the readiness window — i.e. the autostart
+	// actually took and the daemon is up, not just "files placed."
+	// False means the install steps ran but the daemon didn't come up
+	// in time (model still loading, or a real failure to surface).
+	Reachable bool
 
 	// Notes: human-readable lines surfaced by the orchestrator.
 	// The installer prints them inline; users see them in the
@@ -265,7 +276,36 @@ func InstallInferd(spec InferdInstallSpec, opts PullOptions) (InferdInstallResul
 		return r, err
 	}
 	r.InstalledFresh = true
+	// Verify the autostart actually brought the daemon up — a clean
+	// installer exit doesn't guarantee a running daemon (#47). Probe
+	// the admin socket briefly; record the result so the installer can
+	// report "started and reachable" vs. "installed but not yet
+	// responding" instead of a blanket "complete."
+	r.Reachable = waitForInferdReady(15 * time.Second)
+	if !r.Reachable {
+		r.Notes = append(r.Notes,
+			"daemon not reachable yet after install — it may still be loading the model on first boot; "+
+				"check `inferdctl doctor` / the daemon logs if it doesn't come up shortly")
+	}
 	return r, nil
+}
+
+// waitForInferdReady polls the admin socket until it answers or the
+// window elapses. Returns true as soon as inferd is reachable. Used as
+// a post-install confidence check so the installer reports the daemon's
+// real state, not just "files placed."
+func waitForInferdReady(window time.Duration) bool {
+	deadline := time.Now().Add(window)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		reachable, _, _ := probeInferdAdmin(ctx)
+		cancel()
+		if reachable {
+			return true
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return false
 }
 
 // probeInferdAdmin connects to inferd's admin socket and reads one
@@ -574,6 +614,13 @@ func runInferdInstaller(extractDir string, r *InferdInstallResult) error {
 		if err := copyFile(bin, stableBin, 0o750); err != nil {
 			return err
 		}
+		// Copy the ggml backend libs alongside the binary BEFORE running
+		// the launchagent script — it aborts (exit 1) if libllama is not
+		// a sibling of the binary, leaving no LaunchAgent and no running
+		// daemon (#47).
+		if err := copyBackends(extractDir, filepath.Dir(stableBin)); err != nil {
+			return err
+		}
 		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
 		cmd := exec.Command(script, stableBin) // #nosec G204 -- script + path are from our extract tree
 		cmd.Stdout = os.Stdout
@@ -599,6 +646,12 @@ func runInferdInstaller(extractDir string, r *InferdInstallResult) error {
 			return fmt.Errorf("inferd: create %s: %w", filepath.Dir(stableBin), err)
 		}
 		if err := copyFile(bin, stableBin, 0o750); err != nil {
+			return err
+		}
+		// ggml backend libs must sit next to the binary ($ORIGIN RPATH);
+		// without them the daemon starts then aborts with "no backends
+		// are loaded" on model load. Same requirement as macOS (#47).
+		if err := copyBackends(extractDir, filepath.Dir(stableBin)); err != nil {
 			return err
 		}
 		unitSrc := filepath.Join(extractDir, "packaging", "inferd.service")
@@ -654,6 +707,12 @@ func runInferdInstaller(extractDir string, r *InferdInstallResult) error {
 		if err := copyFile(script, stableScript, 0o750); err != nil {
 			return err
 		}
+		// Copy the ggml backend DLLs into the stable dir too, so the
+		// elevated install.ps1 (and the daemon) find them next to the
+		// binary. Without these the daemon loads no compute backend.
+		if err := copyBackends(extractDir, stableDir); err != nil {
+			return err
+		}
 
 		r.Notes = append(r.Notes,
 			fmt.Sprintf("inferd binary copied to %s", stableBin))
@@ -694,7 +753,7 @@ func runCommand(name string, args ...string) error {
 // most recent non-prerelease tag.
 func fetchLatestInferdTag() (string, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, inferdLatestURL, nil)
+	req, err := http.NewRequest(http.MethodGet, inferdReleasesURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -707,20 +766,37 @@ func fetchLatestInferdTag() (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GitHub API returned HTTP %d", resp.StatusCode)
 	}
-	var payload struct {
+	var releases []struct {
 		TagName    string `json:"tag_name"`
 		Prerelease bool   `json:"prerelease"`
+		Draft      bool   `json:"draft"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
 		return "", err
 	}
-	if payload.TagName == "" {
-		return "", errors.New("GitHub API returned empty tag_name")
+	// The list is newest-first. Pick the first STABLE release. A
+	// release is stable iff it's not a draft, not GitHub-flagged
+	// prerelease, AND its tag carries no pre-release suffix
+	// ("v1.2.3-rc.1" / "-beta"). The suffix check is the load-bearing
+	// one: inferd ships RC tags without the prerelease flag, so trusting
+	// the flag alone would install an RC sidecar (issue #47 follow-up).
+	for _, rel := range releases {
+		if rel.Draft || rel.Prerelease || rel.TagName == "" {
+			continue
+		}
+		if isPrereleaseTag(rel.TagName) {
+			continue
+		}
+		return rel.TagName, nil
 	}
-	if payload.Prerelease {
-		return "", fmt.Errorf("GitHub returned prerelease %s; pass --inferd-version to install a prerelease", payload.TagName)
-	}
-	return payload.TagName, nil
+	return "", errors.New("inferd: no stable (non-prerelease) release found; pass --inferd-version to pin one")
+}
+
+// isPrereleaseTag reports whether a semver tag carries a pre-release
+// suffix — anything after a hyphen in the version core, e.g.
+// "v0.5.1-rc.1", "v1.0.0-beta.2". Stable tags ("v0.5.0") have no hyphen.
+func isPrereleaseTag(tag string) bool {
+	return strings.Contains(strings.TrimPrefix(tag, "v"), "-")
 }
 
 // pullInferd downloads + extracts the tarball/zip for version into a
@@ -1017,6 +1093,46 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return fmt.Errorf("inferd: copy %s -> %s: %w", src, dst, err)
 	}
 	return out.Close()
+}
+
+// copyBackends copies the ggml backend module libraries from the
+// extracted tarball's backends/ subdir into dstDir (the dir holding the
+// stable inferd-daemon binary). This is REQUIRED: ggml's
+// ggml_backend_load_all() searches the daemon executable's own
+// directory for the backend modules (libggml-*, libllama, .dylib/.so) —
+// not a backends/ subdir — and inferd's launchagent/systemd path
+// refuses to install when libllama is missing next to the binary. We
+// place the libs as siblings of the binary so the daemon loads its
+// compute backend at startup (without this the daemon aborts with
+// "no backends are loaded" / the installer exits 1 → #47).
+//
+// extractDir is the tarball root (contains both the binary and
+// backends/). Best-effort per file is wrong here — a missing backend
+// lib is fatal at daemon start — so any copy error is returned.
+func copyBackends(extractDir, dstDir string) error {
+	srcDir := filepath.Join(extractDir, "backends")
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No backends/ in the tarball — older layout that shipped
+			// libs next to the binary already; nothing to do.
+			return nil
+		}
+		return fmt.Errorf("inferd: read backends dir %s: %w", srcDir, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		src := filepath.Join(srcDir, e.Name())
+		dst := filepath.Join(dstDir, e.Name())
+		// Backend libs must be executable/loadable; 0o755 matches what
+		// the daemon binary gets.
+		if err := copyFile(src, dst, 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // assetNameFor returns the inferd release asset filename for
