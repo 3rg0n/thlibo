@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **README "install footprint" section** (#51): a table of every path
+  `thlibo install` touches, the SHA-stamp/`.new` edit-preservation, and
+  an explicit note that install does *not* modify
+  `skipDangerousModePermissionPrompt`, `skipWebFetchPreflight`, or any
+  other `settings.json` safety key (correcting a misconception from the
+  #47 audit). Plus a "two behaviors worth knowing" subsection surfacing
+  the PreToolUse auto-allow (`permissionDecision: "allow"`) and the
+  persistent hook — both already named in `THREAT_MODEL.md` (MA-2, MA-6)
+  but previously absent from user-facing docs. Also corrected a stale
+  claim that inferd's Windows install needs admin (zero-touch since
+  v0.7.5).
+
 ## [0.7.5] - 2026-06-29
 
 ### Fixed

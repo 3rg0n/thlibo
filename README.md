@@ -194,10 +194,11 @@ This does five things:
 5. Reports the plan as it goes (use `--dry-run` to see without
    touching anything).
 
-No admin/root required for thlibo's own install. Inferd's Windows
-service registration *does* need admin (the installer surfaces a
-clear instruction when that's the case); systemd / launchd setups
-are per-user and need no elevation.
+No admin/root required, on any OS — for thlibo *or* inferd. All three
+inferd autostart mechanisms are per-user and need no elevation: a
+launchd LaunchAgent (macOS), a `systemctl --user` unit (Linux), and a
+Startup-folder shortcut (Windows). A fresh install goes from nothing to
+a running, login-autostarting daemon with no manual step.
 
 ### Install flags
 
@@ -217,6 +218,49 @@ first inference request, into a shared per-platform model store
 (`~/.local/share/models/` on Linux, `~/Library/Application Support/models/`
 on macOS, `%LOCALAPPDATA%\models\` on Windows). thlibo doesn't
 manage the model — that's inferd's job.
+
+### Install footprint — what gets modified
+
+`thlibo install` touches these paths and nothing else. Every hook and
+skill file is SHA-stamped: if you've edited one, the new version lands
+at `<path>.new` and your edit is preserved.
+
+| Path | What |
+|---|---|
+| `~/.local/bin/thlibo` (Unix) · `%LOCALAPPDATA%\thlibo\bin\` (Win) | the `thlibo` binary (placed by the one-liner installer; on Windows the dir is added to the **User** PATH) |
+| `~/.thlibo/hooks/` | the six PreToolUse hook scripts (Bash + PowerShell variants of exec / read / write) |
+| `~/.thlibo/processors/` | the embedded built-in processors, mirrored to disk (your own processors here are left untouched) |
+| `~/.claude/settings.json` | **only** the `hooks` block — PreToolUse matchers for `Bash`, `PowerShell`, `Read`, `Write`, `Edit` are merged in; every other key and hook you have is preserved verbatim |
+| `~/.claude/skills/caselog/` | the `/caselog` skill |
+| inferd binary + `backends/` libs | `~/.local/bin` (Unix) · `%LOCALAPPDATA%\inferd\` (Win), via inferd's installer |
+| inferd autostart | LaunchAgent (macOS) · `systemctl --user` unit (Linux) · Startup-folder shortcut (Windows) |
+| `~/.codex/hooks.json` + `config.toml` | **only** with `--codex` |
+
+On macOS the one-liner installer (`install.sh`) also strips the
+Gatekeeper quarantine attribute (`xattr -d com.apple.quarantine`) from
+the downloaded `thlibo` binary so it runs without a "blocked" dialog.
+
+`thlibo install` does **not** modify any other `settings.json` keys — in
+particular it does not touch `skipDangerousModePermissionPrompt`,
+`skipWebFetchPreflight`, or any permission/safety setting.
+
+### Two behaviors worth knowing
+
+These are intentional and named in [`THREAT_MODEL.md`](THREAT_MODEL.md)
+(findings MA-2 and MA-6); calling them out here so they aren't a
+surprise:
+
+1. **The hooks auto-allow their own rewrites.** When a PreToolUse hook
+   rewrites a command (or substitutes a compressed file for the Read
+   tool), it emits `permissionDecision: "allow"` for that single,
+   thlibo-rewritten invocation — so Claude Code doesn't re-prompt for
+   the thing thlibo just produced. It only ever allows the rewritten
+   form it emitted; it does not blanket-allow other commands. The
+   rewritten command is visible to you and logged by `thlibo exec`.
+2. **The PreToolUse hook is persistent.** It's a one-time install but
+   the hook stays in `~/.claude/settings.json` and intercepts matching
+   tool calls in **every future Claude Code session** until you run
+   `thlibo uninstall`. `cat ~/.claude/settings.json` to see it.
 
 ---
 
@@ -392,10 +436,10 @@ Every hook honours this flag and exits passthrough immediately.
   by group `inferd-users` (or user-only when the group doesn't
   exist); admin socket is 0600 owned by the daemon user. On Windows,
   the pipe ACL grants the current user only; Everyone is excluded.
-- **No elevation for thlibo itself.** `thlibo install` runs entirely
-  under your user account. Inferd's Windows service registration
-  needs admin (one-time, surfaced clearly); systemd / launchd setups
-  are per-user.
+- **No elevation, anywhere.** `thlibo install` runs entirely under your
+  user account, and so does inferd's: all three autostart mechanisms are
+  per-user — LaunchAgent (macOS), `systemctl --user` unit (Linux),
+  Startup-folder shortcut (Windows). No admin/root at any point.
 - **Fallback on every error.** If anything in the compression path
   fails — inferd unreachable, script crashes, processor times out,
   malformed response — the original output is returned unchanged.
