@@ -98,6 +98,15 @@ _t(r"^(?P<file>[^:\s][^:\n]*?\.go):(?P<line>\d+):(?P<col>\d+):\s+"
    r"(?P<msg>.+?)\s+\((?P<linter>[\w./-]+)\)\s*$",
    "golangci")
 
+# gosec: [file:line] - Gxxx (CWE-nn): msg (Confidence: X, Severity: Y)
+# Distinct shape — bracketed loc, no column, severity in a trailing
+# parenthetical rather than the usual sev: position. The trailing
+# (Confidence/Severity) tail is dropped from msg; sev comes from it.
+_t(r"^\[(?P<file>[^:\s\]][^:\n\]]*?):(?P<line>\d+)\]\s+-\s+"
+   r"(?P<rule>G\d+)\s+\((?P<cwe>CWE-\d+)\):\s+"
+   r"(?P<msg>.+?)\s+\(Confidence:\s+\w+,\s+Severity:\s+(?P<sev>HIGH|MEDIUM|LOW)\)\s*$",
+   "gosec")
+
 # flake8 / ruff concise: file:line:col: CODE msg
 _t(r"^(?P<file>[^:\s][^:\n]*?):(?P<line>\d+):(?P<col>\d+):\s+"
    r"(?P<rule>[A-Z]{1,3}\d{2,4})\s+(?P<msg>.+?)\s*$",
@@ -155,6 +164,8 @@ _SEV_NORMAL = {
     "warn": "warning", "w": "warning",
     "n": "note", "i": "info", "s": "style",
     "c": "convention", "r": "refactor",
+    # gosec severities (trailing "Severity: HIGH|MEDIUM|LOW")
+    "high": "error", "medium": "warning", "low": "info",
 }
 
 

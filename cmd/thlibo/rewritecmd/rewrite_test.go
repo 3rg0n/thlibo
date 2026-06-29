@@ -72,6 +72,58 @@ func TestRewriteWrapsCargo(t *testing.T) {
 	}
 }
 
+// TestRewriteWrapsScanners: single-purpose linters/scanners added to
+// lint-filter's commands list (#43) are wrapped so their output routes
+// through the filter. Excludes `go` deliberately (see next test).
+func TestRewriteWrapsScanners(t *testing.T) {
+	cases := []struct {
+		argv []string
+		tail string
+	}{
+		{[]string{"gosec", "./..."}, " exec -- gosec ./..."},
+		{[]string{"staticcheck", "./..."}, " exec -- staticcheck ./..."},
+		{[]string{"golangci-lint", "run"}, " exec -- golangci-lint run"},
+		{[]string{"shellcheck", "script.sh"}, " exec -- shellcheck script.sh"},
+	}
+	for _, c := range cases {
+		t.Run(c.argv[0], func(t *testing.T) {
+			var code int
+			out := captureStdout(t, func() { code = Run(c.argv) })
+			if code != ExitRewrite {
+				t.Errorf("%s: exit = %d, want %d (should wrap)", c.argv[0], code, ExitRewrite)
+			}
+			if !strings.Contains(out, c.tail) {
+				t.Errorf("%s: stdout = %q, want to contain %q", c.argv[0], out, c.tail)
+			}
+		})
+	}
+}
+
+// TestRewriteDoesNotWrapGo: `go` is multiplexed — go build/run/test must
+// NOT be wrapped (commands: matches argv[0]=go exactly, and we
+// deliberately omit it). go test routes to the separate go-test-filter
+// (#42); go vet awaits subcommand-aware matching. Guards against someone
+// "fixing" #43 by naively adding `go` to commands:.
+func TestRewriteDoesNotWrapGo(t *testing.T) {
+	for _, argv := range [][]string{
+		{"go", "build", "./..."},
+		{"go", "test", "./..."},
+		{"go", "run", "main.go"},
+		{"go", "vet", "./..."},
+	} {
+		t.Run(strings.Join(argv, "_"), func(t *testing.T) {
+			var code int
+			out := captureStdout(t, func() { code = Run(argv) })
+			if code != ExitPassthrough {
+				t.Errorf("%v: exit = %d, want %d (go must not wrap)", argv, code, ExitPassthrough)
+			}
+			if out != "" {
+				t.Errorf("%v: stdout = %q, want empty", argv, out)
+			}
+		})
+	}
+}
+
 // TestRewritePassthroughForUnknown: a command whose argv[0] is not in
 // any processor's commands list returns exit 1 and writes nothing.
 func TestRewritePassthroughForUnknown(t *testing.T) {
