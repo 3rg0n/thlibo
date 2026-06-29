@@ -1,0 +1,28 @@
+internal/install/inferd_backends_test.go
+  s_5811b7f24eccc0::t_6ef0702f11bc02 1-77
+CHANGELOG.md
+  s_5811b7f24eccc0::t_0d721406968497 10-23
+  s_5811b7f24eccc0::t_5e4d61b53ab4c8 24-26
+  s_5811b7f24eccc0::t_39a4c4d84228ca 27-32
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_eb2dfd0939065f 65-70
+  s_5811b7f24eccc0::t_ad1f538f6430ea 153-160,279-289,293-310,617-623,651-656,710-715,756,769,772,774,777-790,792-799,1098-1137
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_f409324c3b2501 377-382,384
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "b7cba43f6a4f9d6db2f9a4bfd3167e87f18acc20",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
