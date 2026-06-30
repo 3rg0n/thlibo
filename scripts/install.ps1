@@ -109,7 +109,47 @@ try {
         if (-not (Test-Path $srcBin)) { Die "unexpected archive layout: $srcBin missing" 3 }
 
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-        Copy-Item -Force (Join-Path $srcBin 'thlibo.exe')  (Join-Path $InstallDir 'thlibo.exe')
+        $dstBin = Join-Path $InstallDir 'thlibo.exe'
+
+        # Rename-then-replace, not overwrite-in-place. When `thlibo
+        # upgrade` drives this script, $dstBin IS the running image and
+        # Windows holds an exclusive lock on it — a direct
+        # `Copy-Item -Force` fails with "being used by another process"
+        # (#52). Renaming a running exe IS permitted, so move the live
+        # binary aside first, then drop the new one into the freed name.
+        # The running process keeps executing from the renamed file.
+        $srcExe = Join-Path $srcBin 'thlibo.exe'
+        if (Test-Path -LiteralPath $dstBin) {
+            # Unique target even if two upgrades land in the same second.
+            $stamp = Get-Date -Format 'yyyyMMddHHmmss'
+            $n = 0
+            $oldBin = Join-Path $InstallDir ("thlibo.exe.old-$stamp")
+            while (Test-Path -LiteralPath $oldBin) {
+                $n++; $oldBin = Join-Path $InstallDir ("thlibo.exe.old-$stamp-$n")
+            }
+            try {
+                Move-Item -LiteralPath $dstBin -Destination $oldBin -Force
+            } catch {
+                Die "could not move the existing thlibo.exe aside ($($_.Exception.Message)). Close any running thlibo and retry." 5
+            }
+            # Roll back the rename if the copy fails — never leave the
+            # user with no thlibo.exe at the expected path (an upgrade
+            # must not be able to destroy the working binary).
+            try {
+                Copy-Item -Force $srcExe $dstBin -ErrorAction Stop
+            } catch {
+                Move-Item -LiteralPath $oldBin -Destination $dstBin -Force -ErrorAction SilentlyContinue
+                Die "could not install the new thlibo.exe ($($_.Exception.Message)). Original restored; retry from a fresh shell." 5
+            }
+        } else {
+            Copy-Item -Force $srcExe $dstBin
+        }
+
+        # Best-effort sweep of prior .old-* binaries. The one we just
+        # renamed may still be running (can't delete a live image on
+        # Windows); that's fine — it gets swept on the next upgrade.
+        Get-ChildItem -LiteralPath $InstallDir -Filter 'thlibo.exe.old-*' -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
 
         Say "installed thlibo $tag → $InstallDir"
     } finally {

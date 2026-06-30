@@ -142,7 +142,28 @@ main() {
   tar -xzf "$tmp/$asset" -C "$tmp"
   # Tarball layout: thlibo-<plat>/bin/thlibo
   local extracted="$tmp/thlibo-${platform}"
-  install -m 755 "$extracted/bin/thlibo"  "$INSTALL_DIR/thlibo"
+  local dst="$INSTALL_DIR/thlibo"
+
+  # Rename-then-replace, not overwrite-in-place. When `thlibo upgrade`
+  # drives this script, $dst IS the running binary; on Linux a direct
+  # write over a running executable fails with ETXTBSY ("Text file
+  # busy") (#52). `install`/`mv` are rename-based so they're fine, but
+  # we still move the old binary aside first, then install the new one
+  # into the freed name — and roll the rename back if the install
+  # fails, so an upgrade can never leave the user with no thlibo.
+  if [ -e "$dst" ]; then
+    local oldbin="$dst.old-$$"
+    mv -f "$dst" "$oldbin" 2>/dev/null \
+      || die "could not move the existing thlibo aside; close any running thlibo and retry" 5
+    if ! install -m 755 "$extracted/bin/thlibo" "$dst"; then
+      mv -f "$oldbin" "$dst" 2>/dev/null || true
+      die "could not install the new thlibo; original restored, retry from a fresh shell" 5
+    fi
+  else
+    install -m 755 "$extracted/bin/thlibo" "$dst"
+  fi
+  # Best-effort sweep of prior .old-* binaries from earlier upgrades.
+  rm -f "$INSTALL_DIR"/thlibo.old-* 2>/dev/null || true
 
   # macOS Gatekeeper quarantines binaries downloaded from the internet.
   # Strip the flag so they run without a system "blocked" dialog.
