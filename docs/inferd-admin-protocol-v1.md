@@ -190,6 +190,22 @@ Frames during one boot, in order, look approximately like:
 - The daemon WILL NOT introduce a new `status` or `phase` that
   breaks the existing semantics. Backwards-additive only.
 
+> **v2 observation (inferd ≥ v0.5).** The unified-wire daemon
+> leads its on-connect snapshot with one **`status: "capabilities"`**
+> frame *per loaded backend* (e.g. `embeddinggemma-300m`, then
+> `gemma-4-e4b`), each carrying `backend`, `vision`, `audio`,
+> `tools`, `wire_version`, etc., *before* the lifecycle frame
+> (`ready` / `loading_model` / …). `capabilities` is **not** a
+> lifecycle state — per the rule above, a readiness client must
+> treat it as opaque and keep reading until it sees a real
+> lifecycle `status`. thlibo's probe (`parseAdminSnapshot` in
+> `internal/install/inferd.go`) parses *all* snapshot frames and
+> reports the last lifecycle status, skipping `capabilities`. A
+> bug where it reported only the first frame surfaced as the
+> spurious install note "inferd is capabilities; thlibo will fail
+> open until ready" — fixed with a regression test pinned to the
+> real captured bytes.
+
 ## 6. Idiomatic client patterns
 
 ### 6.1 Wait for ready (the simple case)

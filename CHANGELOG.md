@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Install printed a garbled status: "inferd is capabilities; thlibo
+  will fail open until ready"** (#54). The admin-socket probe parsed
+  only the *first* NDJSON frame of inferd's on-connect snapshot. Under
+  inferd ≥ v0.5's unified v2 wire that first frame is a
+  `status: "capabilities"` backend advertisement (one per loaded
+  backend), not a lifecycle state — so a fully-`ready` daemon was
+  reported as "capabilities". The probe now parses every snapshot frame,
+  skips the `capabilities` advertisements (per protocol-v1 §5.2 "ignore
+  unknown status values"), and reports the last real lifecycle status.
+  Regression test pinned to the exact bytes captured from a live inferd
+  v0.5.0.
 - **`thlibo upgrade` failed on Windows: "thlibo.exe … being used by
   another process"** (#52). `thlibo upgrade` is a long-lived process
   that drives the signed installer, which then tried to `Copy-Item

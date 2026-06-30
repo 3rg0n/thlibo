@@ -43,6 +43,7 @@ package install
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -342,30 +343,59 @@ func probeInferdAdmin(ctx context.Context) (reachable bool, status, version stri
 		return true, "", ""
 	}
 
-	// Frames are NDJSON; we may have read more than one in the
-	// buffer. Use the first complete line.
-	line := buf[:n]
-	if idx := indexByteFrame(line); idx >= 0 {
-		line = line[:idx]
-	}
-	var frame struct {
-		Status  string `json:"status"`
-		Detail  any    `json:"detail,omitempty"`
-		Version string `json:"version,omitempty"`
-	}
-	if err := json.Unmarshal(line, &frame); err != nil {
-		return true, "", ""
-	}
-	return true, frame.Status, frame.Version
+	status, version = parseAdminSnapshot(buf[:n])
+	return true, status, version
 }
 
-func indexByteFrame(b []byte) int {
+// parseAdminSnapshot extracts the lifecycle status + version from the
+// snapshot the admin socket writes on connect.
+//
+// The snapshot is *several* NDJSON frames, not one. inferd v2 leads with
+// one `capabilities` advertisement frame per loaded backend (e.g.
+// embeddinggemma-300m, then gemma-4-e4b) before the actual lifecycle
+// frame (`ready`/`loading_model`/...). We must report the last real
+// lifecycle status — taking the first line (the old bug) surfaced the
+// `capabilities` frame as the bogus Note "inferd is capabilities; thlibo
+// will fail open until ready" even when a later frame said `ready`.
+func parseAdminSnapshot(b []byte) (status, version string) {
+	for _, line := range splitFrames(b) {
+		var frame struct {
+			Status  string `json:"status"`
+			Version string `json:"version,omitempty"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue // partial/trailing line; skip
+		}
+		if frame.Version != "" {
+			version = frame.Version
+		}
+		// `capabilities` is a v2 backend advertisement, not a lifecycle
+		// state (protocol v1 §5 lists starting/loading_model/ready/
+		// restarting/draining). Skip it so it never becomes the
+		// reported status.
+		if frame.Status == "" || frame.Status == "capabilities" {
+			continue
+		}
+		status = frame.Status
+	}
+	return status, version
+}
+
+// splitFrames returns each complete `\n`-terminated NDJSON line in b.
+// A trailing fragment without a newline is dropped (a partial frame the
+// read didn't finish), matching the daemon's one-object-per-line wire.
+func splitFrames(b []byte) [][]byte {
+	var frames [][]byte
+	start := 0
 	for i, c := range b {
 		if c == '\n' {
-			return i
+			if line := bytes.TrimSpace(b[start:i]); len(line) > 0 {
+				frames = append(frames, line)
+			}
+			start = i + 1
 		}
 	}
-	return -1
+	return frames
 }
 
 // dialInferdAdmin connects to inferd's admin socket on this platform.
