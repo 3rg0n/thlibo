@@ -1,0 +1,32 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_db0e54f591e25b 10-13
+  s_83c04b48dec446::t_00ea628761f034 14-22
+internal/install/inferd_asset_test.go
+  s_5811b7f24eccc0::t_4f8e2694887ac8 1-46
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_00d8ee08540012 1245-1250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "81f1b5d5a99479c680e4ea2c5f71ef3ac0ed95e6",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_83c04b48dec446": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2882990-0d70-445d-93ca-6c6567c7fa31",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
