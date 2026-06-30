@@ -336,7 +336,17 @@ func Run(argv []string) int {
 			fmt.Fprintln(os.Stderr, "install: codex config.toml:", err)
 			return 9
 		}
-		fmt.Printf("  wrote Codex hook + merged %s + enabled codex_hooks in %s\n", cp, cfgPath)
+		fmt.Printf("  wrote Codex hook + merged %s + set [features] hooks=true in %s\n", cp, cfgPath)
+		// Codex requires the user to TRUST a command hook before it
+		// runs ("Before a non-managed command hook can run, Codex
+		// requires you to review and trust the exact hook definition"
+		// — developers.openai.com/codex/hooks). The installer can't do
+		// this for the user (trust is recorded against the hook's hash,
+		// interactively), so until they do it the hook is installed but
+		// silent. Surface the one manual step explicitly.
+		fmt.Println("  ACTION REQUIRED — trust the hook so Codex will run it:")
+		fmt.Println("    Run `/hooks` inside Codex, review the thlibo PostToolUse hook, and approve it.")
+		fmt.Println("    Until trusted, Codex installs the hook but won't execute it (compression stays off).")
 	}
 
 	if hint := wslAPEInteropHint(); hint != "" {

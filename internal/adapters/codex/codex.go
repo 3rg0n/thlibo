@@ -150,9 +150,16 @@ func addPostToolUseHook(root map[string]any, hookPath string) {
 	hooks["PostToolUse"] = post
 }
 
-// EnableHooksFeatureFlag ensures `[features] codex_hooks = true`
-// exists in the user's Codex config.toml. Without this, Codex
-// silently ignores every hook it finds.
+// EnableHooksFeatureFlag ensures the Codex hooks feature flag is on in
+// the user's config.toml. Without it, Codex silently ignores every hook
+// it finds.
+//
+// The canonical key is `[features] hooks = true`. Older Codex used
+// `codex_hooks = true`, which still works as a deprecated alias. We
+// write the canonical `hooks = true`, but treat an existing
+// `hooks = true` OR `codex_hooks = true` as already-satisfied — so we
+// never duplicate the flag or fight a config that git-ai (or another
+// tool) already enabled.
 //
 // The TOML here is written by hand rather than through a library:
 // hooks.json is the authoritative hook declaration, config.toml
@@ -160,7 +167,7 @@ func addPostToolUseHook(root map[string]any, hookPath string) {
 // dependency footprint small.
 //
 // Merge semantics: if the file doesn't exist, it's created with
-// just the feature flag. If [features] already exists, codex_hooks
+// just the feature flag. If [features] already exists, the flag
 // is added/updated without touching any other feature. If the file
 // is non-TOML gibberish, we refuse to write so user data isn't lost.
 func EnableHooksFeatureFlag(configPath string) error {
@@ -199,12 +206,17 @@ func readFileOrEmpty(p string) (string, error) {
 }
 
 // ensureCodexHooksTrue parses a minimal subset of TOML: it finds
-// (or creates) the [features] section header and ensures a
-// `codex_hooks = true` line lives inside it. Everything else in
-// the file is untouched.
+// (or creates) the [features] section header and ensures the hooks
+// feature flag is enabled inside it. Everything else in the file is
+// untouched.
+//
+// The canonical flag is `hooks = true`. `codex_hooks = true` is a
+// deprecated-but-honoured alias. To avoid duplicating the flag (or
+// flipping a working config), we treat EITHER key already being `true`
+// as satisfied and make no change. Otherwise we write `hooks = true`.
 //
 // Returns (newContent, changed, err). changed=false means the file
-// already had the right setting.
+// already had hooks enabled (under either key).
 //
 // We intentionally do NOT use a full TOML parser. The goal is:
 // non-destructive merge for the one feature flag we care about.
@@ -212,8 +224,7 @@ func readFileOrEmpty(p string) (string, error) {
 func ensureCodexHooksTrue(content string) (string, bool, error) {
 	lines := strings.Split(content, "\n")
 
-	// Scan for an existing [features] section and whether it
-	// already contains codex_hooks.
+	// Scan for an existing [features] section.
 	featuresStart := -1
 	featuresEnd := -1 // exclusive: index of the next section header
 	for i, line := range lines {
@@ -232,22 +243,24 @@ func ensureCodexHooksTrue(content string) (string, bool, error) {
 		}
 	}
 
-	const want = "codex_hooks = true"
+	const want = "hooks = true"
 
 	if featuresStart >= 0 {
-		// [features] exists — look for codex_hooks inside it.
+		// [features] exists — look for the canonical key or the alias.
+		// If either is already enabled, we're done (don't duplicate).
 		for j := featuresStart + 1; j < featuresEnd; j++ {
 			t := strings.TrimSpace(lines[j])
-			if strings.HasPrefix(t, "codex_hooks") {
-				// Key present; normalise the value.
-				if t == want {
+			if key, ok := hooksFlagKey(t); ok {
+				if hooksFlagEnabled(t) {
 					return content, false, nil
 				}
-				lines[j] = want
+				// Key present but not true — set the canonical key true
+				// in place (preserving which key the user already had).
+				lines[j] = key + " = true"
 				return strings.Join(lines, "\n"), true, nil
 			}
 		}
-		// Not found; insert right after the section header.
+		// Neither key present; insert the canonical flag after the header.
 		before := lines[:featuresStart+1]
 		after := append([]string{want}, lines[featuresStart+1:]...)
 		return strings.Join(append(before, after...), "\n"), true, nil
@@ -262,6 +275,34 @@ func ensureCodexHooksTrue(content string) (string, bool, error) {
 		prefix += "\n"
 	}
 	return prefix + "[features]\n" + want + "\n", true, nil
+}
+
+// hooksFlagKey reports whether a TOML line sets the hooks feature flag
+// (canonical `hooks` or deprecated alias `codex_hooks`) and returns the
+// bare key name. It matches the assignment, not a substring, so a key
+// like `hooks_extra` doesn't trip it.
+func hooksFlagKey(line string) (string, bool) {
+	for _, key := range []string{"hooks", "codex_hooks"} {
+		rest, ok := strings.CutPrefix(line, key)
+		if !ok {
+			continue
+		}
+		rest = strings.TrimLeft(rest, " \t")
+		if strings.HasPrefix(rest, "=") {
+			return key, true
+		}
+	}
+	return "", false
+}
+
+// hooksFlagEnabled reports whether a `hooks`/`codex_hooks` assignment
+// line sets the value to true.
+func hooksFlagEnabled(line string) bool {
+	_, after, found := strings.Cut(line, "=")
+	if !found {
+		return false
+	}
+	return strings.TrimSpace(after) == "true"
 }
 
 // normalisePath converts backslashes to forward slashes so bash -c
