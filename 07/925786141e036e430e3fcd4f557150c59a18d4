@@ -1,0 +1,42 @@
+internal/install/inferd_probe_test.go
+  s_5811b7f24eccc0::t_1ab3a76f6618f5 1-97
+internal/install/inferd.go
+  s_5811b7f24eccc0::t_0821a718076c4c 46
+  s_83c04b48dec446::t_fcf54137943135 346-379,381,384-389,392-395,398
+CHANGELOG.md
+  s_83c04b48dec446::t_c2db4d7ad49962 12-22
+docs/inferd-admin-protocol-v1.md
+  s_3f706e3f4b4643::t_aba78e95a0ea69 193-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "07925786141e036e430e3fcd4f557150c59a18d4",
+  "prompts": {},
+  "sessions": {
+    "s_3f706e3f4b4643": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d91ced6-3b3b-46d0-b2cb-8b38a3429c2a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_83c04b48dec446": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2882990-0d70-445d-93ca-6c6567c7fa31",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
