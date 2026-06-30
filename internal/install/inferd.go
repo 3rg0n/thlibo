@@ -1242,6 +1242,12 @@ func assetNameFor(version, platform string) string {
 		return fmt.Sprintf("inferd-v%s-aarch64-apple-darwin.tar.gz", v)
 	case "windows-amd64":
 		return fmt.Sprintf("inferd-v%s-x86_64-pc-windows-msvc.zip", v)
+	case "windows-arm64":
+		// inferd ships a native aarch64 Windows build as of v0.5.1
+		// (GitHub's windows-11-arm runner; dl-backends, no CUDA). The
+		// .zip extraction and the GOOS=="windows" install branch are
+		// arch-agnostic, so only the asset name needs the new case.
+		return fmt.Sprintf("inferd-v%s-aarch64-pc-windows-msvc.zip", v)
 	}
 	return ""
 }

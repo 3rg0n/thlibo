@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Windows on ARM64 support for the inferd installer.** inferd v0.5.1
+  ships a native `aarch64-pc-windows-msvc` build; `assetNameFor` now
+  requests it, so `thlibo install` works on Windows-on-ARM instead of
+  bailing "platform not supported". The `.zip` extraction and the
+  `GOOS=="windows"` install branch were already arch-agnostic — only the
+  asset name needed the case. (No new inferd minimum: thlibo keeps
+  auto-resolving the latest *stable* inferd, which is v0.5.1 with the
+  Gemma 4 GA thinking-token fix and the `mmproj_image_max_tokens` OCR
+  knob; both flow in with no thlibo wire change — `wire_version` is
+  still 1.)
+
 ### Fixed
 
 - **Install printed a garbled status: "inferd is capabilities; thlibo
