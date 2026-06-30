@@ -1,0 +1,19 @@
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_3a26954bdc92d6 63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "3f903f8c6f6d1cfb4a17a66b48dbbdf58699dfdc",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "unknown"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
