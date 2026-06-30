@@ -118,16 +118,32 @@ try {
         # (#52). Renaming a running exe IS permitted, so move the live
         # binary aside first, then drop the new one into the freed name.
         # The running process keeps executing from the renamed file.
+        $srcExe = Join-Path $srcBin 'thlibo.exe'
         if (Test-Path -LiteralPath $dstBin) {
+            # Unique target even if two upgrades land in the same second.
             $stamp = Get-Date -Format 'yyyyMMddHHmmss'
+            $n = 0
             $oldBin = Join-Path $InstallDir ("thlibo.exe.old-$stamp")
+            while (Test-Path -LiteralPath $oldBin) {
+                $n++; $oldBin = Join-Path $InstallDir ("thlibo.exe.old-$stamp-$n")
+            }
             try {
                 Move-Item -LiteralPath $dstBin -Destination $oldBin -Force
             } catch {
                 Die "could not move the existing thlibo.exe aside ($($_.Exception.Message)). Close any running thlibo and retry." 5
             }
+            # Roll back the rename if the copy fails — never leave the
+            # user with no thlibo.exe at the expected path (an upgrade
+            # must not be able to destroy the working binary).
+            try {
+                Copy-Item -Force $srcExe $dstBin -ErrorAction Stop
+            } catch {
+                Move-Item -LiteralPath $oldBin -Destination $dstBin -Force -ErrorAction SilentlyContinue
+                Die "could not install the new thlibo.exe ($($_.Exception.Message)). Original restored; retry from a fresh shell." 5
+            }
+        } else {
+            Copy-Item -Force $srcExe $dstBin
         }
-        Copy-Item -Force (Join-Path $srcBin 'thlibo.exe') $dstBin
 
         # Best-effort sweep of prior .old-* binaries. The one we just
         # renamed may still be running (can't delete a live image on
