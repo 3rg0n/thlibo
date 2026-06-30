@@ -329,9 +329,15 @@ func probeInferdAdmin(ctx context.Context) (reachable bool, status, version stri
 	}
 	defer conn.Close()
 
-	// Read up to one status frame. The daemon writes the snapshot
-	// immediately on connect; if it doesn't show up in the deadline
-	// we treat the daemon as unhealthy enough to skip.
+	// Read the on-connect snapshot. The daemon writes it immediately;
+	// if nothing shows up within the deadline we treat the daemon as
+	// unhealthy enough to skip. One read of 8 KiB: the snapshot
+	// (a handful of capabilities frames + one lifecycle frame) fits
+	// comfortably for realistic backend counts. If a pathological
+	// multi-backend daemon overflowed it and the lifecycle frame were
+	// truncated off, parseAdminSnapshot returns an empty status — which
+	// the caller treats as reachable-but-unknown (no bogus note), so the
+	// failure mode is safe rather than wrong.
 	_ = conn.SetReadDeadline(time.Now().Add(1500 * time.Millisecond))
 	buf := make([]byte, 8192)
 	n, err := conn.Read(buf)
@@ -347,16 +353,36 @@ func probeInferdAdmin(ctx context.Context) (reachable bool, status, version stri
 	return true, status, version
 }
 
+// lifecycleStates is the closed set of admin-socket `status` values that
+// represent the daemon's lifecycle (protocol-v1 §5). Anything else —
+// notably inferd v2's `capabilities` backend-advertisement frames — is
+// not a lifecycle state and must not be reported as one. We *allowlist*
+// these rather than denylisting `capabilities`: a readiness client must
+// ignore unknown status values (protocol-v1 §5.2), and allowlisting is
+// the only form that stays correct if a future wire adds a *second*
+// non-lifecycle advertisement frame (denylisting would silently regress
+// to the #54 bug).
+var lifecycleStates = map[string]bool{
+	"starting":      true,
+	"loading_model": true,
+	"ready":         true,
+	"restarting":    true,
+	"draining":      true,
+}
+
 // parseAdminSnapshot extracts the lifecycle status + version from the
 // snapshot the admin socket writes on connect.
 //
 // The snapshot is *several* NDJSON frames, not one. inferd v2 leads with
 // one `capabilities` advertisement frame per loaded backend (e.g.
 // embeddinggemma-300m, then gemma-4-e4b) before the actual lifecycle
-// frame (`ready`/`loading_model`/...). We must report the last real
-// lifecycle status — taking the first line (the old bug) surfaced the
+// frame (`ready`/`loading_model`/...). We report the last real lifecycle
+// status — taking the first line (the old bug, #54) surfaced the
 // `capabilities` frame as the bogus Note "inferd is capabilities; thlibo
-// will fail open until ready" even when a later frame said `ready`.
+// will fail open until ready" even when a later frame said `ready`. A
+// snapshot that is all advertisements with no lifecycle frame yet (or a
+// frame truncated by the single read) yields an empty status, which the
+// caller treats as reachable-but-unknown and emits no note.
 func parseAdminSnapshot(b []byte) (status, version string) {
 	for _, line := range splitFrames(b) {
 		var frame struct {
@@ -366,17 +392,14 @@ func parseAdminSnapshot(b []byte) (status, version string) {
 		if err := json.Unmarshal(line, &frame); err != nil {
 			continue // partial/trailing line; skip
 		}
+		// Version may ride any frame (a capabilities frame can carry it
+		// while the lifecycle frame doesn't); keep the last non-empty.
 		if frame.Version != "" {
 			version = frame.Version
 		}
-		// `capabilities` is a v2 backend advertisement, not a lifecycle
-		// state (protocol v1 §5 lists starting/loading_model/ready/
-		// restarting/draining). Skip it so it never becomes the
-		// reported status.
-		if frame.Status == "" || frame.Status == "capabilities" {
-			continue
+		if lifecycleStates[frame.Status] {
+			status = frame.Status
 		}
-		status = frame.Status
 	}
 	return status, version
 }

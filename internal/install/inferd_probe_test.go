@@ -46,6 +46,21 @@ func TestParseAdminSnapshot(t *testing.T) {
 			wantStatus: "",
 		},
 		{
+			// Forward-compat: a hypothetical future advertisement frame
+			// thlibo has never seen must NOT be reported as a status.
+			// This is why the implementation allowlists lifecycle states
+			// rather than denylisting "capabilities" (#54 review).
+			name: "unknown future advertisement frame is skipped, ready still reported",
+			in: `{"id":"admin","status":"some_future_advert","backend":"z","type":"status"}` + "\n" +
+				`{"id":"admin","status":"ready","type":"status"}` + "\n",
+			wantStatus: "ready",
+		},
+		{
+			name:       "loading_model is a real lifecycle state and IS reported",
+			in:         `{"status":"capabilities"}` + "\n" + `{"status":"loading_model","phase":"mmap"}` + "\n",
+			wantStatus: "loading_model",
+		},
+		{
 			name:       "version carried on a frame is captured",
 			in:         `{"id":"admin","type":"status","status":"ready","version":"v0.5.0"}` + "\n",
 			wantStatus: "ready",
