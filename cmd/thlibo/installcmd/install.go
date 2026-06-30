@@ -66,6 +66,12 @@ func Run(argv []string) int {
 		return 2
 	}
 
+	// --skip-hook returns before the Codex block, so --codex --skip-hook
+	// would silently no-op the Codex install. Warn rather than mislead.
+	if skipHook && installCodex {
+		fmt.Fprintln(os.Stderr, "install: --codex is ignored with --skip-hook (no Codex hook installed). Drop --skip-hook to install it.")
+	}
+
 	if processorsDir == "" {
 		processorsDir = install.DefaultProcessorsDir()
 	}

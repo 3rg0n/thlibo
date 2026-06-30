@@ -255,8 +255,10 @@ func ensureCodexHooksTrue(content string) (string, bool, error) {
 					return content, false, nil
 				}
 				// Key present but not true — set the canonical key true
-				// in place (preserving which key the user already had).
-				lines[j] = key + " = true"
+				// in place, preserving the line's original indentation
+				// (and which key name the user already had).
+				indent := lines[j][:len(lines[j])-len(strings.TrimLeft(lines[j], " \t"))]
+				lines[j] = indent + key + " = true"
 				return strings.Join(lines, "\n"), true, nil
 			}
 		}
@@ -296,11 +298,16 @@ func hooksFlagKey(line string) (string, bool) {
 }
 
 // hooksFlagEnabled reports whether a `hooks`/`codex_hooks` assignment
-// line sets the value to true.
+// line sets the value to true. A trailing TOML comment (`# ...`) is
+// ignored, so `hooks = true # enabled by git-ai` still reads as true
+// (otherwise we'd needlessly rewrite the line and strip the comment).
 func hooksFlagEnabled(line string) bool {
 	_, after, found := strings.Cut(line, "=")
 	if !found {
 		return false
+	}
+	if idx := strings.IndexByte(after, '#'); idx >= 0 {
+		after = after[:idx]
 	}
 	return strings.TrimSpace(after) == "true"
 }

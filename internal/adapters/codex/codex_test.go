@@ -374,6 +374,43 @@ hooks = true
 	}
 }
 
+// TestEnableHooksFeatureFlagPreservesInlineComment: `hooks = true` with
+// a trailing TOML comment is already enabled — must be left UNCHANGED
+// (not rewritten, which would strip the comment). Review-found.
+func TestEnableHooksFeatureFlagPreservesInlineComment(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	existing := "[features]\nhooks = true  # enabled by git-ai\n"
+	_ = os.WriteFile(cfg, []byte(existing), 0o600)
+	if err := EnableHooksFeatureFlag(cfg); err != nil {
+		t.Fatalf("EnableHooksFeatureFlag: %v", err)
+	}
+	got, _ := os.ReadFile(cfg)
+	if string(got) != existing {
+		t.Errorf("config with `hooks = true # comment` must be untouched.\n got: %q\nwant: %q", got, existing)
+	}
+}
+
+// TestEnableHooksFeatureFlagPreservesIndentationOnFlip: a `hooks = false`
+// line with leading whitespace is flipped to true KEEPING its indent.
+// Review-found.
+func TestEnableHooksFeatureFlagPreservesIndentationOnFlip(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	existing := "[features]\n    hooks = false\n"
+	_ = os.WriteFile(cfg, []byte(existing), 0o600)
+	if err := EnableHooksFeatureFlag(cfg); err != nil {
+		t.Fatalf("EnableHooksFeatureFlag: %v", err)
+	}
+	got, _ := os.ReadFile(cfg)
+	if !strings.Contains(string(got), "    hooks = true") {
+		t.Errorf("indentation not preserved on flip: %q", string(got))
+	}
+	if strings.Contains(string(got), "hooks = false") {
+		t.Errorf("stale false value remains: %q", string(got))
+	}
+}
+
 // countFlagLines counts lines that are an assignment of exactly `key`
 // (so "hooks" does not match "codex_hooks" or a "[hooks]" table header).
 func countFlagLines(content, key string) int {
