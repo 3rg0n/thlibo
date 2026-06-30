@@ -109,7 +109,31 @@ try {
         if (-not (Test-Path $srcBin)) { Die "unexpected archive layout: $srcBin missing" 3 }
 
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-        Copy-Item -Force (Join-Path $srcBin 'thlibo.exe')  (Join-Path $InstallDir 'thlibo.exe')
+        $dstBin = Join-Path $InstallDir 'thlibo.exe'
+
+        # Rename-then-replace, not overwrite-in-place. When `thlibo
+        # upgrade` drives this script, $dstBin IS the running image and
+        # Windows holds an exclusive lock on it — a direct
+        # `Copy-Item -Force` fails with "being used by another process"
+        # (#52). Renaming a running exe IS permitted, so move the live
+        # binary aside first, then drop the new one into the freed name.
+        # The running process keeps executing from the renamed file.
+        if (Test-Path -LiteralPath $dstBin) {
+            $stamp = Get-Date -Format 'yyyyMMddHHmmss'
+            $oldBin = Join-Path $InstallDir ("thlibo.exe.old-$stamp")
+            try {
+                Move-Item -LiteralPath $dstBin -Destination $oldBin -Force
+            } catch {
+                Die "could not move the existing thlibo.exe aside ($($_.Exception.Message)). Close any running thlibo and retry." 5
+            }
+        }
+        Copy-Item -Force (Join-Path $srcBin 'thlibo.exe') $dstBin
+
+        # Best-effort sweep of prior .old-* binaries. The one we just
+        # renamed may still be running (can't delete a live image on
+        # Windows); that's fine — it gets swept on the next upgrade.
+        Get-ChildItem -LiteralPath $InstallDir -Filter 'thlibo.exe.old-*' -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
 
         Say "installed thlibo $tag → $InstallDir"
     } finally {

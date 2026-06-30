@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`thlibo upgrade` failed on Windows: "thlibo.exe … being used by
+  another process"** (#52). `thlibo upgrade` is a long-lived process
+  that drives the signed installer, which then tried to `Copy-Item
+  -Force` over the very `thlibo.exe` the parent was running from —
+  Windows holds an exclusive lock on a running executable's image, so
+  the overwrite was denied (after a successful download + SHA-256
+  verify, leaving the box on the old binary). `scripts/install.ps1` now
+  **renames the running binary aside** (`thlibo.exe.old-<stamp>`, which
+  Windows *does* allow for a live image) and drops the new one into the
+  freed name, then sweeps stale `.old-*` copies. `scripts/install.sh`
+  gets the same `mv`-aside treatment as hardening (Unix `install(1)`
+  was already rename-based and unaffected, so Linux/macOS upgrades were
+  never broken). Verified with ground-truth tests that hold a real
+  running process from the target image on both Windows and Linux.
+
 ### Documentation
 
 - **README "install footprint" section** (#51): a table of every path

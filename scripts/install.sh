@@ -142,7 +142,21 @@ main() {
   tar -xzf "$tmp/$asset" -C "$tmp"
   # Tarball layout: thlibo-<plat>/bin/thlibo
   local extracted="$tmp/thlibo-${platform}"
-  install -m 755 "$extracted/bin/thlibo"  "$INSTALL_DIR/thlibo"
+  local dst="$INSTALL_DIR/thlibo"
+
+  # Rename-then-replace, not overwrite-in-place. When `thlibo upgrade`
+  # drives this script, $dst IS the running binary; on Linux writing
+  # over a running executable fails with ETXTBSY ("Text file busy")
+  # (#52). Renaming/unlinking it is fine — the live process keeps its
+  # inode — so move the old binary aside first, then install the new
+  # one into the freed name.
+  if [ -e "$dst" ]; then
+    mv -f "$dst" "$dst.old-$$" 2>/dev/null \
+      || die "could not move the existing thlibo aside; close any running thlibo and retry" 5
+  fi
+  install -m 755 "$extracted/bin/thlibo" "$dst"
+  # Best-effort sweep of prior .old-* binaries from earlier upgrades.
+  rm -f "$INSTALL_DIR"/thlibo.old-* 2>/dev/null || true
 
   # macOS Gatekeeper quarantines binaries downloaded from the internet.
   # Strip the flag so they run without a system "blocked" dialog.
