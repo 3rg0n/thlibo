@@ -206,7 +206,7 @@ func TestMergeHooksJSONNormalisesBackslashes(t *testing.T) {
 // --- EnableHooksFeatureFlag / ensureCodexHooksTrue ---
 
 // TestEnableHooksFeatureFlagFreshFile: creates a new config.toml
-// with just the feature-flag section.
+// with just the feature-flag section. Writes the canonical key.
 func TestEnableHooksFeatureFlagFreshFile(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "config.toml")
@@ -218,8 +218,12 @@ func TestEnableHooksFeatureFlagFreshFile(t *testing.T) {
 	if !strings.Contains(s, "[features]") {
 		t.Errorf("output missing [features]: %q", s)
 	}
-	if !strings.Contains(s, "codex_hooks = true") {
-		t.Errorf("output missing codex_hooks: %q", s)
+	if !strings.Contains(s, "hooks = true") {
+		t.Errorf("output missing canonical hooks flag: %q", s)
+	}
+	// The deprecated alias must NOT be written on a fresh file.
+	if strings.Contains(s, "codex_hooks") {
+		t.Errorf("should write canonical hooks, not deprecated codex_hooks: %q", s)
 	}
 }
 
@@ -249,13 +253,13 @@ provider = "chatgpt"
 	if !strings.Contains(s, "[auth]") || !strings.Contains(s, `provider = "chatgpt"`) {
 		t.Errorf("auth section lost: %q", s)
 	}
-	if !strings.Contains(s, "codex_hooks = true") {
-		t.Errorf("codex_hooks not added: %q", s)
+	if !strings.Contains(s, "hooks = true") {
+		t.Errorf("hooks flag not added: %q", s)
 	}
 }
 
 // TestEnableHooksFeatureFlagAddsKeyToExistingFeaturesSection: if
-// [features] exists but codex_hooks isn't in it, we add it without
+// [features] exists but the hooks flag isn't in it, we add it without
 // creating a second [features] header.
 func TestEnableHooksFeatureFlagAddsKeyToExistingFeaturesSection(t *testing.T) {
 	dir := t.TempDir()
@@ -278,16 +282,15 @@ provider = "chatgpt"
 		t.Errorf("expected exactly one [features] header, got %d: %q",
 			strings.Count(s, "[features]"), s)
 	}
-	if !strings.Contains(s, "codex_hooks = true") {
-		t.Errorf("codex_hooks missing: %q", s)
+	if !strings.Contains(s, "hooks = true") {
+		t.Errorf("hooks flag missing: %q", s)
 	}
 	if !strings.Contains(s, "some_other_feature = true") {
 		t.Errorf("other feature lost: %q", s)
 	}
 }
 
-// TestEnableHooksFeatureFlagIdempotent: 3 runs produce one
-// codex_hooks entry.
+// TestEnableHooksFeatureFlagIdempotent: 3 runs produce one hooks entry.
 func TestEnableHooksFeatureFlagIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "config.toml")
@@ -298,20 +301,21 @@ func TestEnableHooksFeatureFlagIdempotent(t *testing.T) {
 	}
 	got, _ := os.ReadFile(cfg)
 	s := string(got)
-	if strings.Count(s, "codex_hooks") != 1 {
-		t.Errorf("expected 1 codex_hooks line, got %d: %q",
-			strings.Count(s, "codex_hooks"), s)
+	// "hooks" appears in the flag line; count exact flag lines, not the
+	// substring (which would also catch a [hooks] table if present).
+	if n := countFlagLines(s, "hooks"); n != 1 {
+		t.Errorf("expected 1 hooks flag line, got %d: %q", n, s)
 	}
 }
 
 // TestEnableHooksFeatureFlagOverwritesWrongValue: a user who set
-// codex_hooks = false gets it flipped to true (we own this flag;
-// without it our hooks don't run).
+// hooks = false gets it flipped to true (we own this flag; without it
+// our hooks don't run).
 func TestEnableHooksFeatureFlagOverwritesWrongValue(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "config.toml")
 	existing := `[features]
-codex_hooks = false
+hooks = false
 `
 	_ = os.WriteFile(cfg, []byte(existing), 0o600)
 	if err := EnableHooksFeatureFlag(cfg); err != nil {
@@ -319,10 +323,108 @@ codex_hooks = false
 	}
 	got, _ := os.ReadFile(cfg)
 	s := string(got)
-	if !strings.Contains(s, "codex_hooks = true") {
+	if !strings.Contains(s, "hooks = true") {
 		t.Errorf("flag not flipped to true: %q", s)
 	}
-	if strings.Contains(s, "codex_hooks = false") {
+	if strings.Contains(s, "hooks = false") {
 		t.Errorf("stale false value still present: %q", s)
 	}
+}
+
+// TestEnableHooksFeatureFlagDeprecatedAliasSatisfies: a config that
+// already has `codex_hooks = true` (the deprecated alias, e.g. from an
+// older thlibo or git-ai) is left UNCHANGED — we must not add a second,
+// canonical `hooks = true` line beside it (the #56-followup bug where
+// the box ended up with both).
+func TestEnableHooksFeatureFlagDeprecatedAliasSatisfies(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	existing := `[features]
+codex_hooks = true
+`
+	_ = os.WriteFile(cfg, []byte(existing), 0o600)
+	if err := EnableHooksFeatureFlag(cfg); err != nil {
+		t.Fatalf("EnableHooksFeatureFlag: %v", err)
+	}
+	got, _ := os.ReadFile(cfg)
+	s := string(got)
+	if strings.Contains(s, "\nhooks = true") || strings.HasPrefix(s, "hooks = true") {
+		t.Errorf("must not add canonical hooks beside existing codex_hooks alias: %q", s)
+	}
+	if !strings.Contains(s, "codex_hooks = true") {
+		t.Errorf("existing alias should be preserved: %q", s)
+	}
+}
+
+// TestEnableHooksFeatureFlagCanonicalAlreadyPresent: `hooks = true`
+// already there → no change, no duplicate.
+func TestEnableHooksFeatureFlagCanonicalAlreadyPresent(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	existing := `[features]
+hooks = true
+`
+	_ = os.WriteFile(cfg, []byte(existing), 0o600)
+	if err := EnableHooksFeatureFlag(cfg); err != nil {
+		t.Fatalf("EnableHooksFeatureFlag: %v", err)
+	}
+	got, _ := os.ReadFile(cfg)
+	if n := countFlagLines(string(got), "hooks"); n != 1 {
+		t.Errorf("expected exactly 1 hooks flag line, got %d: %q", n, string(got))
+	}
+}
+
+// TestEnableHooksFeatureFlagPreservesInlineComment: `hooks = true` with
+// a trailing TOML comment is already enabled — must be left UNCHANGED
+// (not rewritten, which would strip the comment). Review-found.
+func TestEnableHooksFeatureFlagPreservesInlineComment(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	existing := "[features]\nhooks = true  # enabled by git-ai\n"
+	_ = os.WriteFile(cfg, []byte(existing), 0o600)
+	if err := EnableHooksFeatureFlag(cfg); err != nil {
+		t.Fatalf("EnableHooksFeatureFlag: %v", err)
+	}
+	got, _ := os.ReadFile(cfg)
+	if string(got) != existing {
+		t.Errorf("config with `hooks = true # comment` must be untouched.\n got: %q\nwant: %q", got, existing)
+	}
+}
+
+// TestEnableHooksFeatureFlagPreservesIndentationOnFlip: a `hooks = false`
+// line with leading whitespace is flipped to true KEEPING its indent.
+// Review-found.
+func TestEnableHooksFeatureFlagPreservesIndentationOnFlip(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	existing := "[features]\n    hooks = false\n"
+	_ = os.WriteFile(cfg, []byte(existing), 0o600)
+	if err := EnableHooksFeatureFlag(cfg); err != nil {
+		t.Fatalf("EnableHooksFeatureFlag: %v", err)
+	}
+	got, _ := os.ReadFile(cfg)
+	if !strings.Contains(string(got), "    hooks = true") {
+		t.Errorf("indentation not preserved on flip: %q", string(got))
+	}
+	if strings.Contains(string(got), "hooks = false") {
+		t.Errorf("stale false value remains: %q", string(got))
+	}
+}
+
+// countFlagLines counts lines that are an assignment of exactly `key`
+// (so "hooks" does not match "codex_hooks" or a "[hooks]" table header).
+func countFlagLines(content, key string) int {
+	n := 0
+	for _, line := range strings.Split(content, "\n") {
+		t := strings.TrimSpace(line)
+		rest, ok := strings.CutPrefix(t, key)
+		if !ok {
+			continue
+		}
+		rest = strings.TrimLeft(rest, " \t")
+		if strings.HasPrefix(rest, "=") {
+			n++
+		}
+	}
+	return n
 }

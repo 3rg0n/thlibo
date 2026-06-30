@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Codex hook install: prefer the canonical `hooks` feature flag and
+  surface the trust step.** Current Codex CLI (verified against
+  v0.142.4) renamed the feature flag from `codex_hooks` to `hooks`
+  (`codex_hooks` is now a deprecated alias) and gates command hooks
+  behind a trust-on-first-use step. The installer now (1) writes
+  `[features] hooks = true`, treating an existing `hooks = true` **or**
+  `codex_hooks = true` as already-satisfied so it never duplicates the
+  flag (previously it always appended `codex_hooks = true`, leaving two
+  flags when another tool had already enabled `hooks`), and (2) prints
+  an `ACTION REQUIRED` reminder to run `/hooks` in Codex and trust the
+  hook — without which Codex installs the hook but never executes it, so
+  compression silently stays off. Also corrected the stale `--codex`
+  flag help text (it referenced Claude Code's `updatedInput` mechanism;
+  Codex uses PostToolUse `decision: block`). thlibo's `hooks.json`
+  format and `decision: block` output-substitution remain
+  schema-compatible with current Codex — no wire change.
+
 ## [0.7.6] - 2026-06-30
 
 ### Added

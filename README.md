@@ -213,6 +213,13 @@ a running, login-autostarting daemon with no manual step.
 --codex               Also install the Codex CLI PostToolUse hook.
 ```
 
+With `--codex`, thlibo writes a PostToolUse hook to `~/.codex/hooks.json`
+and sets `[features] hooks = true` in `~/.codex/config.toml`. Codex
+gates command hooks behind a **trust step**: after install, run `/hooks`
+inside Codex, review the thlibo hook, and approve it — until you do,
+Codex sees the hook but won't run it (compression stays off). The
+installer prints this reminder.
+
 The model GGUF (~5.1 GB Gemma 4 E4B) is downloaded by inferd on
 first inference request, into a shared per-platform model store
 (`~/.local/share/models/` on Linux, `~/Library/Application Support/models/`
