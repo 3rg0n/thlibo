@@ -1,0 +1,19 @@
+docs/site/index.html
+  s_a1c7fc31273869::t_9d70bb2552e007 517,572
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "85d11a0b803b74fa43d060d41162f6370116ec1f",
+  "prompts": {},
+  "sessions": {
+    "s_a1c7fc31273869": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "06496eab-6822-4785-a1fe-7645d91834da",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
