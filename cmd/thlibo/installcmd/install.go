@@ -60,7 +60,7 @@ func Run(argv []string) int {
 	fs.StringVar(&inferdVersion, "inferd-version", "", "pin inferd to a specific tag (default: latest non-prerelease)")
 	var installCodex bool
 	var codexHooksPath string
-	fs.BoolVar(&installCodex, "codex", false, "also install the Codex CLI hook (advisory until Codex lands updatedInput support)")
+	fs.BoolVar(&installCodex, "codex", false, "also install the Codex CLI PostToolUse hook (decision:block substitutes compressed output)")
 	fs.StringVar(&codexHooksPath, "codex-hooks", "", "override Codex hooks.json path (default: ~/.codex/hooks.json)")
 	if err := fs.Parse(argv); err != nil {
 		return 2
