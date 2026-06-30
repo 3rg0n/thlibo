@@ -6,7 +6,7 @@ agents that need architectural context in a single shot.
 
 ## Status
 
-v0.7.6 (current). Single binary shipped (`thlibo`); inference runs in
+v0.7.7 (current). Single binary shipped (`thlibo`); inference runs in
 a separate sidecar, **`inferd`** (its own repo, github.com/3rg0n/inferd),
 which `thlibo install` probe-or-installs. `thlibo install` is zero-touch
 on all three OSes (incl. Windows arm64): it copies inferd's `backends/`
@@ -15,9 +15,10 @@ the per-user installer (LaunchAgent / systemd-user / Startup-shortcut),
 and probes the daemon for readiness before reporting success
 (fresh-install fixes, #47). `thlibo upgrade` rename-then-replaces its own
 binary so it works while running (#52). Claude Code hooks for Bash +
-PowerShell + Read + Write/Edit tools, Codex PostToolUse hook, full test +
-scanner CI on linux/macOS/Windows, signed releases via Sigstore keyless,
-CycloneDX SBOM.
+PowerShell + Read + Write/Edit tools; Codex PostToolUse hook (writes the
+canonical `[features] hooks` flag + reminds you to trust it via `/hooks`,
+#57). Full test + scanner CI on linux/macOS/Windows, signed releases via
+Sigstore keyless, CycloneDX SBOM.
 
 > History: through v0.5.x thlibo shipped a second binary, `thlibod`,
 > that spawned llamafile directly. ADR 0005 extracted all inference

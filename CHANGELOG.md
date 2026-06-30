@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-07-01
+
 ### Fixed
 
 - **Codex hook install: prefer the canonical `hooks` feature flag and
