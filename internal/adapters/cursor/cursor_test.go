@@ -327,6 +327,17 @@ func runHook(t *testing.T, stdin, rewriteOut string, rewriteExit int) (string, i
 	return string(out), code
 }
 
+// hasTimeoutBin reports whether a timeout/gtimeout binary is on PATH —
+// the bound the read hook needs to run `thlibo case`. Stock macOS has
+// neither (coreutils ships gtimeout via brew).
+func hasTimeoutBin() bool {
+	if _, err := exec.LookPath("timeout"); err == nil {
+		return true
+	}
+	_, err := exec.LookPath("gtimeout")
+	return err == nil
+}
+
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 func itoa(n int) string {
 	if n == 0 {
@@ -452,6 +463,14 @@ func runReadHook(t *testing.T, stdin, caseOut string, caseExit int) (string, int
 	}
 	if _, err := exec.LookPath("jq"); err != nil {
 		t.Skip("jq not available")
+	}
+	// The rewrite path requires a timeout binary — without one the hook
+	// (correctly) passes through and never runs `thlibo case`. That
+	// no-timeout behaviour is covered separately by
+	// TestReadHookNoTimeoutBinaryPassthrough; here we need a timeout to
+	// reach the case logic. Stock macOS has neither, so skip there.
+	if !hasTimeoutBin() {
+		t.Skip("no timeout/gtimeout binary; rewrite path can't run (covered by TestReadHookNoTimeoutBinaryPassthrough)")
 	}
 	dir := t.TempDir()
 	// If the fake case should "succeed", pre-create its compressed.log.
