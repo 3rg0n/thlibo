@@ -1,0 +1,22 @@
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_056f4c1f3c80e4 21
+  s_5811b7f24eccc0::t_07830d94f192ea 408-416,428-439
+internal/adapters/cursor/cursor_test.go
+  s_5811b7f24eccc0::t_7b146ed0762076 179-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "4aedced8ccf771a066e9a3d5ed9752d48fad8b19",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
