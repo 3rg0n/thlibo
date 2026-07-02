@@ -307,6 +307,33 @@ func TestHookCommandBashWrapsOnWindows(t *testing.T) {
 	}
 }
 
+// TestMergeHooksJSONReinstallNoDoubleWrap: repeated installs must not
+// double-wrap the (Windows) bash-wrapped command — the marker upsert
+// replaces the whole entry, so `bash.exe` and the hook filename each
+// appear exactly once no matter how many times install runs (review).
+func TestMergeHooksJSONReinstallNoDoubleWrap(t *testing.T) {
+	dir := t.TempDir()
+	hp := filepath.Join(dir, "hooks.json")
+	shellHook, readHook := hookPaths(dir)
+	for i := 0; i < 3; i++ {
+		if err := MergeHooksJSON(hp, shellHook, readHook); err != nil {
+			t.Fatalf("pass %d: %v", i, err)
+		}
+	}
+	var root map[string]any
+	buf, _ := os.ReadFile(hp)
+	_ = json.Unmarshal(buf, &root)
+	for _, e := range root["hooks"].(map[string]any)["preToolUse"].([]any) {
+		cmd := e.(map[string]any)["command"].(string)
+		if n := strings.Count(strings.ToLower(cmd), "bash.exe"); n > 1 {
+			t.Errorf("command double-wrapped after reinstall: %q", cmd)
+		}
+		if n := strings.Count(cmd, "cursor.sh"); n != 1 {
+			t.Errorf("hook path should appear once, got %d: %q", n, cmd)
+		}
+	}
+}
+
 // TestMergeHooksJSONPreservesExistingVersion: if the user already set a
 // version (e.g. a future 2), we don't override it.
 func TestMergeHooksJSONPreservesExistingVersion(t *testing.T) {

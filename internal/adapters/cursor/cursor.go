@@ -221,9 +221,16 @@ func findBashWindows() string {
 			return c
 		}
 	}
-	// Last resort: PATH lookup (covers non-standard installs / WSL bash).
+	// Last resort: PATH lookup (covers non-standard Git installs). Skip a
+	// WSL bash (System32\bash.exe / a WSL shim): it runs under a Linux
+	// filesystem view and can't execute a `C:/Users/...` hook path, so
+	// it would fail at runtime — better to return "" (bare path, install
+	// stays non-fatal) than wire a bash that can't run the hook.
 	if p, err := exec.LookPath("bash"); err == nil {
-		return p
+		lower := strings.ToLower(normalisePath(p))
+		if !strings.Contains(lower, "/system32/") && !strings.Contains(lower, "/windows/") {
+			return p
+		}
 	}
 	return ""
 }
