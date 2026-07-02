@@ -1,0 +1,62 @@
+internal/adapters/cursor/hook-read.sh
+  s_5811b7f24eccc0::t_30f73a5d4455fa 1-105
+internal/adapters/cursor/cursor.go
+  s_5811b7f24eccc0::t_dc22765e61028f 39-42,45-50
+  s_5e38537fd2cf36::t_2b90d9a0e1ad96 51-54,58,68-73,75-79,81-84,88-90,92-97,122-123,138-139,141-144,162,164,171
+CHANGELOG.md
+  s_5811b7f24eccc0::t_3489c5d9c1144e 12-27
+  s_5811b7f24eccc0::t_0222d248a1fa4e 28-30
+  s_5811b7f24eccc0::t_8fac86b1bddcba 31-38
+internal/adapters/cursor/cursor_test.go
+  s_5811b7f24eccc0::t_73850b25dfaf27 65-69,72,76-77,88-95,97-98,103-104,112,117-118,130-131,133,135-137,139-142,146,148-149,153-154,158,160,165-175,185,212,224-225,398,402,405,411,417,421,431,433,446,450,453,458-459,483,495,502
+  s_5811b7f24eccc0::t_f7c11dce142a85 186
+  s_5811b7f24eccc0::t_cf1fc21c53efd6 211
+  s_5811b7f24eccc0::t_e60b18c852046c 213-214
+  s_5811b7f24eccc0::t_985419ba60e190 396-397
+  s_5811b7f24eccc0::t_b7d15ed67228d1 399-401
+  s_5811b7f24eccc0::t_8c97c8c2f69ee0 403-404
+  s_5811b7f24eccc0::t_6acdd01d19f8ca 406-410
+  s_5811b7f24eccc0::t_42cacf9e51135e 412-416
+  s_5811b7f24eccc0::t_5562a1b43e13c0 418-420
+  s_5811b7f24eccc0::t_da16e2021ffcfe 422-424,428-430
+  s_5811b7f24eccc0::t_b0e5ff4fa31849 432
+  s_5811b7f24eccc0::t_077cea38eb9830 434-436,443-445
+  s_5811b7f24eccc0::t_dcad12eb02c394 447-449
+  s_5811b7f24eccc0::t_09dfd36e9be59d 451-452
+  s_5811b7f24eccc0::t_e629dc69d61368 454-457
+  s_5811b7f24eccc0::t_c3e188ab2b4cb6 460-462,480-482
+  s_5811b7f24eccc0::t_ab46e40bc4d00e 484-486
+  s_5811b7f24eccc0::t_64575d6b166f53 496-501
+  s_5811b7f24eccc0::t_c0ac287aa02f15 503-505
+  s_5811b7f24eccc0::t_079edbfa37de8d 196-197,201-203,388-394,425-427,437-442,463-479,487-493
+.gitattributes
+  s_5811b7f24eccc0::t_38ed64af2540c1 1-19
+README.md
+  s_5e38537fd2cf36::t_ac582411145c6c 51,497-507
+cmd/thlibo/installcmd/install.go
+  s_5e38537fd2cf36::t_bd7606ce4b661b 68,384-387,390-394,398,401-406
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "4c9c797c2007655b02612127ee4e2577597e9dfb",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5e38537fd2cf36": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38315268-d55d-4da6-95ec-df3dc1923a00",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
