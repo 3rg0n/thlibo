@@ -1,0 +1,23 @@
+internal/adapters/cursor/hook.sh
+  s_5811b7f24eccc0::t_90c68393d0ab23 48-56
+internal/adapters/cursor/cursor_test.go
+  s_5811b7f24eccc0::t_d6f99eb21cbdc1 420-479
+internal/adapters/cursor/hook-read.sh
+  s_5811b7f24eccc0::t_f111b0be7425d4 42-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "887b36fdf2ffd8f5f9b59dd441fc26b183e64bb5",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
