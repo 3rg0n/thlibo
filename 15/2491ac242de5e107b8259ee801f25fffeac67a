@@ -1,0 +1,28 @@
+internal/adapters/cursor/cursor_test.go
+  s_5811b7f24eccc0::t_266d93cce48138 285-306
+  s_5811b7f24eccc0::t_2a084ae5bbcabb 256-260,262-273,275-278,280-281
+  s_5811b7f24eccc0::t_fff5ab151465e7 282-284
+CHANGELOG.md
+  s_5811b7f24eccc0::t_977c2fdd920dcb 27-36
+internal/adapters/cursor/cursor.go
+  s_5811b7f24eccc0::t_8aa34e74f83ad3 158,166,174,178-216,220-229
+  s_5811b7f24eccc0::t_6eec85948bfabd 217-219
+  s_5811b7f24eccc0::t_c624b8ff9d4c25 32,34
+  s_5811b7f24eccc0::t_e1ede618c84ca2 230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "152491ac242de5e107b8259ee801f25fffeac67a",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
