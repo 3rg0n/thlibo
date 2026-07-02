@@ -1,0 +1,36 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_87ede4affa5115 10-17
+  s_5811b7f24eccc0::t_de3c4b734f9c86 18-20
+  s_5811b7f24eccc0::t_cffb69363afeb7 21-26
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_334cce84ad58f8 27
+  s_5811b7f24eccc0::t_3eef01dc2bc99f 66-69,74-75,79-81,142-150,375-402
+internal/adapters/cursor/hook.sh
+  s_5811b7f24eccc0::t_86c0c366a0b54b 1-88
+internal/adapters/cursor/cursor.go
+  s_5811b7f24eccc0::t_814bcd0421adea 1-162
+internal/adapters/cursor/cursor_test.go
+  s_5811b7f24eccc0::t_570db34b950216 1-34,47-221
+  s_5811b7f24eccc0::t_50b49345732636 35-39,42-43,46
+  s_5811b7f24eccc0::t_15834fda37ea06 40-41,44-45
+README.md
+  s_5811b7f24eccc0::t_bb69d184e8f099 49-51,215,497-505
+docs/site/index.html
+  s_5811b7f24eccc0::t_2600fe0c11c8f5 6,9,550
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "7940c0a6656ae7d975f78bf39717d320a441cc5f",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
