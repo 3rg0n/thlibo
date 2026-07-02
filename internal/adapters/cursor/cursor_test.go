@@ -417,6 +417,66 @@ func TestHookOutputPassthrough(t *testing.T) {
 	}
 }
 
+// TestHookInvalidJSONEscapes: Cursor can emit shell-escaped args with
+// invalid JSON escapes (`\(`, `\ `) that make jq bail (#62). The hook
+// must sanitize + still parse, not silently passthrough. Here a Shell
+// command carrying such escapes must still reach `thlibo rewrite` and
+// produce the rewrite JSON.
+func TestHookInvalidJSONEscapes(t *testing.T) {
+	// A command with literal backslash-escapes that are NOT valid JSON:
+	// `cat foo\ \(1\).txt`. jq alone would fail on this input.
+	stdin := `{"tool_name":"Shell","tool_input":{"command":"cat foo\ \(1\).txt"}}`
+	out, code := runHook(t, stdin, "thlibo exec -- cat foo (1).txt", 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("hook output not valid JSON (sanitizer failed?): %v (%q)", err, out)
+	}
+	ui, _ := resp["updated_input"].(map[string]any)
+	if ui["command"] != "thlibo exec -- cat foo (1).txt" {
+		t.Errorf("command not rewritten from invalid-escape input: %v", ui["command"])
+	}
+}
+
+// TestReadHookInvalidJSONEscapes: the #62 repro — a Read of a
+// shell-escaped path (`\(`, `\ `) must sanitize, extract the real path,
+// and rewrite to the compressed file rather than crash on jq.
+func TestReadHookInvalidJSONEscapes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX shell")
+	}
+	if !hasTimeoutBin() {
+		t.Skip("no timeout binary; rewrite path can't run")
+	}
+	dir := t.TempDir()
+	// Real file whose name has spaces + parens.
+	realName := "ATC (Phase 1).pdf"
+	realPath := filepath.Join(dir, realName)
+	_ = os.WriteFile(realPath, []byte("%PDF-1.4\n"), 0o644) // pdf skips size gate
+	// The escaped form Cursor sends (invalid JSON): backslash-space,
+	// backslash-paren.
+	escaped := strings.NewReplacer(" ", `\ `, "(", `\(`, ")", `\)`).Replace(normalisePath(realPath))
+	stdin := `{"tool_name":"Read","tool_input":{"file_path":"` + escaped + `"}}`
+	caseDir := filepath.Join(dir, "case")
+	out, code := runReadHook(t, stdin, caseDir, 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatalf("expected a rewrite for the escaped path, got passthrough (sanitizer failed)")
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("output not JSON: %v (%q)", err, out)
+	}
+	fp, _ := resp["updated_input"].(map[string]any)["file_path"].(string)
+	if !strings.HasSuffix(fp, "compressed.log") {
+		t.Errorf("escaped path not redirected to compressed.log: %v", fp)
+	}
+}
+
 // TestHookDisabledKillSwitch: THLIBO_DISABLED short-circuits to
 // passthrough even for a wrappable command.
 func TestHookDisabledKillSwitch(t *testing.T) {

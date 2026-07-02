@@ -45,6 +45,15 @@ esac
 
 INPUT=$(cat)
 
+# Tolerate invalid JSON escapes from Cursor (shell-escaped paths/args
+# like `\(` or `\ ` are not legal JSON escapes and make jq bail — #62).
+# If the raw input doesn't parse, strip backslashes preceding a
+# NON-escape char (valid escapes \" \\ \/ \b \f \n \r \t \u kept) and
+# retry. Valid input skips this untouched.
+if ! printf '%s' "$INPUT" | jq -e . >/dev/null 2>&1; then
+  INPUT=$(printf '%s' "$INPUT" | sed 's#\\\([^"\\/bfnrtu]\)#\1#g')
+fi
+
 # Only act on the built-in Shell tool. Cursor fires preToolUse for every
 # tool; a non-Shell tool (or a missing command) is passed through.
 TOOL=$(jq -r '.tool_name // empty' <<<"$INPUT")
