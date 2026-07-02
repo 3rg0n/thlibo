@@ -48,7 +48,7 @@ density (`CORDON_MAX_WINDOWS=5000`).
 
 Works with Claude Code (Bash + PowerShell + Read + Write/Edit hooks),
 Codex CLI (PostToolUse `decision: block`), and Cursor IDE (preToolUse
-`updated_input` command rewrite; shell output only).
+`updated_input` command + file-read rewrite; no MCP).
 
 ---
 
@@ -494,14 +494,17 @@ Every hook honours this flag and exits passthrough immediately.
   path), and `Write` / `Edit` tools (when shorthand auto-apply is
   enabled). `Grep` / `Glob` / `MCP`-served tools bypass the hook —
   their inputs and outputs are not intercepted.
-- **Cursor: shell commands only.** `thlibo install --cursor` installs a
-  `preToolUse` hook that rewrites the Shell command (via `updated_input`)
-  to run through `thlibo exec`, so terminal output is compressed before
-  the model reads it — the same command-wrap mechanism as the Claude
-  Code Bash hook. Cursor's hooks **cannot** substitute `Read` or MCP tool
-  output for the built-in tools (`afterShellExecution` is observe-only;
-  `updated_mcp_tool_output` is MCP-server-only), so on Cursor only shell
-  output is compressed. User-level `~/.cursor/hooks.json` loads
+- **Cursor: shell + file reads, no MCP.** `thlibo install --cursor`
+  installs two `preToolUse` hooks. The **Shell** hook rewrites the
+  command (via `updated_input`) to run through `thlibo exec`, so terminal
+  output is compressed before the model reads it. The **Read** hook
+  rewrites `tool_input.file_path` to a pre-built `thlibo case`
+  (`compressed.log`) so large logs/PDFs are compressed too — bounded by a
+  timeout (`THLIBO_READ_TIMEOUT`, default 20s) so a slow scanned-PDF OCR
+  falls through to the original rather than hanging Cursor. Cursor's
+  hooks still **cannot** substitute MCP-tool output for built-in tools
+  (`afterShellExecution` is observe-only; `updated_mcp_tool_output` is
+  MCP-server-only). User-level `~/.cursor/hooks.json` loads
   automatically; project-scoped hooks require a trusted workspace.
 - **Compound shell commands pass through.** `git status | head` or
   `cmd1 && cmd2` are not rewritten — only single-program

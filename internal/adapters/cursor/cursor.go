@@ -36,15 +36,26 @@ import (
 //go:embed hook.sh
 var hookScript []byte
 
-// HookScript returns the embedded Cursor hook script bytes.
+//go:embed hook-read.sh
+var readHookScript []byte
+
+// HookScript returns the embedded Cursor Shell-tool hook script bytes.
 func HookScript() []byte { return hookScript }
 
-// WriteHookScript writes the hook script to path (0o700, owner-only).
-func WriteHookScript(path string) error {
+// ReadHookScript returns the embedded Cursor Read-tool hook script bytes.
+func ReadHookScript() []byte { return readHookScript }
+
+// WriteHookScript writes the Shell-tool hook script to path (0o700).
+func WriteHookScript(path string) error { return writeScript(path, hookScript) }
+
+// WriteReadHookScript writes the Read-tool hook script to path (0o700).
+func WriteReadHookScript(path string) error { return writeScript(path, readHookScript) }
+
+func writeScript(path string, script []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("cursor: create hook dir: %w", err)
 	}
-	if err := os.WriteFile(path, hookScript, 0o600); err != nil {
+	if err := os.WriteFile(path, script, 0o600); err != nil {
 		return fmt.Errorf("cursor: write hook: %w", err)
 	}
 	// #nosec G302 -- owner-execute required; group/other remain 0.
@@ -54,27 +65,36 @@ func WriteHookScript(path string) error {
 	return nil
 }
 
-// hookMarker is the filename substring we use to recognise a
-// previously-installed thlibo entry and update it in place.
-const hookMarker = "thlibo-rewrite-cursor.sh"
+// Filename markers used to recognise a previously-installed thlibo entry
+// and update it in place (one per tool the hooks cover).
+const (
+	shellHookMarker = "thlibo-rewrite-cursor.sh"
+	readHookMarker  = "thlibo-read-cursor.sh"
+)
 
-// shellMatcher scopes the preToolUse hook to the built-in Shell tool
-// (Cursor matches preToolUse by tool type: "Shell", "Read", "Write", …).
-const shellMatcher = "Shell"
+// Cursor matches preToolUse by tool type ("Shell", "Read", "Write", …).
+const (
+	shellMatcher = "Shell"
+	readMatcher  = "Read"
+)
 
-// MergeHooksJSON loads hooksPath, adds a preToolUse/"Shell" entry
-// pointing at hookPath, and writes back. Every unrelated key and every
-// other hook entry is preserved.
+// MergeHooksJSON loads hooksPath, adds thlibo's preToolUse entries — one
+// for the "Shell" tool (shellHookPath, command rewrite) and one for the
+// "Read" tool (readHookPath, file_path rewrite) — and writes back. Every
+// unrelated key and every other hook entry is preserved.
 //
 // The Cursor hooks.json schema is:
 //
-//	{ "version": 1, "hooks": { "preToolUse": [ { "matcher": "Shell",
-//	  "command": "<hook>" } ] } }
+//	{ "version": 1, "hooks": { "preToolUse": [
+//	    { "matcher": "Shell", "command": "<shell-hook>" },
+//	    { "matcher": "Read",  "command": "<read-hook>" } ] } }
 //
-// Idempotent; recognises a prior install by the hookMarker substring;
-// refuses to overwrite malformed JSON so corruption is never silent.
-func MergeHooksJSON(hooksPath, hookPath string) error {
-	hookPath = normalisePath(hookPath)
+// Idempotent; recognises prior installs by each hook's filename marker
+// and updates them in place; refuses to overwrite malformed JSON so
+// corruption is never silent.
+func MergeHooksJSON(hooksPath, shellHookPath, readHookPath string) error {
+	shellHookPath = normalisePath(shellHookPath)
+	readHookPath = normalisePath(readHookPath)
 
 	var root map[string]any
 	buf, err := os.ReadFile(hooksPath) // #nosec G304 -- hooksPath is chosen by the installer, not user input.
@@ -99,7 +119,8 @@ func MergeHooksJSON(hooksPath, hookPath string) error {
 		root["version"] = 1
 	}
 
-	addPreToolUseHook(root, hookPath)
+	upsertPreToolUseHook(root, shellMatcher, shellHookMarker, shellHookPath)
+	upsertPreToolUseHook(root, readMatcher, readHookMarker, readHookPath)
 
 	encoded, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
@@ -114,11 +135,13 @@ func MergeHooksJSON(hooksPath, hookPath string) error {
 	return nil
 }
 
-// addPreToolUseHook walks/creates hooks.preToolUse[?matcher=="Shell"]
-// and appends (or updates in-place) the thlibo entry. Cursor's
+// upsertPreToolUseHook adds (or updates in place) the thlibo preToolUse
+// entry identified by marker, setting its matcher + command. Cursor's
 // preToolUse entries are flat objects ({matcher, command, ...}), not the
-// nested {matcher, hooks:[...]} shape Codex/Claude Code use.
-func addPreToolUseHook(root map[string]any, hookPath string) {
+// nested {matcher, hooks:[...]} shape Codex/Claude Code use. A prior
+// entry is recognised by its filename marker so reinstalls are
+// idempotent and each tool's hook is tracked independently.
+func upsertPreToolUseHook(root map[string]any, matcher, marker, hookPath string) {
 	hooks, _ := root["hooks"].(map[string]any)
 	if hooks == nil {
 		hooks = map[string]any{}
@@ -130,24 +153,22 @@ func addPreToolUseHook(root map[string]any, hookPath string) {
 		pre = []any{}
 	}
 
-	// Update in place if a thlibo entry is already present (idempotent
-	// reinstall), regardless of its matcher.
 	for i, h := range pre {
 		obj, ok := h.(map[string]any)
 		if !ok {
 			continue
 		}
 		cmd, _ := obj["command"].(string)
-		if strings.Contains(normalisePath(cmd), hookMarker) {
+		if strings.Contains(normalisePath(cmd), marker) {
 			obj["command"] = hookPath
-			obj["matcher"] = shellMatcher
+			obj["matcher"] = matcher
 			pre[i] = obj
 			hooks["preToolUse"] = pre
 			return
 		}
 	}
 
-	pre = append(pre, map[string]any{"matcher": shellMatcher, "command": hookPath})
+	pre = append(pre, map[string]any{"matcher": matcher, "command": hookPath})
 	hooks["preToolUse"] = pre
 }
 
