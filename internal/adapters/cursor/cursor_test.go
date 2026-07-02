@@ -176,6 +176,56 @@ func TestMergeHooksJSONIdempotent(t *testing.T) {
 	}
 }
 
+// TestMergeHooksJSONUpgradeFromShellOnly: the rc.1 -> rc.2 upgrade path.
+// A hooks.json that already has ONLY the Shell entry (what rc.1
+// installed) must gain the Read entry on re-merge WITHOUT duplicating
+// Shell — the exact scenario a user already on the Cursor-Shell RC hits.
+func TestMergeHooksJSONUpgradeFromShellOnly(t *testing.T) {
+	dir := t.TempDir()
+	hp := filepath.Join(dir, "hooks.json")
+	shellHook, readHook := hookPaths(dir)
+	// Simulate an rc.1 install: only the Shell entry present.
+	rc1 := `{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      { "matcher": "Shell", "command": "` + normalisePath(shellHook) + `" }
+    ]
+  }
+}`
+	_ = os.WriteFile(hp, []byte(rc1), 0o600)
+
+	// rc.2 install re-runs the merge with both hooks.
+	if err := MergeHooksJSON(hp, shellHook, readHook); err != nil {
+		t.Fatalf("MergeHooksJSON: %v", err)
+	}
+	buf, _ := os.ReadFile(hp)
+	if n := strings.Count(string(buf), "thlibo-rewrite-cursor.sh"); n != 1 {
+		t.Errorf("expected exactly 1 Shell entry after upgrade, got %d: %s", n, buf)
+	}
+	if n := strings.Count(string(buf), "thlibo-read-cursor.sh"); n != 1 {
+		t.Errorf("expected the Read entry added on upgrade, got %d: %s", n, buf)
+	}
+	var root map[string]any
+	_ = json.Unmarshal(buf, &root)
+	pre := root["hooks"].(map[string]any)["preToolUse"].([]any)
+	if len(pre) != 2 {
+		t.Fatalf("expected 2 preToolUse entries after upgrade, got %d", len(pre))
+	}
+	// Confirm both matchers are present and correct.
+	byMatcher := map[string]string{}
+	for _, e := range pre {
+		obj := e.(map[string]any)
+		byMatcher[obj["matcher"].(string)] = obj["command"].(string)
+	}
+	if !strings.Contains(byMatcher["Shell"], "thlibo-rewrite-cursor.sh") {
+		t.Errorf("Shell entry wrong after upgrade: %v", byMatcher["Shell"])
+	}
+	if !strings.Contains(byMatcher["Read"], "thlibo-read-cursor.sh") {
+		t.Errorf("Read entry missing/wrong after upgrade: %v", byMatcher["Read"])
+	}
+}
+
 // TestMergeHooksJSONRejectsInvalidJSON: malformed existing file is not
 // clobbered — the merge errors instead of destroying user data.
 func TestMergeHooksJSONRejectsInvalidJSON(t *testing.T) {

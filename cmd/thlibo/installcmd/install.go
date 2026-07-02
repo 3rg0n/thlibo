@@ -18,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -404,6 +405,15 @@ func Run(argv []string) int {
 		// MCP-tool output for built-in tools.
 		fmt.Println("    Restart Cursor to load the hooks. Shell output and large file reads (logs, PDFs)")
 		fmt.Println("    are compressed; MCP-tool output can't be intercepted. Project hooks need a trusted workspace.")
+		// The Read hook bounds `thlibo case` with a timeout so a slow OCR
+		// can't hang Cursor. macOS has no `timeout` binary by default
+		// (coreutils ships it as `gtimeout`); without it the Read hook
+		// safely passes through instead of compressing. Point macOS users
+		// at the one-line fix.
+		if runtime.GOOS == "darwin" && !hasTimeoutBinary() {
+			fmt.Println("    macOS note: install coreutils for file-read compression — `brew install coreutils`")
+			fmt.Println("    (provides `gtimeout`; without it the Read hook passes files through uncompressed).")
+		}
 	}
 
 	if hint := wslAPEInteropHint(); hint != "" {
@@ -413,6 +423,18 @@ func Run(argv []string) int {
 
 	fmt.Println("thlibo install complete.")
 	return 0
+}
+
+// hasTimeoutBinary reports whether a `timeout`/`gtimeout` binary is on
+// PATH — the bound the Cursor Read hook needs so a slow OCR can't hang
+// the editor. Used only to decide whether to print the macOS coreutils
+// hint; the hook itself re-checks at runtime.
+func hasTimeoutBinary() bool {
+	if _, err := exec.LookPath("timeout"); err == nil {
+		return true
+	}
+	_, err := exec.LookPath("gtimeout")
+	return err == nil
 }
 
 // reportInferdInstall prints the InferdInstallResult in the same
