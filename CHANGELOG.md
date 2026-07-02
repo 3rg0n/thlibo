@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     through to the original rather than hanging Cursor. Low-value cases
     (scanned/binary/tiny, `thlibo case` exit 6) pass through unchanged.
 
+    Both hooks tolerate invalid JSON escapes in the envelope: Cursor can
+    send shell-escaped paths/commands (`\(`, `\ `) that aren't legal JSON
+    escapes and make `jq` bail; the hooks sanitize and retry so those
+    inputs still compress instead of silently passing through (#62).
+    On **Windows** the hooks.json `command` is bash-wrapped
+    (`"<git-bash>" "<hook>"`) — Cursor hands the command to the OS, and a
+    bare `.sh` path pops a "Select an app to open this .sh file" dialog
+    (no file association) so the hook never runs; wrapping it through
+    Git-for-Windows bash fixes that.
+
   Cursor still cannot substitute MCP-tool output for built-in tools
   (`afterShellExecution` observe-only, `updated_mcp_tool_output`
   MCP-server-only). New `internal/adapters/cursor` package (embedded

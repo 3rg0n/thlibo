@@ -253,15 +253,57 @@ func TestMergeHooksJSONNormalisesBackslashes(t *testing.T) {
 	if err := MergeHooksJSON(hp, winShell, winRead); err != nil {
 		t.Fatalf("MergeHooksJSON: %v", err)
 	}
+	// Check the PARSED command strings, not raw file bytes: on Windows
+	// the command is bash-wrapped (`"<bash>" "<hook>"`) and JSON escapes
+	// the embedded quotes as \" — those are legitimate JSON escapes, not
+	// path backslashes, so scanning raw bytes for `\` would false-fail.
+	var root map[string]any
 	buf, _ := os.ReadFile(hp)
-	if strings.Contains(string(buf), `\`) {
-		t.Errorf("backslashes not normalised: %s", buf)
+	if err := json.Unmarshal(buf, &root); err != nil {
+		t.Fatalf("output not valid JSON: %v", err)
 	}
-	if !strings.Contains(string(buf), "C:/Users/me/.thlibo/hooks/thlibo-rewrite-cursor.sh") {
-		t.Errorf("forward-slash Shell path missing: %s", buf)
+	cmds := map[string]string{}
+	for _, e := range root["hooks"].(map[string]any)["preToolUse"].([]any) {
+		obj := e.(map[string]any)
+		cmds[obj["matcher"].(string)] = obj["command"].(string)
 	}
-	if !strings.Contains(string(buf), "C:/Users/me/.thlibo/hooks/thlibo-read-cursor.sh") {
-		t.Errorf("forward-slash Read path missing: %s", buf)
+	for matcher, cmd := range cmds {
+		if strings.Contains(cmd, `\`) {
+			t.Errorf("%s command has an unnormalised backslash: %q", matcher, cmd)
+		}
+	}
+	// The forward-slash hook path must appear in each command (bare on
+	// Unix, or as the bash-wrapped argument on Windows).
+	if !strings.Contains(cmds["Shell"], "C:/Users/me/.thlibo/hooks/thlibo-rewrite-cursor.sh") {
+		t.Errorf("forward-slash Shell path missing: %q", cmds["Shell"])
+	}
+	if !strings.Contains(cmds["Read"], "C:/Users/me/.thlibo/hooks/thlibo-read-cursor.sh") {
+		t.Errorf("forward-slash Read path missing: %q", cmds["Read"])
+	}
+}
+
+// TestHookCommandBashWrapsOnWindows: Cursor hands the command to the OS.
+// On Windows a bare .sh path pops the "Select an app to open this .sh
+// file" dialog (no file association) and the hook never runs; the
+// command must be bash-wrapped. On Unix the shebang handles it, so the
+// command is the bare path.
+func TestHookCommandBashWrapsOnWindows(t *testing.T) {
+	got := hookCommand(`C:\x\thlibo-read-cursor.sh`)
+	if runtime.GOOS == "windows" {
+		if !strings.HasPrefix(got, `"`) || !strings.Contains(strings.ToLower(got), "bash") {
+			t.Errorf("on Windows the command must be bash-wrapped, got %q", got)
+		}
+		if !strings.Contains(got, "thlibo-read-cursor.sh") {
+			t.Errorf("wrapped command lost the hook path: %q", got)
+		}
+		if strings.Contains(got, `\`) {
+			t.Errorf("wrapped command has backslashes: %q", got)
+		}
+	} else {
+		// Unix: bare (forward-slashed) path, no bash prefix.
+		if strings.Contains(got, "bash") {
+			t.Errorf("on Unix the command should be the bare script path, got %q", got)
+		}
 	}
 }
 

@@ -29,7 +29,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -153,6 +155,7 @@ func upsertPreToolUseHook(root map[string]any, matcher, marker, hookPath string)
 		pre = []any{}
 	}
 
+	command := hookCommand(hookPath)
 	for i, h := range pre {
 		obj, ok := h.(map[string]any)
 		if !ok {
@@ -160,7 +163,7 @@ func upsertPreToolUseHook(root map[string]any, matcher, marker, hookPath string)
 		}
 		cmd, _ := obj["command"].(string)
 		if strings.Contains(normalisePath(cmd), marker) {
-			obj["command"] = hookPath
+			obj["command"] = command
 			obj["matcher"] = matcher
 			pre[i] = obj
 			hooks["preToolUse"] = pre
@@ -168,8 +171,61 @@ func upsertPreToolUseHook(root map[string]any, matcher, marker, hookPath string)
 		}
 	}
 
-	pre = append(pre, map[string]any{"matcher": matcher, "command": hookPath})
+	pre = append(pre, map[string]any{"matcher": matcher, "command": command})
 	hooks["preToolUse"] = pre
+}
+
+// hookCommand builds the hooks.json "command" string for a hook script.
+//
+// Cursor hands this string to the OS to execute. On Unix the script's
+// shebang runs it directly. On Windows there is no shebang and no `.sh`
+// file association, so a bare path pops the "Select an app to open this
+// .sh file" dialog and the hook never runs — Cursor must be told to run
+// it through bash. We locate Git-for-Windows / MSYS bash and emit
+// `"<bash>" "<hook>"` (quoted for the spaces in "Program Files"), the
+// same shape other Windows Cursor hooks (e.g. taco) use.
+func hookCommand(hookPath string) string {
+	hookPath = normalisePath(hookPath)
+	if runtime.GOOS != "windows" {
+		return hookPath
+	}
+	bash := findBashWindows()
+	if bash == "" {
+		// No bash found — emit the bare path. The hook can't run without
+		// bash anyway; this keeps install non-fatal and lets a
+		// PATH-resolvable bash (if any) still pick it up.
+		return hookPath
+	}
+	return `"` + normalisePath(bash) + `" "` + hookPath + `"`
+}
+
+// findBashWindows returns a bash.exe path on Windows, or "" if none is
+// found. Prefers Git for Windows' bash; falls back to PATH.
+func findBashWindows() string {
+	candidates := []string{
+		`C:\Program Files\Git\bin\bash.exe`,
+		`C:\Program Files\Git\usr\bin\bash.exe`,
+		`C:\Program Files (x86)\Git\bin\bash.exe`,
+	}
+	if pf := os.Getenv("ProgramFiles"); pf != "" {
+		candidates = append(candidates, filepath.Join(pf, "Git", "bin", "bash.exe"))
+	}
+	if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
+		candidates = append(candidates, filepath.Join(lad, "Programs", "Git", "bin", "bash.exe"))
+	}
+	for _, c := range candidates {
+		// #nosec G703 -- c is a literal Git-install subpath joined onto a
+		// trusted OS env dir (ProgramFiles/LOCALAPPDATA), not user input;
+		// we only Stat it to pick an existing bash.exe.
+		if info, err := os.Stat(c); err == nil && !info.IsDir() {
+			return c
+		}
+	}
+	// Last resort: PATH lookup (covers non-standard installs / WSL bash).
+	if p, err := exec.LookPath("bash"); err == nil {
+		return p
+	}
+	return ""
 }
 
 // normalisePath converts backslashes to forward slashes so bash -c
