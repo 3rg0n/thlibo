@@ -46,8 +46,9 @@ fixtures embedded with [inferd](https://github.com/3rg0n/inferd)'s
 300M-param embed model; top-percentile windows surfaced by k-NN
 density (`CORDON_MAX_WINDOWS=5000`).
 
-Works with Claude Code (Bash + PowerShell + Read + Write/Edit hooks)
-and Codex CLI (PostToolUse `decision: block`).
+Works with Claude Code (Bash + PowerShell + Read + Write/Edit hooks),
+Codex CLI (PostToolUse `decision: block`), and Cursor IDE (preToolUse
+`updated_input` command rewrite; shell output only).
 
 ---
 
@@ -211,6 +212,7 @@ a running, login-autostarting daemon with no manual step.
 --skip-inferd         Don't probe / install the inferd sidecar.
 --inferd-version      Pin inferd to a specific tag (default: latest).
 --codex               Also install the Codex CLI PostToolUse hook.
+--cursor              Also install the Cursor IDE preToolUse hook.
 ```
 
 With `--codex`, thlibo writes a PostToolUse hook to `~/.codex/hooks.json`
@@ -492,8 +494,15 @@ Every hook honours this flag and exits passthrough immediately.
   path), and `Write` / `Edit` tools (when shorthand auto-apply is
   enabled). `Grep` / `Glob` / `MCP`-served tools bypass the hook —
   their inputs and outputs are not intercepted.
-- **No Cursor support.** Claude Code and Codex CLI are both
-  supported; Cursor is not.
+- **Cursor: shell commands only.** `thlibo install --cursor` installs a
+  `preToolUse` hook that rewrites the Shell command (via `updated_input`)
+  to run through `thlibo exec`, so terminal output is compressed before
+  the model reads it — the same command-wrap mechanism as the Claude
+  Code Bash hook. Cursor's hooks **cannot** substitute `Read` or MCP tool
+  output for the built-in tools (`afterShellExecution` is observe-only;
+  `updated_mcp_tool_output` is MCP-server-only), so on Cursor only shell
+  output is compressed. User-level `~/.cursor/hooks.json` loads
+  automatically; project-scoped hooks require a trusted workspace.
 - **Compound shell commands pass through.** `git status | head` or
   `cmd1 && cmd2` are not rewritten — only single-program
   invocations. `thlibo rewrite` matches on `argv[0]` and deliberately

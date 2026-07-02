@@ -24,6 +24,7 @@ import (
 
 	"github.com/3rg0n/thlibo/internal/adapters/claudecode"
 	"github.com/3rg0n/thlibo/internal/adapters/codex"
+	"github.com/3rg0n/thlibo/internal/adapters/cursor"
 	"github.com/3rg0n/thlibo/internal/install"
 )
 
@@ -62,14 +63,21 @@ func Run(argv []string) int {
 	var codexHooksPath string
 	fs.BoolVar(&installCodex, "codex", false, "also install the Codex CLI PostToolUse hook (decision:block substitutes compressed output)")
 	fs.StringVar(&codexHooksPath, "codex-hooks", "", "override Codex hooks.json path (default: ~/.codex/hooks.json)")
+	var installCursor bool
+	var cursorHooksPath string
+	fs.BoolVar(&installCursor, "cursor", false, "also install the Cursor IDE preToolUse hook (updated_input rewrites the Shell command to compress its output)")
+	fs.StringVar(&cursorHooksPath, "cursor-hooks", "", "override Cursor hooks.json path (default: ~/.cursor/hooks.json)")
 	if err := fs.Parse(argv); err != nil {
 		return 2
 	}
 
-	// --skip-hook returns before the Codex block, so --codex --skip-hook
-	// would silently no-op the Codex install. Warn rather than mislead.
+	// --skip-hook returns before the Codex/Cursor blocks, so pairing it
+	// with --codex/--cursor would silently no-op that install. Warn.
 	if skipHook && installCodex {
 		fmt.Fprintln(os.Stderr, "install: --codex is ignored with --skip-hook (no Codex hook installed). Drop --skip-hook to install it.")
+	}
+	if skipHook && installCursor {
+		fmt.Fprintln(os.Stderr, "install: --cursor is ignored with --skip-hook (no Cursor hook installed). Drop --skip-hook to install it.")
 	}
 
 	if processorsDir == "" {
@@ -130,6 +138,15 @@ func Run(argv []string) int {
 		fmt.Printf("  codex hooks:    %s\n", cp)
 	} else {
 		fmt.Println("  codex hooks:    (skipped; use --codex to install)")
+	}
+	if installCursor {
+		cp := cursorHooksPath
+		if cp == "" && home != "" {
+			cp = filepath.Join(home, ".cursor", "hooks.json")
+		}
+		fmt.Printf("  cursor hooks:   %s\n", cp)
+	} else {
+		fmt.Println("  cursor hooks:   (skipped; use --cursor to install)")
 	}
 	if skipInferd {
 		fmt.Println("  inferd:         (skipped; --skip-inferd)")
@@ -353,6 +370,34 @@ func Run(argv []string) int {
 		fmt.Println("  ACTION REQUIRED — trust the hook so Codex will run it:")
 		fmt.Println("    Run `/hooks` inside Codex, review the thlibo PostToolUse hook, and approve it.")
 		fmt.Println("    Until trusted, Codex installs the hook but won't execute it (compression stays off).")
+	}
+
+	if installCursor {
+		cp := cursorHooksPath
+		if cp == "" {
+			if homeErr != nil {
+				fmt.Fprintln(os.Stderr, "install: cannot determine home dir for Cursor:", homeErr)
+				return 3
+			}
+			cp = filepath.Join(home, ".cursor", "hooks.json")
+		}
+		cursorHookPath := filepath.Join(hookDir, "thlibo-rewrite-cursor.sh")
+		if err := cursor.WriteHookScript(cursorHookPath); err != nil {
+			fmt.Fprintln(os.Stderr, "install: cursor hook:", err)
+			return 10
+		}
+		if err := cursor.MergeHooksJSON(cp, cursorHookPath); err != nil {
+			fmt.Fprintln(os.Stderr, "install: cursor hooks.json:", err)
+			return 10
+		}
+		fmt.Printf("  wrote Cursor hook + merged preToolUse/Shell into %s\n", cp)
+		// User-level ~/.cursor/hooks.json loads automatically; a
+		// project-scoped .cursor/hooks.json only runs in a trusted
+		// workspace (cursor.com/docs/hooks). Note it, and the mechanism
+		// limit: Cursor can rewrite the Shell command (so compression
+		// works) but cannot substitute Read/MCP output.
+		fmt.Println("    Restart Cursor to load the hook. Shell output is compressed via command rewrite;")
+		fmt.Println("    Read/MCP output can't be intercepted on Cursor. Project-level hooks need a trusted workspace.")
 	}
 
 	if hint := wslAPEInteropHint(); hint != "" {
