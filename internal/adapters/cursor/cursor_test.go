@@ -494,6 +494,67 @@ func TestReadHookPassthrough(t *testing.T) {
 	}
 }
 
+// TestReadHookNoTimeoutBinaryPassthrough: when neither `timeout` nor
+// `gtimeout` is on PATH (e.g. stock macOS without coreutils), the hook
+// must PASSTHROUGH rather than run `thlibo case` unbounded and risk
+// hanging Cursor on a slow OCR. Runs with a PATH containing only fakes
+// for the required binaries (jq, thlibo) — no timeout.
+func TestReadHookNoTimeoutBinaryPassthrough(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX shell")
+	}
+	realBash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	realJq, err := exec.LookPath("jq")
+	if err != nil {
+		t.Skip("jq not available")
+	}
+	dir := t.TempDir()
+	// Use a .pdf: PDFs skip the size gate, so the hook reaches the
+	// timeout check without needing `wc` (which isn't on our minimal
+	// PATH) — otherwise the test could passthrough at the size gate for
+	// the wrong reason.
+	big := filepath.Join(dir, "doc.pdf")
+	_ = os.WriteFile(big, []byte("%PDF-1.4\n"), 0o644)
+
+	bindir := filepath.Join(dir, "bin")
+	_ = os.MkdirAll(bindir, 0o755)
+	// Symlink the coreutils the hook needs (jq, plus tr/printf/etc. that
+	// run before the timeout check) into bindir, but deliberately NOT
+	// timeout/gtimeout. bash builtins (command, case, [, printf) work
+	// regardless; tr is external so link it.
+	for _, bin := range []string{"jq", "tr", "wc", "sed", "cat", "printf"} {
+		if p, err := exec.LookPath(bin); err == nil {
+			_ = os.Symlink(p, filepath.Join(bindir, bin))
+		}
+	}
+	_ = realJq // kept for the skip-guard above
+	// A fake `thlibo case` that, if ever called, would "succeed" — so if
+	// the hook DID run it (bug), we'd see output and the test fails.
+	caseDir := filepath.Join(dir, "case")
+	_ = os.MkdirAll(caseDir, 0o755)
+	_ = os.WriteFile(filepath.Join(caseDir, "compressed.log"), []byte("x\n"), 0o644)
+	fakeThlibo := "#!/usr/bin/env bash\nprintf '%s' " + shellQuote(caseDir) + "\nexit 0\n"
+	_ = os.WriteFile(filepath.Join(bindir, "thlibo"), []byte(fakeThlibo), 0o700) // #nosec G306
+
+	hookPath := filepath.Join(dir, "hook-read.sh")
+	if err := WriteReadHookScript(hookPath); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(realBash, hookPath)
+	cmd.Stdin = strings.NewReader(`{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`)
+	// PATH = ONLY our fake bindir. bash itself is invoked by absolute
+	// path, so it still runs; but `command -v timeout/gtimeout` inside
+	// the hook find nothing -> passthrough.
+	cmd.Env = []string{"PATH=" + bindir}
+	out, _ := cmd.Output()
+	if strings.TrimSpace(string(out)) != "" {
+		t.Errorf("no timeout binary must passthrough (no output), got %q", out)
+	}
+}
+
 func TestWriteReadHookScript(t *testing.T) {
 	dir := t.TempDir()
 	dest := filepath.Join(dir, "sub", "thlibo-read-cursor.sh")

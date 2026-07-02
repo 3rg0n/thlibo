@@ -21,9 +21,10 @@
 #     error                      scanned PDFs / binaries / tiny files, so
 #                                CASE_EXIT != 0 already covers low-value.)
 #
-# Requires: jq, thlibo binary on PATH. `timeout` (coreutils) optional —
-# if absent, thlibo case runs unbounded (still bounded by thlibo's own
-# inferd request timeout).
+# Requires: jq, thlibo on PATH, and a `timeout` binary (GNU coreutils;
+# `gtimeout` on macOS via `brew install coreutils`). `thlibo case` has no
+# internal timeout, so without a timeout binary the hook passes through
+# rather than risk hanging Cursor on a slow OCR.
 
 if ! command -v jq >/dev/null 2>&1; then
   exit 0
@@ -77,14 +78,25 @@ case "$PATH_IN" in
 esac
 
 # Build the case, bounded by a timeout so a slow OCR can't hang Cursor.
-# If `timeout` isn't installed, run unbounded (thlibo has its own
-# inferd request timeout as a backstop).
+# `thlibo case` uses context.Background() with no timeout of its own, so
+# a scanned-PDF OCR (~5-30s, occasionally longer) would block Cursor's
+# read indefinitely without this guard. GNU coreutils `timeout` is the
+# bound; macOS ships it as `gtimeout` (brew coreutils). If NEITHER is
+# present we do NOT run unbounded — we passthrough, because a possible
+# hang is worse than skipping compression for one read.
 TIMEOUT_SECS=${THLIBO_READ_TIMEOUT:-20}
+TIMEOUT_BIN=""
 if command -v timeout >/dev/null 2>&1; then
-  CASE_DIR=$(timeout "${TIMEOUT_SECS}s" thlibo case --quiet "$PATH_IN" 2>/dev/null)
-else
-  CASE_DIR=$(thlibo case --quiet "$PATH_IN" 2>/dev/null)
+  TIMEOUT_BIN=timeout
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_BIN=gtimeout
 fi
+if [ -z "$TIMEOUT_BIN" ]; then
+  # No timeout available (e.g. stock macOS without coreutils). Don't
+  # risk hanging Cursor on OCR — let it read the original.
+  exit 0
+fi
+CASE_DIR=$("$TIMEOUT_BIN" "${TIMEOUT_SECS}s" thlibo case --quiet "$PATH_IN" 2>/dev/null)
 CASE_EXIT=$?
 
 # CASE_EXIT != 0 covers: timeout (124), low-value (ExitLowValue=6),
