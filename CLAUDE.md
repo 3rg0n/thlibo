@@ -6,7 +6,7 @@ agents that need architectural context in a single shot.
 
 ## Status
 
-v0.7.7 (current). Single binary shipped (`thlibo`); inference runs in
+v0.7.8 (current). Single binary shipped (`thlibo`); inference runs in
 a separate sidecar, **`inferd`** (its own repo, github.com/3rg0n/inferd),
 which `thlibo install` probe-or-installs. `thlibo install` is zero-touch
 on all three OSes (incl. Windows arm64): it copies inferd's `backends/`
@@ -14,10 +14,12 @@ libs beside the daemon, pins the latest *stable* (non-`-rc`) inferd, runs
 the per-user installer (LaunchAgent / systemd-user / Startup-shortcut),
 and probes the daemon for readiness before reporting success
 (fresh-install fixes, #47). `thlibo upgrade` rename-then-replaces its own
-binary so it works while running (#52). Claude Code hooks for Bash +
-PowerShell + Read + Write/Edit tools; Codex PostToolUse hook (writes the
-canonical `[features] hooks` flag + reminds you to trust it via `/hooks`,
-#57). Full test + scanner CI on linux/macOS/Windows, signed releases via
+binary so it works while running (#52). Three AI clients: Claude Code
+hooks (Bash + PowerShell + Read + Write/Edit); Codex PostToolUse hook
+(canonical `[features] hooks` flag + `/hooks` trust reminder, #57);
+Cursor IDE `preToolUse` hooks (Shell command rewrite + Read file_path
+rewrite; bash-wrapped on Windows, invalid-JSON-escape tolerant, #59/#60/
+#62). Full test + scanner CI on linux/macOS/Windows, signed releases via
 Sigstore keyless, CycloneDX SBOM.
 
 > History: through v0.5.x thlibo shipped a second binary, `thlibod`,
@@ -139,6 +141,11 @@ failure to reach or parse, it fails open (ADR 0006).
   skill.
 - **`internal/adapters/codex/`** — PostToolUse hook using
   `decision: block` + `reason` to substitute the tool result.
+- **`internal/adapters/cursor/`** — `preToolUse` hooks (Shell +
+  Read) using `updated_input` to rewrite the command / `file_path`.
+  Non-destructive `~/.cursor/hooks.json` merge; bash-wraps the command
+  on Windows (no `.sh` file association); tolerates invalid JSON
+  escapes in the envelope. Cannot substitute MCP output (Cursor limit).
 
 ## Build, test, scan
 
