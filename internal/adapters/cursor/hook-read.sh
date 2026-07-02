@@ -39,6 +39,19 @@ esac
 
 INPUT=$(cat)
 
+# jq requires strictly-valid JSON, but Cursor can emit shell-escaped
+# paths with invalid JSON escapes — e.g. `.../ATC\ \(Phase\ 1\).pdf`
+# where `\(` and `\ ` are not legal JSON string escapes (#62). Without
+# this, jq bails ("Invalid escape") on the very first field and the hook
+# silently passes through. If the raw input doesn't parse, strip
+# backslashes that precede a NON-escape character (leaving valid escapes
+# \" \\ \/ \b \f \n \r \t \u intact) and retry — the stripped path
+# (spaces + parens, no backslashes) then matches the real filename on
+# disk. Valid input never hits this branch, so it's untouched.
+if ! printf '%s' "$INPUT" | jq -e . >/dev/null 2>&1; then
+  INPUT=$(printf '%s' "$INPUT" | sed 's#\\\([^"\\/bfnrtu]\)#\1#g')
+fi
+
 # Only act on the built-in Read tool.
 TOOL=$(jq -r '.tool_name // empty' <<<"$INPUT")
 if [ "$TOOL" != "Read" ]; then

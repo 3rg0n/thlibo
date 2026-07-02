@@ -253,15 +253,84 @@ func TestMergeHooksJSONNormalisesBackslashes(t *testing.T) {
 	if err := MergeHooksJSON(hp, winShell, winRead); err != nil {
 		t.Fatalf("MergeHooksJSON: %v", err)
 	}
+	// Check the PARSED command strings, not raw file bytes: on Windows
+	// the command is bash-wrapped (`"<bash>" "<hook>"`) and JSON escapes
+	// the embedded quotes as \" — those are legitimate JSON escapes, not
+	// path backslashes, so scanning raw bytes for `\` would false-fail.
+	var root map[string]any
 	buf, _ := os.ReadFile(hp)
-	if strings.Contains(string(buf), `\`) {
-		t.Errorf("backslashes not normalised: %s", buf)
+	if err := json.Unmarshal(buf, &root); err != nil {
+		t.Fatalf("output not valid JSON: %v", err)
 	}
-	if !strings.Contains(string(buf), "C:/Users/me/.thlibo/hooks/thlibo-rewrite-cursor.sh") {
-		t.Errorf("forward-slash Shell path missing: %s", buf)
+	cmds := map[string]string{}
+	for _, e := range root["hooks"].(map[string]any)["preToolUse"].([]any) {
+		obj := e.(map[string]any)
+		cmds[obj["matcher"].(string)] = obj["command"].(string)
 	}
-	if !strings.Contains(string(buf), "C:/Users/me/.thlibo/hooks/thlibo-read-cursor.sh") {
-		t.Errorf("forward-slash Read path missing: %s", buf)
+	for matcher, cmd := range cmds {
+		if strings.Contains(cmd, `\`) {
+			t.Errorf("%s command has an unnormalised backslash: %q", matcher, cmd)
+		}
+	}
+	// The forward-slash hook path must appear in each command (bare on
+	// Unix, or as the bash-wrapped argument on Windows).
+	if !strings.Contains(cmds["Shell"], "C:/Users/me/.thlibo/hooks/thlibo-rewrite-cursor.sh") {
+		t.Errorf("forward-slash Shell path missing: %q", cmds["Shell"])
+	}
+	if !strings.Contains(cmds["Read"], "C:/Users/me/.thlibo/hooks/thlibo-read-cursor.sh") {
+		t.Errorf("forward-slash Read path missing: %q", cmds["Read"])
+	}
+}
+
+// TestHookCommandBashWrapsOnWindows: Cursor hands the command to the OS.
+// On Windows a bare .sh path pops the "Select an app to open this .sh
+// file" dialog (no file association) and the hook never runs; the
+// command must be bash-wrapped. On Unix the shebang handles it, so the
+// command is the bare path.
+func TestHookCommandBashWrapsOnWindows(t *testing.T) {
+	got := hookCommand(`C:\x\thlibo-read-cursor.sh`)
+	if runtime.GOOS == "windows" {
+		if !strings.HasPrefix(got, `"`) || !strings.Contains(strings.ToLower(got), "bash") {
+			t.Errorf("on Windows the command must be bash-wrapped, got %q", got)
+		}
+		if !strings.Contains(got, "thlibo-read-cursor.sh") {
+			t.Errorf("wrapped command lost the hook path: %q", got)
+		}
+		if strings.Contains(got, `\`) {
+			t.Errorf("wrapped command has backslashes: %q", got)
+		}
+	} else {
+		// Unix: bare (forward-slashed) path, no bash prefix.
+		if strings.Contains(got, "bash") {
+			t.Errorf("on Unix the command should be the bare script path, got %q", got)
+		}
+	}
+}
+
+// TestMergeHooksJSONReinstallNoDoubleWrap: repeated installs must not
+// double-wrap the (Windows) bash-wrapped command — the marker upsert
+// replaces the whole entry, so `bash.exe` and the hook filename each
+// appear exactly once no matter how many times install runs (review).
+func TestMergeHooksJSONReinstallNoDoubleWrap(t *testing.T) {
+	dir := t.TempDir()
+	hp := filepath.Join(dir, "hooks.json")
+	shellHook, readHook := hookPaths(dir)
+	for i := 0; i < 3; i++ {
+		if err := MergeHooksJSON(hp, shellHook, readHook); err != nil {
+			t.Fatalf("pass %d: %v", i, err)
+		}
+	}
+	var root map[string]any
+	buf, _ := os.ReadFile(hp)
+	_ = json.Unmarshal(buf, &root)
+	for _, e := range root["hooks"].(map[string]any)["preToolUse"].([]any) {
+		cmd := e.(map[string]any)["command"].(string)
+		if n := strings.Count(strings.ToLower(cmd), "bash.exe"); n > 1 {
+			t.Errorf("command double-wrapped after reinstall: %q", cmd)
+		}
+		if n := strings.Count(cmd, "cursor.sh"); n != 1 {
+			t.Errorf("hook path should appear once, got %d: %q", n, cmd)
+		}
 	}
 }
 
@@ -414,6 +483,66 @@ func TestHookOutputPassthrough(t *testing.T) {
 				t.Errorf("expected no output (passthrough), got %q", out)
 			}
 		})
+	}
+}
+
+// TestHookInvalidJSONEscapes: Cursor can emit shell-escaped args with
+// invalid JSON escapes (`\(`, `\ `) that make jq bail (#62). The hook
+// must sanitize + still parse, not silently passthrough. Here a Shell
+// command carrying such escapes must still reach `thlibo rewrite` and
+// produce the rewrite JSON.
+func TestHookInvalidJSONEscapes(t *testing.T) {
+	// A command with literal backslash-escapes that are NOT valid JSON:
+	// `cat foo\ \(1\).txt`. jq alone would fail on this input.
+	stdin := `{"tool_name":"Shell","tool_input":{"command":"cat foo\ \(1\).txt"}}`
+	out, code := runHook(t, stdin, "thlibo exec -- cat foo (1).txt", 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("hook output not valid JSON (sanitizer failed?): %v (%q)", err, out)
+	}
+	ui, _ := resp["updated_input"].(map[string]any)
+	if ui["command"] != "thlibo exec -- cat foo (1).txt" {
+		t.Errorf("command not rewritten from invalid-escape input: %v", ui["command"])
+	}
+}
+
+// TestReadHookInvalidJSONEscapes: the #62 repro — a Read of a
+// shell-escaped path (`\(`, `\ `) must sanitize, extract the real path,
+// and rewrite to the compressed file rather than crash on jq.
+func TestReadHookInvalidJSONEscapes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX shell")
+	}
+	if !hasTimeoutBin() {
+		t.Skip("no timeout binary; rewrite path can't run")
+	}
+	dir := t.TempDir()
+	// Real file whose name has spaces + parens.
+	realName := "ATC (Phase 1).pdf"
+	realPath := filepath.Join(dir, realName)
+	_ = os.WriteFile(realPath, []byte("%PDF-1.4\n"), 0o644) // pdf skips size gate
+	// The escaped form Cursor sends (invalid JSON): backslash-space,
+	// backslash-paren.
+	escaped := strings.NewReplacer(" ", `\ `, "(", `\(`, ")", `\)`).Replace(normalisePath(realPath))
+	stdin := `{"tool_name":"Read","tool_input":{"file_path":"` + escaped + `"}}`
+	caseDir := filepath.Join(dir, "case")
+	out, code := runReadHook(t, stdin, caseDir, 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatalf("expected a rewrite for the escaped path, got passthrough (sanitizer failed)")
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("output not JSON: %v (%q)", err, out)
+	}
+	fp, _ := resp["updated_input"].(map[string]any)["file_path"].(string)
+	if !strings.HasSuffix(fp, "compressed.log") {
+		t.Errorf("escaped path not redirected to compressed.log: %v", fp)
 	}
 }
 
