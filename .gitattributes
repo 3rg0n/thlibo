@@ -1,0 +1,19 @@
+# Shell scripts MUST use LF, always — they're embedded via go:embed and
+# executed by bash (Claude Code / Codex / Cursor hooks, installers). A
+# CRLF shebang line breaks bash at runtime ("$'\r': command not found"),
+# and CRLF anywhere trips `case ... in`. Force LF regardless of a
+# contributor's core.autocrlf setting so a Windows checkout can never
+# commit CRLF into these files.
+*.sh text eol=lf
+*.bash text eol=lf
+
+# PowerShell hooks are invoked by powershell.exe (CRLF-tolerant) but keep
+# them LF for byte-stable go:embed + SHA-stamping across platforms.
+*.ps1 text eol=lf
+
+# Keep other line-ending-sensitive text stable.
+*.go text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf

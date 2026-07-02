@@ -18,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -65,7 +66,7 @@ func Run(argv []string) int {
 	fs.StringVar(&codexHooksPath, "codex-hooks", "", "override Codex hooks.json path (default: ~/.codex/hooks.json)")
 	var installCursor bool
 	var cursorHooksPath string
-	fs.BoolVar(&installCursor, "cursor", false, "also install the Cursor IDE preToolUse hook (updated_input rewrites the Shell command to compress its output)")
+	fs.BoolVar(&installCursor, "cursor", false, "also install the Cursor IDE preToolUse hooks (updated_input rewrites the Shell command + Read file_path to compress output)")
 	fs.StringVar(&cursorHooksPath, "cursor-hooks", "", "override Cursor hooks.json path (default: ~/.cursor/hooks.json)")
 	if err := fs.Parse(argv); err != nil {
 		return 2
@@ -381,23 +382,38 @@ func Run(argv []string) int {
 			}
 			cp = filepath.Join(home, ".cursor", "hooks.json")
 		}
-		cursorHookPath := filepath.Join(hookDir, "thlibo-rewrite-cursor.sh")
-		if err := cursor.WriteHookScript(cursorHookPath); err != nil {
-			fmt.Fprintln(os.Stderr, "install: cursor hook:", err)
+		cursorShellHook := filepath.Join(hookDir, "thlibo-rewrite-cursor.sh")
+		cursorReadHook := filepath.Join(hookDir, "thlibo-read-cursor.sh")
+		if err := cursor.WriteHookScript(cursorShellHook); err != nil {
+			fmt.Fprintln(os.Stderr, "install: cursor shell hook:", err)
 			return 10
 		}
-		if err := cursor.MergeHooksJSON(cp, cursorHookPath); err != nil {
+		if err := cursor.WriteReadHookScript(cursorReadHook); err != nil {
+			fmt.Fprintln(os.Stderr, "install: cursor read hook:", err)
+			return 10
+		}
+		if err := cursor.MergeHooksJSON(cp, cursorShellHook, cursorReadHook); err != nil {
 			fmt.Fprintln(os.Stderr, "install: cursor hooks.json:", err)
 			return 10
 		}
-		fmt.Printf("  wrote Cursor hook + merged preToolUse/Shell into %s\n", cp)
+		fmt.Printf("  wrote Cursor hooks + merged preToolUse/Shell + preToolUse/Read into %s\n", cp)
 		// User-level ~/.cursor/hooks.json loads automatically; a
 		// project-scoped .cursor/hooks.json only runs in a trusted
-		// workspace (cursor.com/docs/hooks). Note it, and the mechanism
-		// limit: Cursor can rewrite the Shell command (so compression
-		// works) but cannot substitute Read/MCP output.
-		fmt.Println("    Restart Cursor to load the hook. Shell output is compressed via command rewrite;")
-		fmt.Println("    Read/MCP output can't be intercepted on Cursor. Project-level hooks need a trusted workspace.")
+		// workspace (cursor.com/docs/hooks). Note the mechanism: Cursor
+		// rewrites the Shell command and the Read file_path (so shell
+		// output + large-file reads are compressed) but cannot substitute
+		// MCP-tool output for built-in tools.
+		fmt.Println("    Restart Cursor to load the hooks. Shell output and large file reads (logs, PDFs)")
+		fmt.Println("    are compressed; MCP-tool output can't be intercepted. Project hooks need a trusted workspace.")
+		// The Read hook bounds `thlibo case` with a timeout so a slow OCR
+		// can't hang Cursor. macOS has no `timeout` binary by default
+		// (coreutils ships it as `gtimeout`); without it the Read hook
+		// safely passes through instead of compressing. Point macOS users
+		// at the one-line fix.
+		if runtime.GOOS == "darwin" && !hasTimeoutBinary() {
+			fmt.Println("    macOS note: install coreutils for file-read compression — `brew install coreutils`")
+			fmt.Println("    (provides `gtimeout`; without it the Read hook passes files through uncompressed).")
+		}
 	}
 
 	if hint := wslAPEInteropHint(); hint != "" {
@@ -407,6 +423,18 @@ func Run(argv []string) int {
 
 	fmt.Println("thlibo install complete.")
 	return 0
+}
+
+// hasTimeoutBinary reports whether a `timeout`/`gtimeout` binary is on
+// PATH — the bound the Cursor Read hook needs so a slow OCR can't hang
+// the editor. Used only to decide whether to print the macOS coreutils
+// hint; the hook itself re-checks at runtime.
+func hasTimeoutBinary() bool {
+	if _, err := exec.LookPath("timeout"); err == nil {
+		return true
+	}
+	_, err := exec.LookPath("gtimeout")
+	return err == nil
 }
 
 // reportInferdInstall prints the InferdInstallResult in the same

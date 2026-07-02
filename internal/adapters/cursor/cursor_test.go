@@ -62,14 +62,19 @@ func TestWriteHookScript(t *testing.T) {
 	}
 }
 
+// shellHookIn/readHookIn are the two hook paths a real install passes.
+func hookPaths(dir string) (string, string) {
+	return filepath.Join(dir, "thlibo-rewrite-cursor.sh"), filepath.Join(dir, "thlibo-read-cursor.sh")
+}
+
 // TestMergeHooksJSONFreshFile: the written file matches the Cursor
 // schema (top-level version + hooks.preToolUse array of flat
-// {matcher, command} objects).
+// {matcher, command} objects), with BOTH a Shell and a Read entry.
 func TestMergeHooksJSONFreshFile(t *testing.T) {
 	dir := t.TempDir()
 	hp := filepath.Join(dir, "hooks.json")
-	hook := filepath.Join(dir, "thlibo-rewrite-cursor.sh")
-	if err := MergeHooksJSON(hp, hook); err != nil {
+	shellHook, readHook := hookPaths(dir)
+	if err := MergeHooksJSON(hp, shellHook, readHook); err != nil {
 		t.Fatalf("MergeHooksJSON: %v", err)
 	}
 	var root map[string]any
@@ -80,18 +85,23 @@ func TestMergeHooksJSONFreshFile(t *testing.T) {
 	if root["version"] != float64(1) {
 		t.Errorf("expected version 1, got %v", root["version"])
 	}
-	entry := firstPreToolUse(t, root)
-	if entry["matcher"] != "Shell" {
-		t.Errorf("matcher = %v, want Shell", entry["matcher"])
+	pre := root["hooks"].(map[string]any)["preToolUse"].([]any)
+	byMatcher := map[string]string{}
+	for _, e := range pre {
+		obj := e.(map[string]any)
+		byMatcher[obj["matcher"].(string)] = obj["command"].(string)
 	}
-	if !strings.Contains(entry["command"].(string), "thlibo-rewrite-cursor.sh") {
-		t.Errorf("command doesn't point at the hook: %v", entry["command"])
+	if !strings.Contains(byMatcher["Shell"], "thlibo-rewrite-cursor.sh") {
+		t.Errorf("Shell entry wrong/missing: %v", byMatcher["Shell"])
+	}
+	if !strings.Contains(byMatcher["Read"], "thlibo-read-cursor.sh") {
+		t.Errorf("Read entry wrong/missing: %v", byMatcher["Read"])
 	}
 }
 
 // TestMergeHooksJSONPreservesOtherEventsAndKeys: an existing hooks.json
-// with other events and a custom version is preserved; we only add our
-// preToolUse/Shell entry.
+// with other events and a custom version is preserved; we add our
+// Shell + Read entries alongside an unrelated preToolUse hook.
 func TestMergeHooksJSONPreservesOtherEventsAndKeys(t *testing.T) {
 	dir := t.TempDir()
 	hp := filepath.Join(dir, "hooks.json")
@@ -99,13 +109,13 @@ func TestMergeHooksJSONPreservesOtherEventsAndKeys(t *testing.T) {
   "version": 1,
   "hooks": {
     "afterFileEdit": [{ "command": "./fmt.sh" }],
-    "preToolUse": [{ "matcher": "Read", "command": "./audit.sh" }]
+    "preToolUse": [{ "matcher": "Write", "command": "./audit.sh" }]
   }
 }`
 	_ = os.WriteFile(hp, []byte(existing), 0o600)
 
-	hook := filepath.Join(dir, "thlibo-rewrite-cursor.sh")
-	if err := MergeHooksJSON(hp, hook); err != nil {
+	shellHook, readHook := hookPaths(dir)
+	if err := MergeHooksJSON(hp, shellHook, readHook); err != nil {
 		t.Fatalf("MergeHooksJSON: %v", err)
 	}
 	var root map[string]any
@@ -117,44 +127,102 @@ func TestMergeHooksJSONPreservesOtherEventsAndKeys(t *testing.T) {
 		t.Error("afterFileEdit event lost")
 	}
 	pre := hooks["preToolUse"].([]any)
-	if len(pre) != 2 {
-		t.Fatalf("expected 2 preToolUse entries (the audit one + ours), got %d", len(pre))
+	if len(pre) != 3 {
+		t.Fatalf("expected 3 preToolUse entries (audit + shell + read), got %d", len(pre))
 	}
-	// The unrelated Read audit hook must survive verbatim.
-	foundAudit, foundThlibo := false, false
+	var foundAudit, foundShell, foundRead bool
 	for _, e := range pre {
-		obj := e.(map[string]any)
-		cmd, _ := obj["command"].(string)
-		if strings.Contains(cmd, "audit.sh") {
+		cmd, _ := e.(map[string]any)["command"].(string)
+		switch {
+		case strings.Contains(cmd, "audit.sh"):
 			foundAudit = true
-		}
-		if strings.Contains(cmd, "thlibo-rewrite-cursor.sh") {
-			foundThlibo = true
+		case strings.Contains(cmd, "thlibo-rewrite-cursor.sh"):
+			foundShell = true
+		case strings.Contains(cmd, "thlibo-read-cursor.sh"):
+			foundRead = true
 		}
 	}
 	if !foundAudit {
-		t.Error("unrelated Read audit hook was dropped")
+		t.Error("unrelated Write audit hook was dropped")
 	}
-	if !foundThlibo {
-		t.Error("thlibo hook not added")
+	if !foundShell || !foundRead {
+		t.Errorf("thlibo hooks not both added (shell=%v read=%v)", foundShell, foundRead)
 	}
 }
 
-// TestMergeHooksJSONIdempotent: three merges produce exactly one thlibo
-// entry (recognised by the hook-path marker, updated in place).
+// TestMergeHooksJSONIdempotent: three merges produce exactly one Shell
+// and one Read thlibo entry (each recognised by its marker).
 func TestMergeHooksJSONIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	hp := filepath.Join(dir, "hooks.json")
-	hook := filepath.Join(dir, "thlibo-rewrite-cursor.sh")
+	shellHook, readHook := hookPaths(dir)
 	for i := 0; i < 3; i++ {
-		if err := MergeHooksJSON(hp, hook); err != nil {
+		if err := MergeHooksJSON(hp, shellHook, readHook); err != nil {
 			t.Fatalf("pass %d: %v", i, err)
 		}
 	}
 	buf, _ := os.ReadFile(hp)
-	n := strings.Count(string(buf), "thlibo-rewrite-cursor.sh")
-	if n != 1 {
-		t.Errorf("expected exactly 1 thlibo entry, got %d: %s", n, buf)
+	if n := strings.Count(string(buf), "thlibo-rewrite-cursor.sh"); n != 1 {
+		t.Errorf("expected exactly 1 Shell entry, got %d: %s", n, buf)
+	}
+	if n := strings.Count(string(buf), "thlibo-read-cursor.sh"); n != 1 {
+		t.Errorf("expected exactly 1 Read entry, got %d: %s", n, buf)
+	}
+	// And exactly two thlibo preToolUse entries total.
+	var root map[string]any
+	_ = json.Unmarshal(buf, &root)
+	if got := len(root["hooks"].(map[string]any)["preToolUse"].([]any)); got != 2 {
+		t.Errorf("expected 2 preToolUse entries after 3 merges, got %d", got)
+	}
+}
+
+// TestMergeHooksJSONUpgradeFromShellOnly: the rc.1 -> rc.2 upgrade path.
+// A hooks.json that already has ONLY the Shell entry (what rc.1
+// installed) must gain the Read entry on re-merge WITHOUT duplicating
+// Shell — the exact scenario a user already on the Cursor-Shell RC hits.
+func TestMergeHooksJSONUpgradeFromShellOnly(t *testing.T) {
+	dir := t.TempDir()
+	hp := filepath.Join(dir, "hooks.json")
+	shellHook, readHook := hookPaths(dir)
+	// Simulate an rc.1 install: only the Shell entry present.
+	rc1 := `{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      { "matcher": "Shell", "command": "` + normalisePath(shellHook) + `" }
+    ]
+  }
+}`
+	_ = os.WriteFile(hp, []byte(rc1), 0o600)
+
+	// rc.2 install re-runs the merge with both hooks.
+	if err := MergeHooksJSON(hp, shellHook, readHook); err != nil {
+		t.Fatalf("MergeHooksJSON: %v", err)
+	}
+	buf, _ := os.ReadFile(hp)
+	if n := strings.Count(string(buf), "thlibo-rewrite-cursor.sh"); n != 1 {
+		t.Errorf("expected exactly 1 Shell entry after upgrade, got %d: %s", n, buf)
+	}
+	if n := strings.Count(string(buf), "thlibo-read-cursor.sh"); n != 1 {
+		t.Errorf("expected the Read entry added on upgrade, got %d: %s", n, buf)
+	}
+	var root map[string]any
+	_ = json.Unmarshal(buf, &root)
+	pre := root["hooks"].(map[string]any)["preToolUse"].([]any)
+	if len(pre) != 2 {
+		t.Fatalf("expected 2 preToolUse entries after upgrade, got %d", len(pre))
+	}
+	// Confirm both matchers are present and correct.
+	byMatcher := map[string]string{}
+	for _, e := range pre {
+		obj := e.(map[string]any)
+		byMatcher[obj["matcher"].(string)] = obj["command"].(string)
+	}
+	if !strings.Contains(byMatcher["Shell"], "thlibo-rewrite-cursor.sh") {
+		t.Errorf("Shell entry wrong after upgrade: %v", byMatcher["Shell"])
+	}
+	if !strings.Contains(byMatcher["Read"], "thlibo-read-cursor.sh") {
+		t.Errorf("Read entry missing/wrong after upgrade: %v", byMatcher["Read"])
 	}
 }
 
@@ -164,7 +232,8 @@ func TestMergeHooksJSONRejectsInvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	hp := filepath.Join(dir, "hooks.json")
 	_ = os.WriteFile(hp, []byte("{ not json"), 0o600)
-	if err := MergeHooksJSON(hp, filepath.Join(dir, "thlibo-rewrite-cursor.sh")); err == nil {
+	shellHook, readHook := hookPaths(dir)
+	if err := MergeHooksJSON(hp, shellHook, readHook); err == nil {
 		t.Error("expected an error on malformed JSON, got nil")
 	}
 	// File must be left as-is.
@@ -174,13 +243,14 @@ func TestMergeHooksJSONRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
-// TestMergeHooksJSONNormalisesBackslashes: a Windows hook path is
-// written with forward slashes so bash -c can execute it.
+// TestMergeHooksJSONNormalisesBackslashes: Windows hook paths are
+// written with forward slashes so bash -c can execute them.
 func TestMergeHooksJSONNormalisesBackslashes(t *testing.T) {
 	dir := t.TempDir()
 	hp := filepath.Join(dir, "hooks.json")
-	winPath := `C:\Users\me\.thlibo\hooks\thlibo-rewrite-cursor.sh`
-	if err := MergeHooksJSON(hp, winPath); err != nil {
+	winShell := `C:\Users\me\.thlibo\hooks\thlibo-rewrite-cursor.sh`
+	winRead := `C:\Users\me\.thlibo\hooks\thlibo-read-cursor.sh`
+	if err := MergeHooksJSON(hp, winShell, winRead); err != nil {
 		t.Fatalf("MergeHooksJSON: %v", err)
 	}
 	buf, _ := os.ReadFile(hp)
@@ -188,7 +258,10 @@ func TestMergeHooksJSONNormalisesBackslashes(t *testing.T) {
 		t.Errorf("backslashes not normalised: %s", buf)
 	}
 	if !strings.Contains(string(buf), "C:/Users/me/.thlibo/hooks/thlibo-rewrite-cursor.sh") {
-		t.Errorf("forward-slash path missing: %s", buf)
+		t.Errorf("forward-slash Shell path missing: %s", buf)
+	}
+	if !strings.Contains(string(buf), "C:/Users/me/.thlibo/hooks/thlibo-read-cursor.sh") {
+		t.Errorf("forward-slash Read path missing: %s", buf)
 	}
 }
 
@@ -198,7 +271,8 @@ func TestMergeHooksJSONPreservesExistingVersion(t *testing.T) {
 	dir := t.TempDir()
 	hp := filepath.Join(dir, "hooks.json")
 	_ = os.WriteFile(hp, []byte(`{"version": 2, "hooks": {}}`), 0o600)
-	if err := MergeHooksJSON(hp, filepath.Join(dir, "thlibo-rewrite-cursor.sh")); err != nil {
+	shellHook, readHook := hookPaths(dir)
+	if err := MergeHooksJSON(hp, shellHook, readHook); err != nil {
 		t.Fatalf("MergeHooksJSON: %v", err)
 	}
 	var root map[string]any
@@ -251,6 +325,17 @@ func runHook(t *testing.T, stdin, rewriteOut string, rewriteExit int) (string, i
 		t.Fatalf("run hook: %v", err)
 	}
 	return string(out), code
+}
+
+// hasTimeoutBin reports whether a timeout/gtimeout binary is on PATH —
+// the bound the read hook needs to run `thlibo case`. Stock macOS has
+// neither (coreutils ships gtimeout via brew).
+func hasTimeoutBin() bool {
+	if _, err := exec.LookPath("timeout"); err == nil {
+		return true
+	}
+	_, err := exec.LookPath("gtimeout")
+	return err == nil
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
@@ -361,15 +446,192 @@ func TestHookDisabledKillSwitch(t *testing.T) {
 	}
 }
 
-func firstPreToolUse(t *testing.T, root map[string]any) map[string]any {
+// runReadHook executes the embedded hook-read.sh with the given stdin,
+// using a fake `thlibo` on PATH whose `case --quiet` prints caseOut and
+// exits caseExit, and a fake `timeout` that just execs its target (so
+// the timeout guard is transparent in tests). Returns (stdout, exit).
+// The compressed.log inside caseOut is pre-created so the hook's
+// existence check passes. Skips on non-POSIX / missing bash+jq.
+func runReadHook(t *testing.T, stdin, caseOut string, caseExit int) (string, int) {
 	t.Helper()
-	hooks, ok := root["hooks"].(map[string]any)
-	if !ok {
-		t.Fatal("no hooks object")
+	if runtime.GOOS == "windows" {
+		t.Skip("hook-read.sh execution test needs a POSIX shell; skipped on windows")
 	}
-	pre, ok := hooks["preToolUse"].([]any)
-	if !ok || len(pre) == 0 {
-		t.Fatal("no preToolUse entries")
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
 	}
-	return pre[0].(map[string]any)
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("jq not available")
+	}
+	// The rewrite path requires a timeout binary — without one the hook
+	// (correctly) passes through and never runs `thlibo case`. That
+	// no-timeout behaviour is covered separately by
+	// TestReadHookNoTimeoutBinaryPassthrough; here we need a timeout to
+	// reach the case logic. Stock macOS has neither, so skip there.
+	if !hasTimeoutBin() {
+		t.Skip("no timeout/gtimeout binary; rewrite path can't run (covered by TestReadHookNoTimeoutBinaryPassthrough)")
+	}
+	dir := t.TempDir()
+	// If the fake case should "succeed", pre-create its compressed.log.
+	if caseExit == 0 && caseOut != "" {
+		_ = os.MkdirAll(caseOut, 0o755)
+		_ = os.WriteFile(filepath.Join(caseOut, "compressed.log"), []byte("compressed\n"), 0o644)
+	}
+	fake := filepath.Join(dir, "thlibo")
+	// `thlibo case --quiet <path>` -> print caseOut, exit caseExit.
+	script := "#!/usr/bin/env bash\nprintf '%s' " + shellQuote(caseOut) + "\nexit " + itoa(caseExit) + "\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil { // #nosec G306
+		t.Fatal(err)
+	}
+	hookPath := filepath.Join(dir, "hook-read.sh")
+	if err := WriteReadHookScript(hookPath); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bash, hookPath)
+	cmd.Stdin = strings.NewReader(stdin)
+	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.Output()
+	code := 0
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	} else if err != nil {
+		t.Fatalf("run read hook: %v", err)
+	}
+	return string(out), code
+}
+
+// TestReadHookRewritesLargeLog: a large .log Read is redirected to the
+// case's compressed.log via updated_input.file_path.
+func TestReadHookRewritesLargeLog(t *testing.T) {
+	dir := t.TempDir()
+	big := filepath.Join(dir, "app.log")
+	_ = os.WriteFile(big, make([]byte, 40*1024), 0o644) // > 32 KiB size gate
+	caseDir := filepath.Join(dir, "case")
+	stdin := `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`
+	out, code := runReadHook(t, stdin, caseDir, 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("read hook output not JSON: %v (%q)", err, out)
+	}
+	if resp["permission"] != "allow" {
+		t.Errorf("permission = %v, want allow", resp["permission"])
+	}
+	ui, _ := resp["updated_input"].(map[string]any)
+	fp, _ := ui["file_path"].(string)
+	if !strings.HasSuffix(fp, "compressed.log") {
+		t.Errorf("file_path not redirected to compressed.log: %v", fp)
+	}
+}
+
+// TestReadHookPassthrough: cases that must emit nothing (exit 0).
+func TestReadHookPassthrough(t *testing.T) {
+	dir := t.TempDir()
+	big := filepath.Join(dir, "app.log")
+	_ = os.WriteFile(big, make([]byte, 40*1024), 0o644)
+	small := filepath.Join(dir, "tiny.log")
+	_ = os.WriteFile(small, []byte("hi\n"), 0o644)
+	src := filepath.Join(dir, "main.go")
+	_ = os.WriteFile(src, make([]byte, 40*1024), 0o644)
+
+	cases := []struct {
+		name     string
+		stdin    string
+		caseOut  string
+		caseExit int
+	}{
+		{"non-Read tool", `{"tool_name":"Shell","tool_input":{"command":"ls"}}`, "", 0},
+		{"unsupported extension", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(src) + `"}}`, "", 0},
+		{"small file under size gate", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(small) + `"}}`, "", 0},
+		{"low-value case (exit 6)", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`, filepath.Join(dir, "c6"), 6},
+		{"timeout (exit 124)", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`, filepath.Join(dir, "c124"), 124},
+		{"missing file", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(filepath.Join(dir, "nope.log")) + `"}}`, "", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, code := runReadHook(t, tc.stdin, tc.caseOut, tc.caseExit)
+			if code != 0 {
+				t.Errorf("exit = %d, want 0", code)
+			}
+			if strings.TrimSpace(out) != "" {
+				t.Errorf("expected passthrough (no output), got %q", out)
+			}
+		})
+	}
+}
+
+// TestReadHookNoTimeoutBinaryPassthrough: when neither `timeout` nor
+// `gtimeout` is on PATH (e.g. stock macOS without coreutils), the hook
+// must PASSTHROUGH rather than run `thlibo case` unbounded and risk
+// hanging Cursor on a slow OCR. Runs with a PATH containing only fakes
+// for the required binaries (jq, thlibo) — no timeout.
+func TestReadHookNoTimeoutBinaryPassthrough(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX shell")
+	}
+	realBash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	realJq, err := exec.LookPath("jq")
+	if err != nil {
+		t.Skip("jq not available")
+	}
+	dir := t.TempDir()
+	// Use a .pdf: PDFs skip the size gate, so the hook reaches the
+	// timeout check without needing `wc` (which isn't on our minimal
+	// PATH) — otherwise the test could passthrough at the size gate for
+	// the wrong reason.
+	big := filepath.Join(dir, "doc.pdf")
+	_ = os.WriteFile(big, []byte("%PDF-1.4\n"), 0o644)
+
+	bindir := filepath.Join(dir, "bin")
+	_ = os.MkdirAll(bindir, 0o755)
+	// Symlink the coreutils the hook needs (jq, plus tr/printf/etc. that
+	// run before the timeout check) into bindir, but deliberately NOT
+	// timeout/gtimeout. bash builtins (command, case, [, printf) work
+	// regardless; tr is external so link it.
+	for _, bin := range []string{"jq", "tr", "wc", "sed", "cat", "printf"} {
+		if p, err := exec.LookPath(bin); err == nil {
+			_ = os.Symlink(p, filepath.Join(bindir, bin))
+		}
+	}
+	_ = realJq // kept for the skip-guard above
+	// A fake `thlibo case` that, if ever called, would "succeed" — so if
+	// the hook DID run it (bug), we'd see output and the test fails.
+	caseDir := filepath.Join(dir, "case")
+	_ = os.MkdirAll(caseDir, 0o755)
+	_ = os.WriteFile(filepath.Join(caseDir, "compressed.log"), []byte("x\n"), 0o644)
+	fakeThlibo := "#!/usr/bin/env bash\nprintf '%s' " + shellQuote(caseDir) + "\nexit 0\n"
+	_ = os.WriteFile(filepath.Join(bindir, "thlibo"), []byte(fakeThlibo), 0o700) // #nosec G306
+
+	hookPath := filepath.Join(dir, "hook-read.sh")
+	if err := WriteReadHookScript(hookPath); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(realBash, hookPath)
+	cmd.Stdin = strings.NewReader(`{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`)
+	// PATH = ONLY our fake bindir. bash itself is invoked by absolute
+	// path, so it still runs; but `command -v timeout/gtimeout` inside
+	// the hook find nothing -> passthrough.
+	cmd.Env = []string{"PATH=" + bindir}
+	out, _ := cmd.Output()
+	if strings.TrimSpace(string(out)) != "" {
+		t.Errorf("no timeout binary must passthrough (no output), got %q", out)
+	}
+}
+
+func TestWriteReadHookScript(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "sub", "thlibo-read-cursor.sh")
+	if err := WriteReadHookScript(dest); err != nil {
+		t.Fatalf("WriteReadHookScript: %v", err)
+	}
+	got, _ := os.ReadFile(dest)
+	if !reflect.DeepEqual(got, ReadHookScript()) {
+		t.Error("written bytes differ from embedded read script")
+	}
 }

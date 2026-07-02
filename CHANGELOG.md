@@ -9,20 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Cursor IDE support** (`thlibo install --cursor`). Installs a
-  `preToolUse` hook into `~/.cursor/hooks.json` (scoped `matcher:
-  "Shell"`) that rewrites the Shell command via Cursor's `updated_input`
-  — turning `git status` into `thlibo exec -- git status` so the
-  terminal output is compressed before the model reads it. Same
-  command-wrap mechanism as the Claude Code Bash hook. Cursor's hooks
-  cannot substitute `Read`/MCP output for built-in tools
-  (`afterShellExecution` is observe-only, `updated_mcp_tool_output` is
-  MCP-server-only), so on Cursor only shell output is compressed;
-  documented as a limitation. New `internal/adapters/cursor` package
-  (embedded hook + non-destructive `hooks.json` merge preserving all
-  other events/entries and the top-level `version`). Reverses the prior
-  "no Cursor support" stance. Verified end-to-end on a real Cursor
-  install with a pre-existing multi-tool `hooks.json` (git-ai + taco).
+- **Cursor IDE support** (`thlibo install --cursor`). Installs two
+  `preToolUse` hooks into `~/.cursor/hooks.json` via Cursor's
+  `updated_input` rewrite:
+  - **Shell** (`matcher: "Shell"`) — rewrites the command, turning
+    `git status` into `thlibo exec -- git status` so terminal output is
+    compressed before the model reads it. Same command-wrap mechanism as
+    the Claude Code Bash hook.
+  - **Read** (`matcher: "Read"`, #60) — rewrites `tool_input.file_path`
+    to a pre-built `thlibo case` (`compressed.log`) so large logs and
+    PDFs are compressed too. Because Cursor rewrites the path *before*
+    the read, `thlibo case` runs under a `timeout`
+    (`THLIBO_READ_TIMEOUT`, default 20s) — a slow scanned-PDF OCR falls
+    through to the original rather than hanging Cursor. Low-value cases
+    (scanned/binary/tiny, `thlibo case` exit 6) pass through unchanged.
+
+  Cursor still cannot substitute MCP-tool output for built-in tools
+  (`afterShellExecution` observe-only, `updated_mcp_tool_output`
+  MCP-server-only). New `internal/adapters/cursor` package (embedded
+  hooks + non-destructive `hooks.json` merge preserving all other
+  events/entries and the top-level `version`; idempotent per-hook via
+  filename markers). Reverses the prior "no Cursor support" stance.
+  Verified end-to-end on a real Cursor install with a pre-existing
+  multi-tool `hooks.json` (git-ai + taco).
+- **`.gitattributes` forces `*.sh`/`*.ps1` to LF.** The hook scripts are
+  `go:embed`ded and run by bash; a CRLF shebang breaks them at runtime
+  (`$'\r': command not found`). Pinning EOL prevents a Windows checkout
+  from ever committing CRLF into an embedded hook.
 
 ## [0.7.7] - 2026-07-01
 
