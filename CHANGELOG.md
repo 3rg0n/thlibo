@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Cursor IDE support** (`thlibo install --cursor`). Installs a
+  `preToolUse` hook into `~/.cursor/hooks.json` (scoped `matcher:
+  "Shell"`) that rewrites the Shell command via Cursor's `updated_input`
+  — turning `git status` into `thlibo exec -- git status` so the
+  terminal output is compressed before the model reads it. Same
+  command-wrap mechanism as the Claude Code Bash hook. Cursor's hooks
+  cannot substitute `Read`/MCP output for built-in tools
+  (`afterShellExecution` is observe-only, `updated_mcp_tool_output` is
+  MCP-server-only), so on Cursor only shell output is compressed;
+  documented as a limitation. New `internal/adapters/cursor` package
+  (embedded hook + non-destructive `hooks.json` merge preserving all
+  other events/entries and the top-level `version`). Reverses the prior
+  "no Cursor support" stance. Verified end-to-end on a real Cursor
+  install with a pre-existing multi-tool `hooks.json` (git-ai + taco).
+
 ## [0.7.7] - 2026-07-01
 
 ### Fixed
