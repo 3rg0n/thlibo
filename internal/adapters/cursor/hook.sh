@@ -18,8 +18,13 @@
 #   0 + stdout   rewrite applied, stdout = new command -> emit updated_input + allow
 #   1            no wrapper for argv[0]                -> exit 0 (passthrough)
 #   2            deny rule                             -> exit 0 (let Cursor decide)
-#   3 + stdout   ask rule                              -> emit updated_input, permission "ask"
-#   other        internal error                        -> exit 0 (passthrough, never break client)
+#   other        internal error / reserved            -> exit 0 (passthrough, never break client)
+#
+# Note: Cursor's preToolUse permission enum is only "allow"/"deny" —
+# "ask" is accepted by the schema but NOT enforced for preToolUse
+# (cursor.com/docs/hooks), so there is no ask path here. (`thlibo
+# rewrite` reserves exit 3 for a future ask rule; on Cursor it would
+# just fall through to passthrough.)
 #
 # Requires: jq, thlibo binary on PATH.
 
@@ -61,13 +66,9 @@ case $EXIT_CODE in
       exit 0
     fi
     ;;
-  3)
-    if [ -z "$REWRITTEN" ]; then
-      exit 0
-    fi
-    ;;
   *)
-    # Passthrough (1, 2, internal error, or anything else).
+    # Passthrough (1 = no wrapper, 2 = deny, 3 = reserved ask,
+    # internal error, or anything else). Never break the client.
     exit 0
     ;;
 esac
@@ -75,14 +76,7 @@ esac
 # Strip any trailing newline jq wouldn't want in the final JSON.
 REWRITTEN=${REWRITTEN%$'\n'}
 
-# updated_input carries the changed field only (per Cursor's docs the
-# response's updated_input is merged over the original tool_input).
-if [ "$EXIT_CODE" -eq 3 ]; then
-  # Ask: rewrite the command but let Cursor prompt the user.
-  jq -cn --arg cmd "$REWRITTEN" \
-    '{ "permission": "ask", "updated_input": { "command": $cmd } }'
-else
-  # Allow: rewrite + auto-allow the wrapped command.
-  jq -cn --arg cmd "$REWRITTEN" \
-    '{ "permission": "allow", "updated_input": { "command": $cmd } }'
-fi
+# Rewrite + auto-allow the wrapped command. updated_input carries the
+# changed field only; Cursor merges it over the original tool_input.
+jq -cn --arg cmd "$REWRITTEN" \
+  '{ "permission": "allow", "updated_input": { "command": $cmd } }'

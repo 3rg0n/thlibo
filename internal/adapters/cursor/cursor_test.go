@@ -3,8 +3,10 @@ package cursor
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -204,6 +206,158 @@ func TestMergeHooksJSONPreservesExistingVersion(t *testing.T) {
 	_ = json.Unmarshal(buf, &root)
 	if root["version"] != float64(2) {
 		t.Errorf("existing version overwritten: got %v, want 2", root["version"])
+	}
+}
+
+// runHook executes the embedded hook.sh with the given stdin, using a
+// fake `thlibo` on PATH that echoes a fixed rewrite and exits with
+// rewriteExit. Returns (stdout, exitCode). Skips on non-bash platforms
+// or when bash/jq aren't available, so it exercises the real script
+// wherever a POSIX shell exists (CI linux/macOS) without a real thlibo.
+func runHook(t *testing.T, stdin, rewriteOut string, rewriteExit int) (string, int) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("hook.sh execution test needs a POSIX shell; skipped on windows")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("jq not available")
+	}
+
+	dir := t.TempDir()
+	// Fake `thlibo`: ignores args, prints rewriteOut, exits rewriteExit.
+	fake := filepath.Join(dir, "thlibo")
+	script := "#!/usr/bin/env bash\nprintf '%s' " + shellQuote(rewriteOut) + "\nexit " + itoa(rewriteExit) + "\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil { // #nosec G306 -- test shim needs exec bit
+		t.Fatal(err)
+	}
+	hookPath := filepath.Join(dir, "hook.sh")
+	if err := WriteHookScript(hookPath); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bash, hookPath)
+	cmd.Stdin = strings.NewReader(stdin)
+	// Prepend our fake-thlibo dir so the hook finds it first.
+	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.Output()
+	code := 0
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	} else if err != nil {
+		t.Fatalf("run hook: %v", err)
+	}
+	return string(out), code
+}
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	if neg {
+		b = append([]byte{'-'}, b...)
+	}
+	return string(b)
+}
+
+// TestHookOutputWrappableShell drives the real hook.sh with a Shell
+// preToolUse envelope + a fake thlibo that rewrites the command, and
+// asserts the emitted JSON matches Cursor's contract:
+// {"permission":"allow","updated_input":{"command":<rewritten>}}.
+func TestHookOutputWrappableShell(t *testing.T) {
+	stdin := `{"tool_name":"Shell","tool_input":{"command":"git status"},"tool_use_id":"t1"}`
+	out, code := runHook(t, stdin, "thlibo exec -- git status", 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("hook output not valid JSON: %v (%q)", err, out)
+	}
+	if resp["permission"] != "allow" {
+		t.Errorf("permission = %v, want allow", resp["permission"])
+	}
+	ui, ok := resp["updated_input"].(map[string]any)
+	if !ok {
+		t.Fatalf("updated_input missing/not object: %v", resp["updated_input"])
+	}
+	if ui["command"] != "thlibo exec -- git status" {
+		t.Errorf("updated_input.command = %v, want the wrapped command", ui["command"])
+	}
+	// Must not use unsupported mechanisms.
+	if _, bad := resp["decision"]; bad {
+		t.Error("response must not carry Codex's decision field")
+	}
+}
+
+// TestHookOutputPassthrough covers every case that must emit NOTHING and
+// exit 0: non-Shell tool, empty command, non-wrappable command (rewrite
+// exit 1), and the reserved exit-3 (no ask path on Cursor).
+func TestHookOutputPassthrough(t *testing.T) {
+	cases := []struct {
+		name        string
+		stdin       string
+		rewriteOut  string
+		rewriteExit int
+	}{
+		{"non-Shell tool", `{"tool_name":"Read","tool_input":{"path":"/x"}}`, "", 0},
+		{"empty command", `{"tool_name":"Shell","tool_input":{"command":""}}`, "", 0},
+		{"no wrapper (exit 1)", `{"tool_name":"Shell","tool_input":{"command":"echo hi"}}`, "", 1},
+		{"reserved ask (exit 3) has no path", `{"tool_name":"Shell","tool_input":{"command":"git status"}}`, "thlibo exec -- git status", 3},
+		{"rewrite equals input", `{"tool_name":"Shell","tool_input":{"command":"git status"}}`, "git status", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, code := runHook(t, tc.stdin, tc.rewriteOut, tc.rewriteExit)
+			if code != 0 {
+				t.Errorf("exit = %d, want 0", code)
+			}
+			if strings.TrimSpace(out) != "" {
+				t.Errorf("expected no output (passthrough), got %q", out)
+			}
+		})
+	}
+}
+
+// TestHookDisabledKillSwitch: THLIBO_DISABLED short-circuits to
+// passthrough even for a wrappable command.
+func TestHookDisabledKillSwitch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs POSIX shell")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("jq not available")
+	}
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "thlibo")
+	_ = os.WriteFile(fake, []byte("#!/usr/bin/env bash\nprintf 'thlibo exec -- git status'\nexit 0\n"), 0o700) // #nosec G306
+	hookPath := filepath.Join(dir, "hook.sh")
+	if err := WriteHookScript(hookPath); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bash, hookPath)
+	cmd.Stdin = strings.NewReader(`{"tool_name":"Shell","tool_input":{"command":"git status"}}`)
+	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"), "THLIBO_DISABLED=1")
+	out, _ := cmd.Output()
+	if strings.TrimSpace(string(out)) != "" {
+		t.Errorf("THLIBO_DISABLED should passthrough, got %q", out)
 	}
 }
 
