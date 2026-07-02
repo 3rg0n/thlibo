@@ -1,0 +1,21 @@
+internal/adapters/cursor/cursor.go
+  s_5811b7f24eccc0::t_b7a3929c4cf9fc 224-228,230-233
+internal/adapters/cursor/cursor_test.go
+  s_5811b7f24eccc0::t_a4a409dda3e526 310-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "7aa3025c6ea76a1ec62ae74458355519dfc43938",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
