@@ -22,6 +22,12 @@
 #      processors, and probe-or-install the inferd sidecar (which
 #      handles the model download). Skip with THLIBO_SKIP_INSTALL=1.
 #
+# Env vars:
+#   THLIBO_SKIP_INSTALL=1  Extract the binary only; don't configure.
+#   THLIBO_CODEX=1         Also install the Codex CLI hook (--codex).
+#   THLIBO_CURSOR=1        Also install the Cursor IDE hooks (--cursor).
+#      (The one-liner can't take flags, so these env vars opt in.)
+#
 # What it does NOT do (on purpose):
 #   - Modify your shell rc. If ~/.local/bin isn't already on PATH it
 #     prints the one-line addition you need to copy-paste.
@@ -199,14 +205,22 @@ main() {
       ;;
     *)
       echo
-      say "running: $INSTALL_DIR/thlibo install"
+      # Opt-in extra AI clients via env vars, since a piped one-liner
+      # can't take flags. THLIBO_CODEX=1 / THLIBO_CURSOR=1 append the
+      # matching install flag. (Without these, the one-liner only wires
+      # Claude Code — #169.)
+      install_args=()
+      case "${THLIBO_CODEX:-0}" in 1|true|yes|on) install_args+=(--codex) ;; esac
+      case "${THLIBO_CURSOR:-0}" in 1|true|yes|on) install_args+=(--cursor) ;; esac
+      say "running: $INSTALL_DIR/thlibo install ${install_args[*]}"
       say "  (writes Claude Code hooks, mirrors processors,"
       say "   probe-or-installs the inferd sidecar; inferd then"
       say "   downloads the ~5 GB Gemma 4 model on first request)"
       echo
       # Absolute path: PATH in this shell may not yet include
       # $INSTALL_DIR even if a future rc source will.
-      if ! "$INSTALL_DIR/thlibo" install; then
+      # ${arr[@]+"${arr[@]}"} expands safely on macOS bash 3.2 set -u.
+      if ! "$INSTALL_DIR/thlibo" install ${install_args[@]+"${install_args[@]}"}; then
         die "\`thlibo install\` failed; re-run it manually from a fresh shell to retry" 4
       fi
       echo

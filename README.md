@@ -145,6 +145,21 @@ Both installers:
 Skip step 5 with `THLIBO_SKIP_INSTALL=1` if you want to inspect the
 binary before running configure.
 
+The one-liner wires **Claude Code** by default. To also install the
+**Codex** or **Cursor** hooks through the one-liner (it can't take
+flags), set an env var:
+
+```bash
+# Unix
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_CODEX=1 THLIBO_CURSOR=1 bash
+```
+```powershell
+# Windows
+$env:THLIBO_CODEX=1; $env:THLIBO_CURSOR=1; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+```
+
+(Equivalently, run `thlibo install --codex --cursor` yourself afterward.)
+
 ### Prerequisites for running
 
 - Python 3.8+ — the built-in script processors are Python.

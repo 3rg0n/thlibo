@@ -22,6 +22,12 @@
 #      processors, and probe-or-install the inferd sidecar (which
 #      handles the model download). Skip with $env:THLIBO_SKIP_INSTALL=1.
 #
+# Env vars:
+#   $env:THLIBO_SKIP_INSTALL=1  Extract only; don't configure.
+#   $env:THLIBO_CODEX=1         Also install the Codex CLI hook (--codex).
+#   $env:THLIBO_CURSOR=1        Also install the Cursor IDE hooks (--cursor).
+#      (The one-liner can't take flags, so these env vars opt in.)
+#
 # What it does NOT do (on purpose):
 #   - Touch the Machine PATH or any admin-only registry. This is a
 #     per-user install (ADR 0004).
@@ -191,7 +197,13 @@ try {
         Say '    thlibo install'
     } else {
         Write-Host ''
-        Say 'running: thlibo install'
+        # Opt-in extra AI clients via env vars (a piped one-liner can't
+        # take flags). THLIBO_CODEX / THLIBO_CURSOR append the flag.
+        # Without these, the one-liner only wires Claude Code (#169).
+        $installArgs = @('install')
+        if ($env:THLIBO_CODEX  -in '1','true','yes','on') { $installArgs += '--codex' }
+        if ($env:THLIBO_CURSOR -in '1','true','yes','on') { $installArgs += '--cursor' }
+        Say ("running: thlibo " + ($installArgs -join ' '))
         Say '  (writes Claude Code hooks, mirrors processors,'
         Say '   probe-or-installs the inferd sidecar; inferd then'
         Say '   downloads the ~5 GB Gemma 4 model on first request)'
@@ -202,7 +214,7 @@ try {
         }
         # Forward exit code so automation / CI can key on install
         # success the same way it keys on the download step.
-        & $thliboExe install
+        & $thliboExe @installArgs
         $code = $LASTEXITCODE
         if ($code -ne 0) {
             Die "`"thlibo install`" exited $code" $code
