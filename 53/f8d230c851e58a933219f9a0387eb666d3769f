@@ -1,0 +1,21 @@
+docs/adr/0010-native-go-processors.md
+  s_5811b7f24eccc0::t_7e44baf12b6ad0 1-111
+docs/adr/README.md
+  s_5811b7f24eccc0::t_06727ddaedce89 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "53f8d230c851e58a933219f9a0387eb666d3769f",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+internal/processors/native_test.go
+  s_5811b7f24eccc0::t_0969711f4d3a39 1-98
+internal/processors/descriptor.go
+  s_5811b7f24eccc0::t_2d0f1c7cdde638 22
+  s_5811b7f24eccc0::t_a1a9330f598b8e 23-25
+  s_5811b7f24eccc0::t_958ffd6ebc406d 26-28,235-249
+internal/processors/native.go
+  s_5811b7f24eccc0::t_d87aca3fc3b3f2 1-70
+internal/processors/dispatch.go
+  s_5811b7f24eccc0::t_6ca319ae8e602a 50-58
+internal/processors/registry.go
+  s_5811b7f24eccc0::t_98ffa872200d0e 251-254
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "8485f127620d80340fb2d8296930139fd3ceecc3",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
