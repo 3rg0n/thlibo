@@ -248,7 +248,10 @@ func (r *Registry) MatchFastPath(input string) *Descriptor {
 		if !d.MatchesFastPath(input) {
 			continue
 		}
-		if d.Type == KindScript {
+		// Script and native filters are deterministic + fast; prefer
+		// them over prompt processors on a fast-path hit (ADR 0010:
+		// native behaves like script for routing).
+		if d.Type == KindScript || d.Type == KindNative {
 			return d
 		}
 		if firstPrompt == nil {

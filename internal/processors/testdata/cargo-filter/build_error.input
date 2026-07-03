@@ -1,0 +1,2 @@
+error[E0382]: borrow of moved value
+Finished dev [unoptimized] target(s) in 0.52s

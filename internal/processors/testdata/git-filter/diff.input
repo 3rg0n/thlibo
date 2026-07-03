@@ -1,0 +1,17 @@
+diff --git a/foo.go b/foo.go
+index 1234567..89abcde 100644
+--- a/foo.go
++++ b/foo.go
+@@ -1,5 +1,6 @@
+ package foo
+-import "old"
++import "new"
++import "extra"
+ func main() {}
+diff --git a/bar.go b/bar.go
+index aaa..bbb 100644
+--- a/bar.go
++++ b/bar.go
+@@ -10,3 +10,2 @@
+-removed line
+ context

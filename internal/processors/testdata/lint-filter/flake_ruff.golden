@@ -1,0 +1,3 @@
+src/x.py:1:1: F401 'os' imported but unused
+src/x.py:2:1: E302 expected 2 blank lines
+src/x.py:3:5: E225 missing whitespace around operator

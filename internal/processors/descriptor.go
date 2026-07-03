@@ -19,6 +19,13 @@ type Kind string
 const (
 	KindScript Kind = "script"
 	KindPrompt Kind = "prompt"
+	// KindNative is a built-in processor implemented as a Go function
+	// compiled into the thlibo binary (ADR 0010). It has no entry
+	// script, no DiskDir, and is not mirrored to disk; the dispatcher
+	// runs it in-process. Reserved for built-ins — a user descriptor
+	// declaring type:native is rejected (there is no user Go code to
+	// bind to the name).
+	KindNative Kind = "native"
 )
 
 // Descriptor is the loaded form of a processor.yaml or processor.md
@@ -224,6 +231,21 @@ func validate(d *Descriptor) error {
 	case KindPrompt:
 		if d.SystemPrompt == "" {
 			return fmt.Errorf("processor %s: prompt type requires a non-empty body", d.Name)
+		}
+	case KindNative:
+		// Native processors bind to Go code compiled into the binary
+		// (ADR 0010), so they are built-in only and their name must
+		// resolve to a registered filter func. A user descriptor can't
+		// supply Go code, so reject type:native from user origins and
+		// unknown native names.
+		if d.Origin.Source == OriginUser {
+			return fmt.Errorf("processor %s: type:native is built-in only (no user Go code to bind)", d.Name)
+		}
+		if nativeFilter(d.Name) == nil {
+			return fmt.Errorf("processor %s: no native filter registered for this name", d.Name)
+		}
+		if d.Entry != "" {
+			return fmt.Errorf("processor %s: type:native must not declare an entry", d.Name)
 		}
 	default:
 		return fmt.Errorf("processor %s: unknown type %q", d.Name, d.Type)

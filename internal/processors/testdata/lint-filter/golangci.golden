@@ -1,0 +1,2 @@
+E	internal/foo.go:40:6	golint	exported func Bar should have comment
+E	internal/foo.go:12:2	ineffassign	ineffectual assignment to err

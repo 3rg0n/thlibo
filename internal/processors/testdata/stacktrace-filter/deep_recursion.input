@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "recursive.py", line 10, in recurse
+    recurse(n - 1)
+  File "recursive.py", line 10, in recurse
+    recurse(n - 1)
+  File "recursive.py", line 10, in recurse
+    recurse(n - 1)
+  File "recursive.py", line 10, in recurse
+    recurse(n - 1)
+  File "recursive.py", line 10, in recurse
+    recurse(n - 1)
+RecursionError: maximum recursion depth exceeded

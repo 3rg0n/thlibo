@@ -1,0 +1,9 @@
+===== test session starts =====
+platform linux -- Python 3.9.0, pytest-7.0.0
+rootdir: /home/user/myproject
+plugins: asyncio-0.18.0
+collected 2 items
+
+test_foo.py .. [100%]
+
+===== 2 passed in 0.15s =====

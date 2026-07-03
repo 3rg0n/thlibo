@@ -1,0 +1,6 @@
+panic: runtime error: index out of range [3] with length 2
+
+goroutine 6 [running]:
+github.com/x/y.TestPanics(0x...)
+	/src/y_test.go:14 +0x1d
+FAIL	github.com/x/y	0.03s

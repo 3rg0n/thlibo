@@ -1,0 +1,3 @@
+--- FAIL: TestB
+    b_test.go:5: got X want Y
+FAIL github.com/x/y

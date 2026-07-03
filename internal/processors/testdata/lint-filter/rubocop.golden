@@ -1,0 +1,2 @@
+C	app/models/user.rb:12:80	Layout/LineLength	Line is too long. [95/80]
+C	app/models/user.rb:10:5	Style/StringLiterals	Prefer single-quoted strings.

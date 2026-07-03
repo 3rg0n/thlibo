@@ -1,0 +1,3 @@
+{"level":"error","msg":"connection refused","addr":"localhost:5000","_count":2}
+{"level":"warn","msg":"retrying","attempt":1}
+{"level":"info","msg":"startup complete"}

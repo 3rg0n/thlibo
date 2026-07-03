@@ -1,0 +1,2 @@
+{"severity":"ERROR","body":"auth failed","user":"alice","nested":{"code":"401"},"_count":2}
+{"loglevel":"INFO","text":"request","method":"GET"}

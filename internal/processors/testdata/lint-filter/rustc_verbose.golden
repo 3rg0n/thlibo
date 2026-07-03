@@ -1,0 +1,2 @@
+E	src/main.rs:10:20	E0382	borrow of moved value
+W	src/main.rs:2:9	unused_variables	unused variable: `x`

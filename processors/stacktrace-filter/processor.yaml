@@ -1,6 +1,5 @@
 name: stacktrace-filter
-type: script
-entry: run.py
+type: native
 match: "(?m)^(Traceback \\(most recent call last\\):|panic: |goroutine \\d+ \\[|fatal runtime error:|thread '[^']+' panicked at|Exception in thread |\\s+at [\\w$.]+\\(.*\\.java:|^\\s*at [\\w$.<>]+\\s*\\(.*:\\d+\\)$)"
 description: >
   Compresses language-agnostic stack traces (Python Traceback,

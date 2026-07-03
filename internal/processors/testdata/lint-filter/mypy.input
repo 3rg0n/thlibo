@@ -1,0 +1,2 @@
+src/x.py:10: error: Incompatible return value type [return-value]
+src/x.py:12: note: Revealed type is "builtins.int"

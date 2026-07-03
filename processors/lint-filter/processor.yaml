@@ -1,6 +1,5 @@
 name: lint-filter
-type: script
-entry: run.py
+type: native
 # Match-driven (fires on lint-shaped output from any source) AND
 # command-wrapped (see commands: below) so single-purpose scanners are
 # routed even when their output shape is novel. The final alternative

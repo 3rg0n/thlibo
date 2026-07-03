@@ -78,7 +78,7 @@ Claude Code: about to run `git status`
  thlibo exec runs the real git, captures stdout
       │
       ▼
- middleware: fast-path regex → git-filter (python script)
+ middleware: fast-path regex → git-filter (native Go)
              OR router call → inferd sidecar → Gemma 4 processor
       │
       ▼
@@ -91,16 +91,17 @@ Claude Code: about to run `git status`
  Model never sees the original — only the summary.
 ```
 
-Script processors (`git-filter`, `npm-filter`, `cargo-filter`,
-`pytest-filter`, `ndjson-filter`, `stacktrace-filter`,
-`lint-filter`, `pdf-to-md`) are deterministic Python scripts — they
-don't need inferd for their core path. (One exception: a *scanned*,
-image-only PDF has no extractable text, so `thlibo case` hands its
-pages to inferd's Gemma vision model for OCR — see below.) Prompt
-processors (`compress`, `casefolder`, `shorthand`) dispatch through
-inferd for LLM-driven summarisation of unfamiliar output.
-`cordon-filter` (semantic anomaly surfacer) embeds windows via inferd
-and surfaces the rare ones.
+The deterministic filters (`git-filter`, `npm-filter`, `cargo-filter`,
+`pytest-filter`, `go-test-filter`, `ndjson-filter`, `stacktrace-filter`,
+`lint-filter`, `trivy-filter`) are **native Go** — compiled into the
+binary, run in-process, no inferd and no Python (ADR 0010). `pdf-to-md`
+stays a Python script processor (pypdf + pdfplumber; one exception: a
+*scanned*, image-only PDF has no extractable text, so `thlibo case`
+hands its pages to inferd's Gemma vision model for OCR — see below).
+Prompt processors (`compress`, `casefolder`, `shorthand`) dispatch
+through inferd for LLM-driven summarisation of unfamiliar output.
+`cordon-filter` (semantic anomaly surfacer, Python + numpy) embeds
+windows via inferd and surfaces the rare ones.
 
 Everything runs on your machine. No network calls during inference,
 no telemetry, nothing leaves localhost.
@@ -162,7 +163,11 @@ $env:THLIBO_CODEX=1; $env:THLIBO_CURSOR=1; irm https://raw.githubusercontent.com
 
 ### Prerequisites for running
 
-- Python 3.8+ — the built-in script processors are Python.
+- **Python 3.8+ — optional.** The common built-in filters (git, npm,
+  cargo, go test, pytest, lint, trivy, ndjson, stacktrace) are native
+  Go and need no Python. Python is only required for **`pdf-to-md`**
+  (PDF → Markdown, uses pypdf + pdfplumber) and the **`cordon-filter`**
+  anomaly surfacer (uses numpy), plus any of your own `.py` processors.
 - `jq` — the Claude Code hook shell script needs it. Install via
   your package manager or `winget install jqlang.jq` on Windows.
 - `git` — for git-related compression you probably have it already.

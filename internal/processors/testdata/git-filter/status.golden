@@ -1,0 +1,11 @@
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+	modified:   internal/foo.go
+	modified:   README.md
+
+Untracked files:
+	newfile.txt
+
+no changes added to commit (use "git add" and/or "git commit -a")

@@ -1,0 +1,7 @@
+=== RUN   TestPass
+--- PASS: TestPass (0.00s)
+=== RUN   TestFail
+    foo_test.go:42: got 7, want 9
+--- FAIL: TestFail (0.00s)
+FAIL
+FAIL	github.com/x/y	0.05s

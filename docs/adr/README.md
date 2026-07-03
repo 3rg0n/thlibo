@@ -14,6 +14,7 @@ implementation choices aren't.
 | [0007](0007-pdf-to-markdown.md) | PDF → Markdown converter (pypdf + pdfplumber, Python script processor) | Accepted (scanned-PDF deferral superseded by [0009](0009-pdf-image-ocr-via-gemma-vision.md)) |
 | [0008](0008-numpy-as-processor-dep.md) | numpy as a processor dep, soft-imported with passthrough fallback | Accepted |
 | [0009](0009-pdf-image-ocr-via-gemma-vision.md) | Scanned-PDF OCR via Gemma vision, dispatched Go-side | Accepted |
+| [0010](0010-native-go-processors.md) | Reimplement the 9 deterministic built-in processors as native Go (`pdf-to-md` / `cordon-filter` stay Python) | Accepted |
 
 ## Writing a new ADR
 
