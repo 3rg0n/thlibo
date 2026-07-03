@@ -47,6 +47,15 @@ func (x *Dispatcher) Run(ctx context.Context, d *Descriptor, input string) (stri
 	switch d.Type {
 	case KindScript:
 		return x.runScript(ctx, d, input)
+	case KindNative:
+		// In-process Go filter (ADR 0010). No subprocess, no entry-file
+		// fingerprint (the code is the compiled binary). RunNative wraps
+		// the filter with panic-safety + the monotonic byte-win guard.
+		out, ok := RunNative(d.Name, []byte(input))
+		if !ok {
+			return "", fmt.Errorf("dispatch: %s: no native filter registered", d.Name)
+		}
+		return string(out), nil
 	case KindPrompt:
 		if x.PromptClient == nil {
 			return "", errors.New("dispatch: no prompt client configured")
