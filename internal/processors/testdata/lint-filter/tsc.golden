@@ -1,0 +1,2 @@
+E	src/app.ts:10:5	TS2322	Type 'string' is not assignable to type 'number'.
+W	src/app.ts:20:3	TS6133	'x' is declared but never used.

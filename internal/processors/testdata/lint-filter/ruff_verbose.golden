@@ -1,0 +1,3 @@
+W	src/x.py:5:80	E501	Line too long
+W	src/x.py:1:8	F401	`os` imported but unused
+-	src/x.py:1:8	F401	help: Remove unused import

@@ -30,7 +30,7 @@ import sys
 # \n -> \r\n, which breaks byte-identity for callers that pipe this
 # script's output back through tools that compare bytes.
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(newline="")
+    sys.stdout.reconfigure(newline="", encoding="utf-8")
 
 # Strip ANSI escapes — terminals love them, models don't need them.
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")

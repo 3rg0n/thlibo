@@ -1,0 +1,3 @@
+/project/src/app.js
+   1:1   error    Unexpected console statement  no-console
+   5:3   warning  Missing semicolon             semi

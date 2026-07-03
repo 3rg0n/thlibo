@@ -1,0 +1,13 @@
+warning: unused variable: `x`
+ --> src/main.rs:2:9
+  |
+2 |     let x = 5;
+  |         ^ help: if this is intentional, prefix it with an underscore: `_x`
+  |
+  = note: `#[warn(unused_variables)]` on by default
+
+error[E0382]: borrow of moved value
+ --> src/main.rs:10:20
+  |
+9 |     let s = String::new();
+  |

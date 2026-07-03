@@ -1,6 +1,5 @@
 name: npm-filter
-type: script
-entry: run.py
+type: native
 match: "(?m)^(npm (warn|error|notice)|added \\d+ packages|removed \\d+ packages|# npm audit report|npm ERR!|[│├└]──\\s+\\S+@[0-9.]+)"
 commands:
   - npm

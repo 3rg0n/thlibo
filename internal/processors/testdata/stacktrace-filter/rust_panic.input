@@ -1,0 +1,7 @@
+thread 'main' panicked at 'called Option::unwrap() on a None value':
+  0: rust_backtrace::trace
+             at src/main.rs:10
+  1: rust_backtrace::main
+             at src/main.rs:20:5
+  2: core::ops::function::FnOnce::call_once
+             at /rustc/12345/library/core/src/ops/function.rs:100

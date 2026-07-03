@@ -17,3 +17,7 @@
 *.json text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
+
+# Processor golden/parity fixtures are byte-compared — pin LF so a
+# Windows checkout can't rewrite them to CRLF and break TestFilterGoldens.
+internal/processors/testdata/** -text

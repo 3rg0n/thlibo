@@ -1,0 +1,4 @@
+{"severity":17,"body":"fatal error"}
+{"severity":13,"body":"database error"}
+{"severity":9,"body":"slow query"}
+{"severity":5,"body":"info log"}

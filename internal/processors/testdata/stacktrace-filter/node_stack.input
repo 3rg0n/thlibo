@@ -1,0 +1,5 @@
+TypeError: Cannot read properties of undefined (reading 'length')
+    at Object.getData (app.js:42:15)
+    at processRequest (app.js:100:5)
+    at Layer.handle [as handle_request] (express/lib/router/layer.js:95:10)
+    at next (express/lib/router/route.js:137:13)

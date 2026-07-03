@@ -1,0 +1,2 @@
+internal/foo.go:12:2: ineffectual assignment to err (ineffassign)
+internal/foo.go:40:6: exported func Bar should have comment (golint)

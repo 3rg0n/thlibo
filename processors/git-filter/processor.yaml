@@ -1,6 +1,5 @@
 name: git-filter
-type: script
-entry: run.py
+type: native
 match: "(?m)^(On branch |HEAD detached|Changes |Untracked files:|nothing to commit|diff --git|commit [0-9a-f]{7,40}$)"
 commands:
   - git

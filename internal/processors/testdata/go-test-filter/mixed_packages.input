@@ -1,0 +1,9 @@
+=== RUN   TestA
+--- PASS: TestA (0.00s)
+ok  	github.com/x/a	0.01s
+=== RUN   TestB
+    b_test.go:5: boom
+--- FAIL: TestB (0.00s)
+FAIL
+FAIL	github.com/x/b	0.02s
+?   	github.com/x/c	[no test files]

@@ -26,7 +26,6 @@ var (
 	ansiRE          = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 	pyStartRE       = regexp.MustCompile(`^Traceback \(most recent call last\):\s*$`)
 	pyFrameRE       = regexp.MustCompile(`^\s+File "([^"]+)", line (\d+)(?:, in (.+))?$`)
-	pyExcRE         = regexp.MustCompile(`^[A-Z][\w.]*(?:Error|Exception|Warning|Interrupt):.*$`)
 	goPanicRE       = regexp.MustCompile(`^panic: (.+)$`)
 	goGoroutineRE   = regexp.MustCompile(`^goroutine (\d+) \[([^\]]+)\]:`)
 	goFrameRE       = regexp.MustCompile(`^([\w./*-]+(?:\.\w+)+)\(.*\)$`)

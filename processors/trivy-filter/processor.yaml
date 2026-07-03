@@ -1,6 +1,5 @@
 name: trivy-filter
-type: script
-entry: run.py
+type: native
 match: "(?m)^Total:\\s+\\d+\\s+\\(.*?(?:CRITICAL|HIGH|MEDIUM|LOW|UNKNOWN):\\s+\\d+|Library.*Vulnerability.*Severity.*(?:Status.*)?Installed Version.*Fixed Version.*Title"
 description: >
   Distills Trivy's default box-drawing vulnerability tables into a

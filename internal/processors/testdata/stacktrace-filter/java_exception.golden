@@ -1,0 +1,6 @@
+Exception in thread "main" java.lang.NullPointerException
+	at com.example.MyClass.process(MyClass.java:42)
+	at com.example.Main.main(Main.java:100)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+Caused by: java.io.IOException
+	at com.example.Helper.load(Helper.java:200)

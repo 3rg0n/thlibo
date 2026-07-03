@@ -1,0 +1,16 @@
+===== test session starts =====
+collected 2 items
+
+test_bar.py .E [100%]
+
+===== ERRORS =====
+_____ ERROR at setup of test_needs_fixture ______
+
+def my_fixture():
+>       raise RuntimeError("fixture broken")
+
+test_bar.py:5: RuntimeError
+
+===== short test summary info =====
+ERROR test_bar.py::test_needs_fixture
+===== 1 error, 1 passed in 0.18s =====

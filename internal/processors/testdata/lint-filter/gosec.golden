@@ -1,0 +1,2 @@
+E	internal/x.go:42	G404	Use of weak random number generator
+I	internal/y.go:7	G104	Errors unhandled

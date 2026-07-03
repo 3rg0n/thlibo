@@ -1,0 +1,8 @@
+{"Action":"run","Test":"TestPass0"}
+{"Action":"output","Test":"TestPass0","Output":"=== RUN   TestPass0\n"}
+{"Action":"output","Test":"TestPass0","Output":"--- PASS: TestPass0 (0.00s)\n"}
+{"Action":"pass","Test":"TestPass0"}
+{"Action":"run","Test":"TestB"}
+{"Action":"output","Test":"TestB","Output":"    b_test.go:5: got X want Y\n"}
+{"Action":"fail","Test":"TestB"}
+{"Action":"fail","Package":"github.com/x/y"}

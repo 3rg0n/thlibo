@@ -1,0 +1,11 @@
+commit 1234567890abcdef1234567890abcdef12345678
+Author: Someone <s@example.com>
+Date:   Mon Jan 1 00:00:00 2026 +0000
+
+    Fix the thing
+
+commit fedcba0987654321fedcba0987654321fedcba09
+Author: Other <o@example.com>
+Date:   Tue Jan 2 00:00:00 2026 +0000
+
+    Add the other thing

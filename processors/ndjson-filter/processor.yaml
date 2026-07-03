@@ -1,6 +1,5 @@
 name: ndjson-filter
-type: script
-entry: run.py
+type: native
 match: "(?m)^\\{[^\\n]*\"(?:level|severity|msg|message|@timestamp|time|ts)\":[^\\n]*\\}\\s*$"
 description: >
   Compresses NDJSON / structured-log streams (OpenTelemetry exports,

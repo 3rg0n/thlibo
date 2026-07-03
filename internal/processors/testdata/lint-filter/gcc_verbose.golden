@@ -1,0 +1,2 @@
+E	src/test.c:10:5	-Werror	'y' undeclared
+W	src/test.c:5:9	-Wunused-variable	unused variable 'x'

@@ -1,0 +1,6 @@
+src/test.c:5:9: warning: unused variable 'x' [-Wunused-variable]
+    5 |     int x = 0;
+      |         ^
+src/test.c:10:5: error: 'y' undeclared [-Werror]
+   10 |     y = 1;
+      |     ^

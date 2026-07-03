@@ -1,0 +1,3 @@
+scripts/a.sh:5:12: warning: Quote this to prevent word splitting. [SC2086]
+scripts/b.sh:5:12: warning: Quote this to prevent word splitting. [SC2086]
+scripts/c.sh:5:12: warning: Quote this to prevent word splitting. [SC2086]

@@ -1,0 +1,6 @@
+===== test session starts =====
+collected 1 items
+
+test_foo.py \x1b[32m.\x1b[0m [100%]
+
+===== 1 passed in 0.10s =====

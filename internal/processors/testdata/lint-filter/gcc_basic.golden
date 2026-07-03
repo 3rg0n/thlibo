@@ -1,0 +1,3 @@
+W	src/test.c:1:9	-Wunused-variable	unused variable 'x'
+W	src/test.c:2:9	-Wunused-variable	unused variable 'y'
+W	src/test.c:3:9	-Wunused-variable	unused variable 'z'

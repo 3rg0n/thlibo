@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "script.py", line 42, in main
+    result = foo(x)
+  File "lib.py", line 100, in foo
+    return bar(y)
+  File "lib.py", line 200, in bar
+    return baz(z)
+IndexError: list index out of range

@@ -1,6 +1,5 @@
 name: go-test-filter
-type: script
-entry: run.py
+type: native
 # Match-driven (fires on go-test-shaped output from any source) plus
 # command-prefix wrapping. `command_prefixes` (not `commands`) because
 # argv[0]=go is multiplexed — only `go test` should wrap, never

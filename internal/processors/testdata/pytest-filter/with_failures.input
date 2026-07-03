@@ -1,0 +1,18 @@
+===== test session starts =====
+platform linux -- Python 3.9.0
+collected 3 items
+
+test_foo.py .F. [100%]
+
+===== FAILURES =====
+___________ test_broken _____________
+
+def test_broken():
+>       assert False
+E       AssertionError: assert False
+
+test_foo.py:42: AssertionError
+
+===== short test summary info =====
+FAILED test_foo.py::test_broken - AssertionError: assert False
+===== 1 failed, 2 passed in 0.22s =====

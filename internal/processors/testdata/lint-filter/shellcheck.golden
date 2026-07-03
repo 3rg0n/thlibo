@@ -1,0 +1,3 @@
+W	scripts/a.sh:5:12	SC2086	Quote this to prevent word splitting.
+W	scripts/b.sh:5:12	SC2086	Quote this to prevent word splitting.
+W	scripts/c.sh:5:12	SC2086	Quote this to prevent word splitting.

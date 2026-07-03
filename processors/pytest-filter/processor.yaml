@@ -1,6 +1,5 @@
 name: pytest-filter
-type: script
-entry: run.py
+type: native
 match: "(?m)^(=+ test session starts =+|=+ FAILURES =+|=+ ERRORS =+|=+ short test summary info =+|collected \\d+ items?)"
 commands:
   - pytest

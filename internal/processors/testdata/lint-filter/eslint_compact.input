@@ -1,0 +1,2 @@
+src/app.js: line 1, col 1, Error - Unexpected console statement. (no-console)
+src/app.js: line 5, col 3, Warning - Missing semicolon. (semi)

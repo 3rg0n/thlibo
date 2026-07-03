@@ -1,0 +1,11 @@
+panic: runtime error: index out of range [42] with length 10
+
+goroutine 1 [running]:
+main.(*Cache).Get(0xc0001234, 0x2a)
+	/home/user/src/cache.go:42 +0x234
+main.process()
+	/home/user/src/main.go:100 +0x567
+main.main()
+	/home/user/src/main.go:200 +0x789
+runtime.main()
+	/usr/local/go/src/runtime/proc.go:250 +0x100

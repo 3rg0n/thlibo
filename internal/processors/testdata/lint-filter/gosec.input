@@ -1,0 +1,2 @@
+[internal/x.go:42] - G404 (CWE-338): Use of weak random number generator (Confidence: HIGH, Severity: HIGH)
+[internal/y.go:7] - G104 (CWE-703): Errors unhandled (Confidence: HIGH, Severity: LOW)

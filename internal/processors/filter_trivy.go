@@ -23,15 +23,11 @@ import (
 func init() { RegisterNative("trivy-filter", trivyFilter) }
 
 var (
-	trivyAnsiRE        = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-	trivyRowRE         = regexp.MustCompile(`^\s*│(.*)│\s*$`)
-	trivySepRE         = regexp.MustCompile(`[─┬┼┴]`)
-	trivyFullSepRE     = regexp.MustCompile(`^\s*[├┌└][─┬┼┴┤┐┘]+[┤┐┘]\s*$`)
-	trivyHeaderRE      = regexp.MustCompile(`Library.*Vulnerability.*Severity.*(?:Status.*)?Installed Version.*Fixed Version.*Title`)
-	trivyTargetRE      = regexp.MustCompile(`^(?P<target>\S.+?)\s+\(\S+\)\s*$`)
-	trivyTotalRE       = regexp.MustCompile(`^Total:\s+\d+\s+\(`)
-	trivyVulnIDRE      = regexp.MustCompile(`^(?:CVE-\d{4}-\d+|GHSA-[\w-]+|CGA-[\w-]+|[A-Z]+-\d+(?:-\d+)?)$`)
-	trivyURLRE         = regexp.MustCompile(`\bhttps?://\S+`)
+	trivyAnsiRE   = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+	trivyRowRE    = regexp.MustCompile(`^\s*│(.*)│\s*$`)
+	trivyHeaderRE = regexp.MustCompile(`Library.*Vulnerability.*Severity.*(?:Status.*)?Installed Version.*Fixed Version.*Title`)
+	trivyVulnIDRE = regexp.MustCompile(`^(?:CVE-\d{4}-\d+|GHSA-[\w-]+|CGA-[\w-]+|[A-Z]+-\d+(?:-\d+)?)$`)
+	trivyURLRE    = regexp.MustCompile(`\bhttps?://\S+`)
 )
 
 var (
@@ -113,8 +109,8 @@ func trivyIsTableOpen(line string) bool {
 
 func trivySplitCells(line string) []string {
 	m := trivyRowRE.FindStringSubmatch(line)
-	if m == nil || len(m) < 2 {
-		return []string{}
+	if m == nil {
+		return nil
 	}
 	inner := m[1]
 	parts := strings.Split(inner, "│")
