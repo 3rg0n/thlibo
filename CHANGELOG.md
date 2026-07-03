@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The 9 deterministic built-in processors are now native Go, not
+  Python** ([ADR 0010](docs/adr/0010-native-go-processors.md)).
+  `git-filter`, `npm-filter`, `cargo-filter`, `ndjson-filter`,
+  `pytest-filter`, `stacktrace-filter`, `trivy-filter`, `go-test-filter`,
+  and `lint-filter` are reimplemented as a new `type: native`
+  in-process processor kind — the middleware dispatches them by calling
+  a compiled Go function instead of forking `python3`. Each is
+  byte-for-byte parity-verified against its original `run.py` via
+  captured golden fixtures (`internal/processors/testdata/`), a gate
+  that runs with no Python dependency. **Python is now optional** —
+  required only for `pdf-to-md` and `cordon-filter` (which stay Python,
+  ADR 0007/0008) and user-authored `.py` processors. Faster too:
+  in-process call, no interpreter startup or subprocess per dispatch.
+
 ## [0.7.8] - 2026-07-02
 
 ### Added

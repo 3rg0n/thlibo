@@ -162,7 +162,11 @@ $env:THLIBO_CODEX=1; $env:THLIBO_CURSOR=1; irm https://raw.githubusercontent.com
 
 ### Prerequisites for running
 
-- Python 3.8+ — the built-in script processors are Python.
+- **Python 3.8+ — optional.** The common built-in filters (git, npm,
+  cargo, go test, pytest, lint, trivy, ndjson, stacktrace) are native
+  Go and need no Python. Python is only required for **`pdf-to-md`**
+  (PDF → Markdown, uses pypdf + pdfplumber) and the **`cordon-filter`**
+  anomaly surfacer (uses numpy), plus any of your own `.py` processors.
 - `jq` — the Claude Code hook shell script needs it. Install via
   your package manager or `winget install jqlang.jq` on Windows.
 - `git` — for git-related compression you probably have it already.
