@@ -1,0 +1,271 @@
+internal/processors/testdata/trivy-filter/simple_table.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-8
+internal/processors/testdata/go-test-filter/all_pass.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-6
+internal/processors/testdata/pytest-filter/ansi_colored.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-6
+internal/processors/testdata/ndjson-filter/only_noise.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/pytest-filter/non_pytest_noise.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/trivy-filter/multiple_tables.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-13
+processors/stacktrace-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+internal/processors/testdata/lint-filter/non_lint.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/pytest-filter/with_errors.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-16
+internal/processors/testdata/trivy-filter/with_wrapped_title.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-9
+processors/lint-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+internal/processors/testdata/cargo-filter/build_error.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/go-test-filter/all_pass.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/lint-filter/gosec.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/ndjson-filter/nested_fields.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/go-test-filter/build_error.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/go-test-filter/skip.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-7
+internal/processors/testdata/stacktrace-filter/rust_panic.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-7
+internal/processors/testdata/stacktrace-filter/node_stack.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-5
+internal/processors/testdata/lint-filter/gcc_basic.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/pytest-filter/non_pytest_noise.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/trivy-filter/with_total_line.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-7
+internal/processors/testdata/go-test-filter/mixed_packages.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-6
+internal/processors/testdata/lint-filter/rustc_verbose.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-13
+internal/processors/testdata/lint-filter/mypy.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/ndjson-filter/non_json_noise.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-4
+internal/processors/testdata/go-test-filter/panic.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-6
+internal/processors/testdata/stacktrace-filter/java_exception.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-6
+processors/trivy-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+processors/git-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+internal/processors/testdata/go-test-filter/mixed_packages.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-9
+internal/processors/testdata/trivy-filter/with_total_line.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-7
+internal/processors/testdata/lint-filter/gcc_verbose.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-6
+internal/processors/testdata/lint-filter/rustc_verbose.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/lint-filter/eslint_stylish.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/lint-filter/eslint_unix.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/lint-filter/ruff_verbose.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/lint-filter/stylelint.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/ndjson-filter/mixed_levels.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/pytest-filter/with_errors.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-14
+internal/processors/testdata/git-filter/status.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-14
+internal/processors/testdata/pytest-filter/ansi_colored.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-6
+internal/processors/testdata/git-filter/log.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-11
+internal/processors/testdata/lint-filter/stylelint.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/lint-filter/tsc.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/lint-filter/golangci.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/trivy-filter/with_wrapped_title.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-9
+internal/processors/testdata/git-filter/diff.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/go-test-filter/json_events.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/trivy-filter/multiple_tables.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-13
+internal/processors/testdata/lint-filter/eslint_compact.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/stacktrace-filter/deep_recursion.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-12
+internal/processors/testdata/stacktrace-filter/python_traceback.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-8
+internal/processors/testdata/lint-filter/mypy.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/lint-filter/rubocop.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/ndjson-filter/non_json_noise.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-5
+internal/processors/testdata/go-test-filter/json_events.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-8
+internal/processors/testdata/lint-filter/rubocop.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/lint-filter/eslint_unix.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/npm-filter/list_tree.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/stacktrace-filter/go_panic.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-11
+internal/processors/testdata/lint-filter/eslint_stylish.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/filter_golden_test.go
+  s_5811b7f24eccc0::t_50bcddbccd29a5 1-67
+internal/processors/testdata/git-filter/noise.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/go-test-filter/non_gotest.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+processors/go-test-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+internal/processors/testdata/trivy-filter/simple_table.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-8
+internal/processors/testdata/stacktrace-filter/non_trace.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/stacktrace-filter/python_traceback.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-8
+internal/processors/testdata/npm-filter/install_success.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/lint-filter/ruff_verbose.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-9
+internal/processors/testdata/lint-filter/tsc.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/lint-filter/shellcheck.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/npm-filter/install_success.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/pytest-filter/with_failures.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-18
+internal/processors/testdata/lint-filter/gcc_verbose.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/lint-filter/mixed.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+processors/stacktrace-filter/run.py
+  s_5811b7f24eccc0::t_08972ec3b5f8de 33
+internal/processors/testdata/ndjson-filter/duplicates.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-5
+internal/processors/testdata/stacktrace-filter/go_panic.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-11
+internal/processors/testdata/cargo-filter/build_error.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/ndjson-filter/duplicates.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/lint-filter/gcc_basic.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/filter_trivy.go
+  s_5811b7f24eccc0::t_c6190dd7f8a972 26-30
+  s_5811b7f24eccc0::t_59dff74a99bc9b 112-113
+internal/processors/testdata/git-filter/noise.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/go-test-filter/panic.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-7
+internal/processors/testdata/lint-filter/gosec.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/ndjson-filter/mixed_levels.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-4
+internal/processors/testdata/ndjson-filter/only_noise.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/stacktrace-filter/deep_recursion.golden
+  s_5811b7f24eccc0::t_08972ec3b5f8de 1-4
+internal/processors/testdata/npm-filter/list_tree.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/zz_gen_golden_test.go
+  s_5811b7f24eccc0::t_40387ff19155e7 1-4,6,8-10,16-17,19,24-27,37-38,40-44,51-59
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 5,7,11-15,18,20-23,28-36,39,45-50
+processors/ndjson-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+internal/processors/testdata/go-test-filter/build_error.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/git-filter/status.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-11
+internal/processors/testdata/lint-filter/eslint_compact.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/cargo-filter/simple_success.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/ndjson-filter/otel_numeric.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-4
+internal/processors/testdata/lint-filter/mixed.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/stacktrace-filter/node_stack.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-5
+internal/processors/testdata/pytest-filter/passing.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-9
+internal/processors/testdata/go-test-filter/single_failure.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-4
+internal/processors/testdata/go-test-filter/single_failure.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-7
+internal/processors/testdata/stacktrace-filter/non_trace.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/git-filter/diff.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-17
+internal/processors/testdata/trivy-filter/non_table.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/git-filter/log.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-11
+internal/processors/testdata/lint-filter/flake_ruff.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/lint-filter/golangci.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/lint-filter/non_lint.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+processors/cargo-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+processors/pytest-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+internal/processors/testdata/stacktrace-filter/java_exception.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-6
+internal/processors/testdata/pytest-filter/passing.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-4
+internal/processors/testdata/go-test-filter/skip.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/trivy-filter/non_table.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/stacktrace-filter/rust_panic.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-7
+internal/processors/testdata/ndjson-filter/nested_fields.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-2
+internal/processors/testdata/cargo-filter/simple_success.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1
+internal/processors/testdata/go-test-filter/non_gotest.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/lint-filter/flake_ruff.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/lint-filter/shellcheck.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-3
+internal/processors/testdata/ndjson-filter/otel_numeric.input
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-4
+processors/npm-filter/processor.yaml
+  s_5811b7f24eccc0::t_397a950a6bacb8 2
+internal/processors/testdata/pytest-filter/with_failures.golden
+  s_5811b7f24eccc0::t_a22971ad3d3c5a 1-15
+.gitattributes
+  s_5811b7f24eccc0::t_522f934d0c93de 20-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "ec0fd4253c7624b0e19d3ceecf6515c77bc9816f",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
