@@ -166,6 +166,101 @@ func mustRead(t *testing.T, p string) []byte {
 	return b
 }
 
+// TestRemoveStaleHooksJSONAbsent: no file → no-op, no error.
+func TestRemoveStaleHooksJSONAbsent(t *testing.T) {
+	dir := t.TempDir()
+	if err := RemoveStaleHooksJSON(filepath.Join(dir, "hooks.json")); err != nil {
+		t.Errorf("absent file should be a no-op, got %v", err)
+	}
+}
+
+// TestRemoveStaleHooksJSONNoMarker: a hooks.json with only OTHER tools'
+// hooks is left untouched (no thlibo marker → don't rewrite).
+func TestRemoveStaleHooksJSONNoMarker(t *testing.T) {
+	dir := t.TempDir()
+	hp := filepath.Join(dir, "hooks.json")
+	original := `{
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "^Bash$", "hooks": [ { "type": "command", "command": "other-tool.sh" } ] }
+    ]
+  }
+}`
+	_ = os.WriteFile(hp, []byte(original), 0o600)
+	if err := RemoveStaleHooksJSON(hp); err != nil {
+		t.Fatal(err)
+	}
+	if string(mustRead(t, hp)) != original {
+		t.Error("file without a thlibo entry must be left byte-for-byte unchanged")
+	}
+}
+
+// TestRemoveStaleHooksJSONOnlyThlibo: a hooks.json that contained ONLY
+// thlibo's entry is deleted entirely (no empty second representation).
+func TestRemoveStaleHooksJSONOnlyThlibo(t *testing.T) {
+	dir := t.TempDir()
+	hp := filepath.Join(dir, "hooks.json")
+	_ = os.WriteFile(hp, []byte(`{
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "^Bash$", "hooks": [ { "type": "command", "command": "/x/thlibo-rewrite-codex.sh" } ] }
+    ]
+  }
+}`), 0o600)
+	if err := RemoveStaleHooksJSON(hp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(hp); !os.IsNotExist(err) {
+		t.Errorf("hooks.json with only the thlibo entry should be deleted; stat err=%v", err)
+	}
+}
+
+// TestRemoveStaleHooksJSONPreservesOthers: thlibo's entry is stripped
+// but a co-resident other-tool entry (and other events) survive.
+func TestRemoveStaleHooksJSONPreservesOthers(t *testing.T) {
+	dir := t.TempDir()
+	hp := filepath.Join(dir, "hooks.json")
+	_ = os.WriteFile(hp, []byte(`{
+  "hooks": {
+    "SessionStart": [ { "hooks": [ { "type": "command", "command": "sess.sh" } ] } ],
+    "PostToolUse": [
+      { "matcher": "^Bash$", "hooks": [
+        { "type": "command", "command": "other-observer.sh" },
+        { "type": "command", "command": "/x/thlibo-rewrite-codex.sh" }
+      ] }
+    ]
+  }
+}`), 0o600)
+	if err := RemoveStaleHooksJSON(hp); err != nil {
+		t.Fatal(err)
+	}
+	s := string(mustRead(t, hp))
+	if strings.Contains(s, "thlibo-rewrite-codex.sh") {
+		t.Error("thlibo entry should have been removed")
+	}
+	if !strings.Contains(s, "other-observer.sh") {
+		t.Error("co-resident other-tool hook was dropped")
+	}
+	if !strings.Contains(s, "sess.sh") {
+		t.Error("unrelated SessionStart event was dropped")
+	}
+}
+
+// TestRemoveStaleHooksJSONMalformed: a corrupt file is left untouched.
+func TestRemoveStaleHooksJSONMalformed(t *testing.T) {
+	dir := t.TempDir()
+	hp := filepath.Join(dir, "hooks.json")
+	// Contains the marker but is not valid JSON — must NOT be clobbered.
+	original := `{ not json … thlibo-rewrite-codex.sh`
+	_ = os.WriteFile(hp, []byte(original), 0o600)
+	if err := RemoveStaleHooksJSON(hp); err != nil {
+		t.Errorf("malformed file should be a silent no-op, got %v", err)
+	}
+	if string(mustRead(t, hp)) != original {
+		t.Error("malformed file must be left untouched")
+	}
+}
+
 // --- EnableHooksFeatureFlag / ensureCodexHooksTrue ---
 
 // TestEnableHooksFeatureFlagFreshFile: creates a new config.toml

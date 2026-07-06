@@ -363,6 +363,14 @@ func Run(argv []string) int {
 			fmt.Fprintln(os.Stderr, "install: codex config.toml:", err)
 			return 9
 		}
+		// Migration: a pre-#170 install put the hook in a sibling
+		// hooks.json. Leaving it there recreates the mixed-representation
+		// state we just moved off of, so strip any stale thlibo entry
+		// from hooks.json next to the config. Non-fatal.
+		staleHooksJSON := filepath.Join(filepath.Dir(cfgPath), "hooks.json")
+		if err := codex.RemoveStaleHooksJSON(staleHooksJSON); err != nil {
+			fmt.Fprintln(os.Stderr, "install: codex hooks.json cleanup (non-fatal):", err)
+		}
 		fmt.Printf("  wrote Codex hook + added inline [[hooks.PostToolUse]] + [features] hooks=true in %s\n", cfgPath)
 		// Codex requires the user to TRUST a command hook before it
 		// runs ("Before a non-managed command hook can run, Codex

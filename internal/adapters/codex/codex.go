@@ -27,6 +27,7 @@ package codex
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -130,6 +131,110 @@ func MergeConfigTOMLHook(configPath, hookPath string) error {
 	return nil
 }
 
+// RemoveStaleHooksJSON removes a previously-installed thlibo PostToolUse
+// entry from a legacy ~/.codex/hooks.json (migration cleanup for #170).
+//
+// Before #170 thlibo wrote its hook to hooks.json. Now it writes inline
+// into config.toml. If an upgrading user still has the old hooks.json
+// entry, they'd have BOTH representations in one layer — the exact mixed
+// state that makes Codex warn and hide hooks (#170). So on every
+// --codex install we strip any thlibo entry from hooks.json, dropping
+// emptied groups and the "hooks" object, and deleting the file entirely
+// if nothing but our entry was in it.
+//
+// No-ops (returns nil) when the file is absent. Leaves a malformed file
+// untouched rather than risk clobbering user data. Only removes OUR
+// entry (matched by hookMarker); every other tool's hook is preserved.
+func RemoveStaleHooksJSON(hooksPath string) error {
+	buf, err := os.ReadFile(hooksPath) // #nosec G304 -- installer-chosen path, not user input.
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("codex: read %s: %w", hooksPath, err)
+	}
+	if len(buf) == 0 {
+		return nil
+	}
+	// Fast path: if our marker isn't even in the file, nothing to do —
+	// avoids rewriting (and reformatting) a file we don't own.
+	if !strings.Contains(normalisePath(string(buf)), hookMarker) {
+		return nil
+	}
+
+	var root map[string]any
+	if err := json.Unmarshal(buf, &root); err != nil {
+		// Malformed — don't touch it. The mixed-state warning is a lesser
+		// evil than corrupting the user's file.
+		return nil
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	post, ok := hooks["PostToolUse"].([]any)
+	if !ok {
+		return nil
+	}
+
+	// Drop thlibo entries from each group's hooks[]; drop groups left
+	// with no hooks.
+	var keptGroups []any
+	for _, g := range post {
+		obj, ok := g.(map[string]any)
+		if !ok {
+			keptGroups = append(keptGroups, g)
+			continue
+		}
+		inner, _ := obj["hooks"].([]any)
+		var keptInner []any
+		for _, h := range inner {
+			ho, ok := h.(map[string]any)
+			if !ok {
+				keptInner = append(keptInner, h)
+				continue
+			}
+			cmd, _ := ho["command"].(string)
+			if strings.Contains(normalisePath(cmd), hookMarker) {
+				continue // drop our stale entry
+			}
+			keptInner = append(keptInner, h)
+		}
+		if len(keptInner) == 0 {
+			continue // group had only our entry — drop the whole group
+		}
+		obj["hooks"] = keptInner
+		keptGroups = append(keptGroups, obj)
+	}
+
+	if len(keptGroups) == 0 {
+		delete(hooks, "PostToolUse")
+	} else {
+		hooks["PostToolUse"] = keptGroups
+	}
+	if len(hooks) == 0 {
+		delete(root, "hooks")
+	}
+
+	// If nothing meaningful is left, remove the file so it doesn't sit
+	// as an empty second representation.
+	if len(root) == 0 {
+		if err := os.Remove(hooksPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("codex: remove empty %s: %w", hooksPath, err)
+		}
+		return nil
+	}
+
+	encoded, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("codex: marshal %s: %w", hooksPath, err)
+	}
+	if err := os.WriteFile(hooksPath, encoded, 0o600); err != nil {
+		return fmt.Errorf("codex: write %s: %w", hooksPath, err)
+	}
+	return nil
+}
+
 // EnableHooksFeatureFlag ensures the Codex hooks feature flag is on in
 // the user's config.toml. Without it, Codex silently ignores every hook
 // it finds.
@@ -141,10 +246,8 @@ func MergeConfigTOMLHook(configPath, hookPath string) error {
 // never duplicate the flag or fight a config that git-ai (or another
 // tool) already enabled.
 //
-// The TOML here is written by hand rather than through a library:
-// hooks.json is the authoritative hook declaration, config.toml
-// only needs the one feature flag. Doing it inline keeps the
-// dependency footprint small.
+// The TOML here is written by hand rather than through a library, to
+// keep the dependency footprint at zero (the module has no TOML lib).
 //
 // Merge semantics: if the file doesn't exist, it's created with
 // just the feature flag. If [features] already exists, the flag
