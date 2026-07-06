@@ -15,10 +15,14 @@
 // The package installs three things:
 //
 //	1. The hook script (thlibo-rewrite-codex.sh) to the user's hook dir.
-//	2. A hooks.json entry: PostToolUse/^Bash$/command→<hook>, merged
-//	   into ~/.codex/hooks.json without clobbering other events.
-//	3. The [features] codex_hooks = true flag in ~/.codex/config.toml,
-//	   without which Codex silently ignores all hooks.
+//	2. An inline [[hooks.PostToolUse]] (matcher "^Bash$") block appended
+//	   to ~/.codex/config.toml pointing at the hook (#170). Written
+//	   inline — not to a separate hooks.json — because Codex warns and
+//	   degrades when one config layer mixes hooks.json + inline tables,
+//	   and other tools (git-ai/taco) already write inline, so the hook
+//	   would not reliably surface in `/hooks`.
+//	3. The [features] hooks = true flag in ~/.codex/config.toml, without
+//	   which Codex ignores all hooks.
 package codex
 
 import (
@@ -52,102 +56,183 @@ func WriteHookScript(path string) error {
 }
 
 // hookMarker is the filename substring we use to recognise a
-// previously-installed thlibo entry and update it in place.
+// previously-installed thlibo entry (so a reinstall is idempotent).
 const hookMarker = "thlibo-rewrite-codex.sh"
 
-// MergeHooksJSON loads hooksPath, adds a PostToolUse/^Bash$ entry
-// pointing at hookPath, and writes back. Every unrelated key and
-// every other hook entry is preserved.
+// MergeConfigTOMLHook appends thlibo's PostToolUse/^Bash$ hook INLINE
+// into the user's config.toml, if not already present.
 //
-// The Codex hooks.json schema wraps events under a top-level "hooks"
-// object, per the docs example:
+// Why inline config.toml and not a separate hooks.json (#170): when a
+// single config layer (~/.codex) contains BOTH a hooks.json and inline
+// [[hooks.*]] tables, Codex warns ("loading hooks from both … prefer a
+// single representation for this layer") and thlibo's hooks.json hook
+// doesn't reliably surface in `/hooks`. Tools like git-ai / taco write
+// inline config.toml hooks, so on a real machine that mixed state is
+// the norm. Writing thlibo's hook in the SAME representation the rest of
+// the layer uses avoids the split entirely.
 //
-//	{ "hooks": { "PostToolUse": [ ... ] } }
+// The appended block (Codex canonical inline shape,
+// developers.openai.com/codex/hooks) is:
 //
-// Idempotent; recognises a prior install by the hookMarker substring;
-// refuses to overwrite malformed JSON so corruption is never silent.
-func MergeHooksJSON(hooksPath, hookPath string) error {
+//	[[hooks.PostToolUse]]
+//	matcher = "^Bash$"
+//
+//	[[hooks.PostToolUse.hooks]]
+//	type = "command"
+//	command = '<hook path>'
+//
+// Multiple [[hooks.PostToolUse]] array-of-tables are additive, so
+// appending never disturbs git-ai/taco's own blocks. Idempotent: if a
+// thlibo hook command is already present anywhere in the file, this is a
+// no-op. Non-destructive: we only ever append; existing content is
+// untouched.
+func MergeConfigTOMLHook(configPath, hookPath string) error {
 	hookPath = normalisePath(hookPath)
 
-	var root map[string]any
-	buf, err := os.ReadFile(hooksPath) // #nosec G304 -- hooksPath is chosen by the installer, not user input.
-	switch {
-	case err == nil:
-		if len(buf) == 0 {
-			root = map[string]any{}
-		} else {
-			if err := json.Unmarshal(buf, &root); err != nil {
-				return fmt.Errorf("codex: parse %s: %w", hooksPath, err)
-			}
-		}
-	case os.IsNotExist(err):
-		root = map[string]any{}
-	default:
-		return fmt.Errorf("codex: read %s: %w", hooksPath, err)
+	existing, err := readFileOrEmpty(configPath)
+	if err != nil {
+		return err
 	}
 
-	addPostToolUseHook(root, hookPath)
+	// Idempotent: a prior thlibo hook (recognised by the script marker)
+	// means nothing to do — leave the file byte-for-byte unchanged.
+	if strings.Contains(normalisePath(existing), hookMarker) {
+		return nil
+	}
+
+	// TOML single-quoted (literal) string: no escapes are processed, so
+	// a Windows path's backslashes are safe. A literal string cannot
+	// contain a single quote; our install paths never do, but guard by
+	// falling back to a double-quoted string with backslashes escaped if
+	// one somehow appears.
+	var cmdLit string
+	if strings.Contains(hookPath, "'") {
+		cmdLit = `"` + strings.ReplaceAll(hookPath, `\`, `\\`) + `"`
+	} else {
+		cmdLit = "'" + hookPath + "'"
+	}
+
+	block := "\n[[hooks.PostToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PostToolUse.hooks]]\ntype = \"command\"\ncommand = " + cmdLit + "\n"
+
+	// Ensure a newline boundary before the appended block so we don't
+	// glue onto a trailing partial line.
+	out := existing
+	if out != "" && !strings.HasSuffix(out, "\n") {
+		out += "\n"
+	}
+	out += block
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+		return fmt.Errorf("codex: create config dir: %w", err)
+	}
+	if err := os.WriteFile(configPath, []byte(out), 0o600); err != nil {
+		return fmt.Errorf("codex: write %s: %w", configPath, err)
+	}
+	return nil
+}
+
+// RemoveStaleHooksJSON removes a previously-installed thlibo PostToolUse
+// entry from a legacy ~/.codex/hooks.json (migration cleanup for #170).
+//
+// Before #170 thlibo wrote its hook to hooks.json. Now it writes inline
+// into config.toml. If an upgrading user still has the old hooks.json
+// entry, they'd have BOTH representations in one layer — the exact mixed
+// state that makes Codex warn and hide hooks (#170). So on every
+// --codex install we strip any thlibo entry from hooks.json, dropping
+// emptied groups and the "hooks" object, and deleting the file entirely
+// if nothing but our entry was in it.
+//
+// No-ops (returns nil) when the file is absent. Leaves a malformed file
+// untouched rather than risk clobbering user data. Only removes OUR
+// entry (matched by hookMarker); every other tool's hook is preserved.
+func RemoveStaleHooksJSON(hooksPath string) error {
+	buf, err := os.ReadFile(hooksPath) // #nosec G304 -- installer-chosen path, not user input.
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("codex: read %s: %w", hooksPath, err)
+	}
+	if len(buf) == 0 {
+		return nil
+	}
+	// Fast path: if our marker isn't even in the file, nothing to do —
+	// avoids rewriting (and reformatting) a file we don't own.
+	if !strings.Contains(normalisePath(string(buf)), hookMarker) {
+		return nil
+	}
+
+	var root map[string]any
+	if err := json.Unmarshal(buf, &root); err != nil {
+		// Malformed — don't touch it. The mixed-state warning is a lesser
+		// evil than corrupting the user's file.
+		return nil
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	post, ok := hooks["PostToolUse"].([]any)
+	if !ok {
+		return nil
+	}
+
+	// Drop thlibo entries from each group's hooks[]; drop groups left
+	// with no hooks.
+	var keptGroups []any
+	for _, g := range post {
+		obj, ok := g.(map[string]any)
+		if !ok {
+			keptGroups = append(keptGroups, g)
+			continue
+		}
+		inner, _ := obj["hooks"].([]any)
+		var keptInner []any
+		for _, h := range inner {
+			ho, ok := h.(map[string]any)
+			if !ok {
+				keptInner = append(keptInner, h)
+				continue
+			}
+			cmd, _ := ho["command"].(string)
+			if strings.Contains(normalisePath(cmd), hookMarker) {
+				continue // drop our stale entry
+			}
+			keptInner = append(keptInner, h)
+		}
+		if len(keptInner) == 0 {
+			continue // group had only our entry — drop the whole group
+		}
+		obj["hooks"] = keptInner
+		keptGroups = append(keptGroups, obj)
+	}
+
+	if len(keptGroups) == 0 {
+		delete(hooks, "PostToolUse")
+	} else {
+		hooks["PostToolUse"] = keptGroups
+	}
+	if len(hooks) == 0 {
+		delete(root, "hooks")
+	}
+
+	// If nothing meaningful is left, remove the file so it doesn't sit
+	// as an empty second representation.
+	if len(root) == 0 {
+		if err := os.Remove(hooksPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("codex: remove empty %s: %w", hooksPath, err)
+		}
+		return nil
+	}
 
 	encoded, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
-		return fmt.Errorf("codex: marshal hooks: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(hooksPath), 0o750); err != nil {
-		return fmt.Errorf("codex: create hooks dir: %w", err)
+		return fmt.Errorf("codex: marshal %s: %w", hooksPath, err)
 	}
 	if err := os.WriteFile(hooksPath, encoded, 0o600); err != nil {
 		return fmt.Errorf("codex: write %s: %w", hooksPath, err)
 	}
 	return nil
-}
-
-// addPostToolUseHook walks/creates hooks.PostToolUse[?matcher==^Bash$]
-// .hooks[] and appends (or updates in-place) the thlibo entry.
-func addPostToolUseHook(root map[string]any, hookPath string) {
-	hooks, _ := root["hooks"].(map[string]any)
-	if hooks == nil {
-		hooks = map[string]any{}
-		root["hooks"] = hooks
-	}
-
-	post, _ := hooks["PostToolUse"].([]any)
-	if post == nil {
-		post = []any{}
-	}
-
-	var group map[string]any
-	for _, g := range post {
-		obj, ok := g.(map[string]any)
-		if !ok {
-			continue
-		}
-		if s, _ := obj["matcher"].(string); s == "^Bash$" {
-			group = obj
-			break
-		}
-	}
-	if group == nil {
-		group = map[string]any{"matcher": "^Bash$", "hooks": []any{}}
-		post = append(post, group)
-	}
-
-	groupHooks, _ := group["hooks"].([]any)
-	for i, h := range groupHooks {
-		obj, ok := h.(map[string]any)
-		if !ok {
-			continue
-		}
-		cmd, _ := obj["command"].(string)
-		if strings.Contains(normalisePath(cmd), hookMarker) {
-			groupHooks[i] = map[string]any{"type": "command", "command": hookPath}
-			group["hooks"] = groupHooks
-			hooks["PostToolUse"] = post
-			return
-		}
-	}
-	groupHooks = append(groupHooks, map[string]any{"type": "command", "command": hookPath})
-	group["hooks"] = groupHooks
-	hooks["PostToolUse"] = post
 }
 
 // EnableHooksFeatureFlag ensures the Codex hooks feature flag is on in
@@ -161,10 +246,8 @@ func addPostToolUseHook(root map[string]any, hookPath string) {
 // never duplicate the flag or fight a config that git-ai (or another
 // tool) already enabled.
 //
-// The TOML here is written by hand rather than through a library:
-// hooks.json is the authoritative hook declaration, config.toml
-// only needs the one feature flag. Doing it inline keeps the
-// dependency footprint small.
+// The TOML here is written by hand rather than through a library, to
+// keep the dependency footprint at zero (the module has no TOML lib).
 //
 // Merge semantics: if the file doesn't exist, it's created with
 // just the feature flag. If [features] already exists, the flag
