@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -53,154 +52,118 @@ func TestWriteHookScript(t *testing.T) {
 	}
 }
 
-// TestMergeHooksJSONFreshFile: the written file matches the Codex
-// schema (hooks wrapped in a top-level "hooks" object).
-func TestMergeHooksJSONFreshFile(t *testing.T) {
+// TestMergeConfigTOMLHookFreshFile: an empty/absent config.toml gets a
+// well-formed inline [[hooks.PostToolUse]] block pointing at the hook.
+func TestMergeConfigTOMLHookFreshFile(t *testing.T) {
 	dir := t.TempDir()
-	hp := filepath.Join(dir, "hooks.json")
+	cfg := filepath.Join(dir, "config.toml")
 	cmd := filepath.Join(dir, "thlibo-rewrite-codex.sh")
 
-	if err := MergeHooksJSON(hp, cmd); err != nil {
-		t.Fatalf("MergeHooksJSON: %v", err)
+	if err := MergeConfigTOMLHook(cfg, cmd); err != nil {
+		t.Fatalf("MergeConfigTOMLHook: %v", err)
 	}
-	var got map[string]any
-	raw, _ := os.ReadFile(hp)
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("parse %q: %v", raw, err)
-	}
-
-	hooks, ok := got["hooks"].(map[string]any)
-	if !ok {
-		t.Fatalf("top-level hooks key missing; raw: %s", raw)
-	}
-	post, _ := hooks["PostToolUse"].([]any)
-	if len(post) != 1 {
-		t.Fatalf("PostToolUse groups = %d, want 1: %s", len(post), raw)
-	}
-	group := post[0].(map[string]any)
-	if group["matcher"] != "^Bash$" {
-		t.Errorf("matcher = %v, want ^Bash$", group["matcher"])
-	}
-	entry := group["hooks"].([]any)[0].(map[string]any)
-	if entry["type"] != "command" {
-		t.Errorf("type = %v", entry["type"])
-	}
-	wantCmd := strings.ReplaceAll(cmd, `\`, "/")
-	if entry["command"] != wantCmd {
-		t.Errorf("command = %v, want %v", entry["command"], wantCmd)
+	got, _ := os.ReadFile(cfg)
+	s := string(got)
+	for _, want := range []string{
+		"[[hooks.PostToolUse]]",
+		`matcher = "^Bash$"`,
+		"[[hooks.PostToolUse.hooks]]",
+		`type = "command"`,
+		"thlibo-rewrite-codex.sh",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("output missing %q:\n%s", want, s)
+		}
 	}
 }
 
-// TestMergeHooksJSONPreservesOtherKeys: unrelated events and keys
-// survive the merge.
-func TestMergeHooksJSONPreservesOtherKeys(t *testing.T) {
+// TestMergeConfigTOMLHookPreservesExistingInline: the exact real-world
+// case #170 targets — a config.toml that already has another tool's
+// inline hooks (git-ai style) + the feature flag. Our block is appended;
+// nothing existing is touched.
+func TestMergeConfigTOMLHookPreservesExistingInline(t *testing.T) {
 	dir := t.TempDir()
-	hp := filepath.Join(dir, "hooks.json")
+	cfg := filepath.Join(dir, "config.toml")
+	existing := `model = "gpt-5.5"
+
+[features]
+hooks = true
+
+[[hooks.PostToolUse]]
+
+[[hooks.PostToolUse.hooks]]
+command = 'C:\Users\me\.git-ai\bin\git-ai.exe checkpoint codex --hook-input stdin'
+type = "command"
+`
+	_ = os.WriteFile(cfg, []byte(existing), 0o600)
 	cmd := filepath.Join(dir, "thlibo-rewrite-codex.sh")
 
-	existing := map[string]any{
-		"hooks": map[string]any{
-			"SessionStart": []any{
-				map[string]any{
-					"matcher": "",
-					"hooks": []any{
-						map[string]any{"type": "command", "command": "echo session"},
-					},
-				},
-			},
-			"PostToolUse": []any{
-				map[string]any{
-					"matcher": "^Bash$",
-					"hooks": []any{
-						map[string]any{"type": "command", "command": "my-other-observer.sh"},
-					},
-				},
-			},
-		},
+	if err := MergeConfigTOMLHook(cfg, cmd); err != nil {
+		t.Fatalf("MergeConfigTOMLHook: %v", err)
 	}
-	raw, _ := json.MarshalIndent(existing, "", "  ")
-	_ = os.WriteFile(hp, raw, 0o600)
-
-	if err := MergeHooksJSON(hp, cmd); err != nil {
-		t.Fatalf("MergeHooksJSON: %v", err)
+	s := string(mustRead(t, cfg))
+	// Everything that was there must still be there, verbatim.
+	if !strings.Contains(s, existing) {
+		t.Errorf("existing content not preserved verbatim:\n%s", s)
 	}
-	var got map[string]any
-	out, _ := os.ReadFile(hp)
-	_ = json.Unmarshal(out, &got)
-
-	hooks := got["hooks"].(map[string]any)
-	if _, ok := hooks["SessionStart"]; !ok {
-		t.Error("SessionStart event lost")
+	// git-ai's hook survives; ours is added.
+	if !strings.Contains(s, "git-ai.exe checkpoint codex") {
+		t.Error("git-ai inline hook was lost")
 	}
-	// PostToolUse ^Bash$ group should now have TWO entries: the
-	// pre-existing observer + our thlibo hook.
-	post := hooks["PostToolUse"].([]any)
-	if len(post) != 1 {
-		t.Fatalf("expected 1 matcher group (both entries under ^Bash$), got %d", len(post))
+	if !strings.Contains(s, "thlibo-rewrite-codex.sh") {
+		t.Error("thlibo hook not appended")
 	}
-	entries := post[0].(map[string]any)["hooks"].([]any)
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries in ^Bash$ group (observer+thlibo), got %d", len(entries))
+	// Two PostToolUse array-of-table entries now (git-ai's + ours).
+	if n := strings.Count(s, "[[hooks.PostToolUse]]"); n != 2 {
+		t.Errorf("expected 2 [[hooks.PostToolUse]] entries, got %d:\n%s", n, s)
 	}
 }
 
-// TestMergeHooksJSONIdempotent: multiple runs leave exactly one thlibo entry.
-func TestMergeHooksJSONIdempotent(t *testing.T) {
+// TestMergeConfigTOMLHookIdempotent: re-running never adds a second
+// thlibo block (recognised by the script marker).
+func TestMergeConfigTOMLHookIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	hp := filepath.Join(dir, "hooks.json")
+	cfg := filepath.Join(dir, "config.toml")
 	cmd := filepath.Join(dir, "thlibo-rewrite-codex.sh")
-
 	for i := 0; i < 4; i++ {
-		if err := MergeHooksJSON(hp, cmd); err != nil {
+		if err := MergeConfigTOMLHook(cfg, cmd); err != nil {
 			t.Fatalf("pass %d: %v", i, err)
 		}
 	}
-	var got map[string]any
-	raw, _ := os.ReadFile(hp)
-	_ = json.Unmarshal(raw, &got)
-	post := got["hooks"].(map[string]any)["PostToolUse"].([]any)
-	if len(post) != 1 {
-		t.Fatalf("want 1 matcher group after 4 installs, got %d", len(post))
+	s := string(mustRead(t, cfg))
+	if n := strings.Count(s, "thlibo-rewrite-codex.sh"); n != 1 {
+		t.Errorf("expected exactly 1 thlibo hook after 4 installs, got %d:\n%s", n, s)
 	}
-	entries := post[0].(map[string]any)["hooks"].([]any)
-	if len(entries) != 1 {
-		t.Errorf("want 1 thlibo entry after 4 installs, got %d", len(entries))
+	if n := strings.Count(s, "[[hooks.PostToolUse]]"); n != 1 {
+		t.Errorf("expected 1 PostToolUse block after 4 installs, got %d", n)
 	}
 }
 
-// TestMergeHooksJSONRejectsInvalidJSON: we never overwrite corrupt
-// JSON; a bad file stays bad and we return an error.
-func TestMergeHooksJSONRejectsInvalidJSON(t *testing.T) {
+// TestMergeConfigTOMLHookWindowsPath: a Windows hook path is emitted in
+// a TOML single-quoted (literal) string so its backslashes survive
+// unescaped and correct.
+func TestMergeConfigTOMLHookWindowsPath(t *testing.T) {
 	dir := t.TempDir()
-	hp := filepath.Join(dir, "hooks.json")
-	original := []byte("{not json at all")
-	_ = os.WriteFile(hp, original, 0o600)
-
-	if err := MergeHooksJSON(hp, "/x/hook.sh"); err == nil {
-		t.Fatal("expected parse error")
-	}
-	got, _ := os.ReadFile(hp)
-	if !reflect.DeepEqual(got, original) {
-		t.Errorf("corrupt file was modified: %q", got)
-	}
-}
-
-// TestMergeHooksJSONNormalisesBackslashes: Windows path safety.
-func TestMergeHooksJSONNormalisesBackslashes(t *testing.T) {
-	dir := t.TempDir()
-	hp := filepath.Join(dir, "hooks.json")
+	cfg := filepath.Join(dir, "config.toml")
 	winPath := `C:\Users\me\.thlibo\hooks\thlibo-rewrite-codex.sh`
-	if err := MergeHooksJSON(hp, winPath); err != nil {
-		t.Fatalf("MergeHooksJSON: %v", err)
+	if err := MergeConfigTOMLHook(cfg, winPath); err != nil {
+		t.Fatalf("MergeConfigTOMLHook: %v", err)
 	}
-	var got map[string]any
-	raw, _ := os.ReadFile(hp)
-	_ = json.Unmarshal(raw, &got)
-	entry := got["hooks"].(map[string]any)["PostToolUse"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
-	cmd := entry["command"].(string)
-	if strings.Contains(cmd, `\`) {
-		t.Errorf("command not normalised: %q", cmd)
+	s := string(mustRead(t, cfg))
+	// normalisePath forward-slashes the path; the command line must
+	// contain it inside a single-quoted literal.
+	if !strings.Contains(s, `command = 'C:/Users/me/.thlibo/hooks/thlibo-rewrite-codex.sh'`) {
+		t.Errorf("windows path not emitted as a forward-slashed literal:\n%s", s)
 	}
+}
+
+func mustRead(t *testing.T, p string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 // --- EnableHooksFeatureFlag / ensureCodexHooksTrue ---

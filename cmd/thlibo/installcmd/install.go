@@ -63,7 +63,7 @@ func Run(argv []string) int {
 	var installCodex bool
 	var codexHooksPath string
 	fs.BoolVar(&installCodex, "codex", false, "also install the Codex CLI PostToolUse hook (decision:block substitutes compressed output)")
-	fs.StringVar(&codexHooksPath, "codex-hooks", "", "override Codex hooks.json path (default: ~/.codex/hooks.json)")
+	fs.StringVar(&codexHooksPath, "codex-hooks", "", "override Codex config.toml path (default: ~/.codex/config.toml)")
 	var installCursor bool
 	var cursorHooksPath string
 	fs.BoolVar(&installCursor, "cursor", false, "also install the Cursor IDE preToolUse hooks (updated_input rewrites the Shell command + Read file_path to compress output)")
@@ -134,9 +134,9 @@ func Run(argv []string) int {
 	if installCodex {
 		cp := codexHooksPath
 		if cp == "" && home != "" {
-			cp = filepath.Join(home, ".codex", "hooks.json")
+			cp = filepath.Join(home, ".codex", "config.toml")
 		}
-		fmt.Printf("  codex hooks:    %s\n", cp)
+		fmt.Printf("  codex hooks:    %s (inline)\n", cp)
 	} else {
 		fmt.Println("  codex hooks:    (skipped; use --codex to install)")
 	}
@@ -338,29 +338,32 @@ func Run(argv []string) int {
 	}
 
 	if installCodex {
-		cp := codexHooksPath
-		if cp == "" {
+		// codexHooksPath (--codex-hooks) historically pointed at
+		// hooks.json; it now names the config.toml we write the inline
+		// hook into (#170). Accept either the explicit override or the
+		// default ~/.codex/config.toml.
+		cfgPath := codexHooksPath
+		if cfgPath == "" {
 			if homeErr != nil {
 				fmt.Fprintln(os.Stderr, "install: cannot determine home dir for Codex:", homeErr)
 				return 3
 			}
-			cp = filepath.Join(home, ".codex", "hooks.json")
+			cfgPath = filepath.Join(home, ".codex", "config.toml")
 		}
-		cfgPath := filepath.Join(filepath.Dir(cp), "config.toml")
 		codexHookPath := filepath.Join(hookDir, "thlibo-rewrite-codex.sh")
 		if err := codex.WriteHookScript(codexHookPath); err != nil {
 			fmt.Fprintln(os.Stderr, "install: codex hook:", err)
 			return 9
 		}
-		if err := codex.MergeHooksJSON(cp, codexHookPath); err != nil {
-			fmt.Fprintln(os.Stderr, "install: codex hooks.json:", err)
+		if err := codex.MergeConfigTOMLHook(cfgPath, codexHookPath); err != nil {
+			fmt.Fprintln(os.Stderr, "install: codex config.toml hook:", err)
 			return 9
 		}
 		if err := codex.EnableHooksFeatureFlag(cfgPath); err != nil {
 			fmt.Fprintln(os.Stderr, "install: codex config.toml:", err)
 			return 9
 		}
-		fmt.Printf("  wrote Codex hook + merged %s + set [features] hooks=true in %s\n", cp, cfgPath)
+		fmt.Printf("  wrote Codex hook + added inline [[hooks.PostToolUse]] + [features] hooks=true in %s\n", cfgPath)
 		// Codex requires the user to TRUST a command hook before it
 		// runs ("Before a non-managed command hook can run, Codex
 		// requires you to review and trust the exact hook definition"

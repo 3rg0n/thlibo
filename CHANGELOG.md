@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Codex hook now written inline in `config.toml`, not a separate
+  `hooks.json`** (#170). When one Codex config layer (`~/.codex`)
+  contains both a `hooks.json` and inline `[[hooks.*]]` tables, Codex
+  warns ("loading hooks from both … prefer a single representation for
+  this layer") and thlibo's `hooks.json` hook doesn't reliably surface
+  in `/hooks`. Since other tools (git-ai, taco) write inline
+  `config.toml` hooks, that mixed state is the norm on real machines.
+  `thlibo install --codex` now appends an inline `[[hooks.PostToolUse]]`
+  (`matcher = "^Bash$"`) block to `config.toml` in the same
+  representation the rest of the layer uses — additive (never disturbs
+  other tools' blocks), idempotent (recognises a prior thlibo hook), and
+  the Windows path is emitted as a single-quoted TOML literal so
+  backslashes survive. `--codex-hooks` now overrides the `config.toml`
+  path (was `hooks.json`).
+
 ### Changed
 
 - **The 9 deterministic built-in processors are now native Go, not
