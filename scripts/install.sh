@@ -206,13 +206,18 @@ main() {
     *)
       echo
       # Opt-in extra AI clients via env vars, since a piped one-liner
-      # can't take flags. THLIBO_CODEX=1 / THLIBO_CURSOR=1 append the
-      # matching install flag. (Without these, the one-liner only wires
-      # Claude Code — #169.)
+      # can't take flags: THLIBO_CODEX=1 / THLIBO_CURSOR=1 append the
+      # matching flag (#169). macOS ships bash 3.2, where `set -u`
+      # aborts on any value-expansion of an EMPTY array (${arr[*]} /
+      # ${arr[@]}) — and the default one-liner sets neither var, so the
+      # array IS empty. Build a display STRING alongside the arg array
+      # so the `say` line never expands a possibly-empty array (that was
+      # the regression that broke fresh macOS installs, #169 follow-up).
       install_args=()
-      case "${THLIBO_CODEX:-0}" in 1|true|yes|on) install_args+=(--codex) ;; esac
-      case "${THLIBO_CURSOR:-0}" in 1|true|yes|on) install_args+=(--cursor) ;; esac
-      say "running: $INSTALL_DIR/thlibo install ${install_args[*]}"
+      args_display=""
+      case "${THLIBO_CODEX:-0}" in 1|true|yes|on) install_args+=(--codex); args_display="$args_display --codex" ;; esac
+      case "${THLIBO_CURSOR:-0}" in 1|true|yes|on) install_args+=(--cursor); args_display="$args_display --cursor" ;; esac
+      say "running: $INSTALL_DIR/thlibo install${args_display}"
       say "  (writes Claude Code hooks, mirrors processors,"
       say "   probe-or-installs the inferd sidecar; inferd then"
       say "   downloads the ~5 GB Gemma 4 model on first request)"
