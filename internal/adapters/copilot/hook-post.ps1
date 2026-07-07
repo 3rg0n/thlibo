@@ -41,16 +41,30 @@ try {
     if ($null -eq $obj.PSObject.Properties['toolResult']) { exit 0 }
 
     # Double-compression guard: skip our own preToolUse-wrapped commands.
-    $cmd = $obj.toolArgs.command
-    if ([string]::IsNullOrEmpty($cmd)) { $cmd = $obj.toolArgs.commandLine }
-    if ([string]::IsNullOrEmpty($cmd)) { $cmd = $obj.toolArgs.cmd }
-    if ([string]::IsNullOrEmpty($cmd)) { $cmd = $obj.toolArgs.script }
+    # toolArgs arrives as a JSON-encoded STRING on the live Copilot CLI;
+    # decode it before reading the command.
+    $targs = $obj.toolArgs
+    if ($targs -is [string]) { $targs = $targs | ConvertFrom-Json }
+    $cmd = $targs.command
+    if ([string]::IsNullOrEmpty($cmd)) { $cmd = $targs.commandLine }
+    if ([string]::IsNullOrEmpty($cmd)) { $cmd = $targs.cmd }
+    if ([string]::IsNullOrEmpty($cmd)) { $cmd = $targs.script }
     if ($cmd -like '*exec -- *' -or $cmd -like '*thlibo exec*') { exit 0 }
 
-    # Model-visible output.
-    $output = $obj.toolResult.textResultForLlm
-    if ([string]::IsNullOrEmpty($output)) { $output = $obj.toolResult.output }
-    if ([string]::IsNullOrEmpty($output) -and $obj.toolResult -is [string]) { $output = $obj.toolResult }
+    # Model-visible output. toolResult may be an object or (like toolArgs)
+    # a JSON-encoded string; decode a string first, then read the field.
+    $tr = $obj.toolResult
+    if ($tr -is [string]) {
+        # A plain-string result stays a string; only replace it if it
+        # parses as JSON. Keep $tr as-is on parse failure (fail-open).
+        try { $tr = $tr | ConvertFrom-Json } catch { $tr = $obj.toolResult }
+    }
+    if ($tr -is [string]) {
+        $output = $tr
+    } else {
+        $output = $tr.textResultForLlm
+        if ([string]::IsNullOrEmpty($output)) { $output = $tr.output }
+    }
     if ([string]::IsNullOrEmpty($output)) { exit 0 }
 
     # Mirror the middleware's 2000-BYTE short-circuit. Measure UTF-8

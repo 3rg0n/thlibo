@@ -41,6 +41,10 @@ func TestPreHookShape(t *testing.T) {
 			t.Errorf("preToolUse hook missing dual-envelope token %q", must)
 		}
 	}
+	// Must decode a stringified toolArgs (the live Copilot CLI shape).
+	if !strings.Contains(s, "fromjson") {
+		t.Error("preToolUse (bash) hook must fromjson a stringified toolArgs")
+	}
 }
 
 // TestPostHookShape: the postToolUse bash hook must pipe through
@@ -233,6 +237,37 @@ func TestPreHookWrapsCommand(t *testing.T) {
 	}
 }
 
+// TestPreHookCLIStringifiedToolArgs is the regression guard for the
+// live-product bug: Copilot CLI sends toolArgs as a JSON-ENCODED STRING
+// (`"toolArgs":"{\"command\":\"git status\"}"`), not a nested object. A
+// naive .toolArgs.command yields empty and the hook never wraps. The
+// hook must decode the string, extract the command, wrap it, and emit
+// modifiedArgs as an OBJECT (a stringified value is not applied by the
+// CLI — also verified live).
+func TestPreHookCLIStringifiedToolArgs(t *testing.T) {
+	// toolArgs is a STRING containing JSON.
+	stdin := `{"toolName":"powershell","toolArgs":"{\"command\":\"git status\",\"description\":\"check\"}"}`
+	out, code := runPreHook(t, stdin, "/x/thlibo exec -- git status", 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("hook output not valid JSON: %v (%q)", err, out)
+	}
+	// modifiedArgs must be an OBJECT (not a re-stringified value).
+	ma, ok := resp["modifiedArgs"].(map[string]any)
+	if !ok {
+		t.Fatalf("modifiedArgs must be an object, got %T: %v", resp["modifiedArgs"], resp["modifiedArgs"])
+	}
+	if ma["command"] != "/x/thlibo exec -- git status" {
+		t.Errorf("command not wrapped from stringified toolArgs: %v", ma["command"])
+	}
+	if ma["description"] != "check" {
+		t.Errorf("sibling key lost when decoding stringified toolArgs: %v", ma)
+	}
+}
+
 // TestPreHookVSCodeEnvelope: the VS Code / Claude Code envelope
 // (tool_input, no toolArgs) must produce the Claude-format output —
 // hookSpecificOutput.updatedInput with the command swapped — NOT the
@@ -287,6 +322,59 @@ func TestPreHookVSCodeCommandLine(t *testing.T) {
 	ui, _ := hso["updatedInput"].(map[string]any)
 	if ui["commandLine"] != "/x/thlibo exec -- git status" {
 		t.Errorf("commandLine not rewritten: %v", ui)
+	}
+}
+
+// TestPostHookStringifiedToolResult: the Copilot CLI may deliver
+// toolResult as a JSON-encoded string (like toolArgs). The post hook
+// must decode it and still find + compress the output.
+func TestPostHookStringifiedToolResult(t *testing.T) {
+	big := strings.Repeat("verbose tool output line\n", 200)
+	// toolArgs AND toolResult both stringified (the live CLI shape).
+	argStr, _ := json.Marshal(map[string]any{"command": "cat big.log"})
+	resStr, _ := json.Marshal(map[string]any{"resultType": "success", "textResultForLlm": big})
+	stdinB, _ := json.Marshal(map[string]any{
+		"toolName":   "bash",
+		"toolArgs":   string(argStr),
+		"toolResult": string(resStr),
+	})
+	out, code := runPostHook(t, string(stdinB), "SHORT", 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("hook output not valid JSON: %v (%q)", err, out)
+	}
+	mr, ok := resp["modifiedResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("stringified toolResult not decoded/compressed: %v", resp)
+	}
+	if mr["textResultForLlm"] != "SHORT" {
+		t.Errorf("textResultForLlm = %v, want compressed", mr["textResultForLlm"])
+	}
+}
+
+// TestPostHookPlainTextToolResult: a non-JSON plain-text toolResult
+// string must be treated as the output text itself (not dropped).
+func TestPostHookPlainTextToolResult(t *testing.T) {
+	big := strings.Repeat("plain error line\n", 200) // > 2000 bytes, not JSON
+	argStr, _ := json.Marshal(map[string]any{"command": "cat big.log"})
+	stdinB, _ := json.Marshal(map[string]any{
+		"toolName":   "bash",
+		"toolArgs":   string(argStr),
+		"toolResult": big, // plain string, not JSON
+	})
+	out, code := runPostHook(t, string(stdinB), "SHORT", 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("hook output not valid JSON: %v (%q)", err, out)
+	}
+	if _, ok := resp["modifiedResult"]; !ok {
+		t.Errorf("plain-text toolResult string should be compressed, got %v", resp)
 	}
 }
 
@@ -419,9 +507,14 @@ func TestPostHookNoShrinkPassthrough(t *testing.T) {
 // --- test helpers ---
 
 func postEnvelope(command, output string) string {
+	// Real Copilot CLI shape: toolArgs is a JSON-ENCODED STRING, not a
+	// nested object (verified against a live copilot 1.0.x). The hooks
+	// must decode it before reading the command for the double-
+	// compression guard.
+	argStr, _ := json.Marshal(map[string]any{"command": command})
 	b, _ := json.Marshal(map[string]any{
 		"toolName": "bash",
-		"toolArgs": map[string]any{"command": command},
+		"toolArgs": string(argStr),
 		"toolResult": map[string]any{
 			"resultType":       "success",
 			"textResultForLlm": output,
