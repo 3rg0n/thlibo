@@ -21,7 +21,9 @@ Cursor IDE `preToolUse` hooks (Shell command rewrite + Read file_path
 rewrite; bash-wrapped on Windows, invalid-JSON-escape tolerant, #59/#60/
 #62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command
 rewrite, fail-closed-safe + `postToolUse` `modifiedResult` output
-compression, fail-open; own `~/.copilot/hooks/thlibo.json`). Full test +
+compression, fail-open; own `~/.copilot/hooks/thlibo.json`) — the same
+hook file is auto-discovered by **VS Code Copilot** (1.111+, Insiders),
+whose Claude-Code wire format the scripts detect and match. Full test +
 scanner CI on linux/macOS/Windows, signed releases via Sigstore keyless,
 CycloneDX SBOM.
 
@@ -161,6 +163,13 @@ failure to reach or parse, it fails open (ADR 0006).
   command was already `exec --`-wrapped by preToolUse. Ships native
   `.sh` + `.ps1` per event (config carries both `bash`/`powershell`),
   so Windows runs the PowerShell variant directly — no bash-wrapping.
+  **Dual-host:** VS Code Copilot (1.111+, Insiders) also reads
+  `~/.copilot/hooks/`, so the same file works there — but VS Code uses
+  the Claude-Code envelope (`tool_input` / `hookSpecificOutput`.
+  `updatedInput`; observe-only postToolUse). The hook scripts detect the
+  envelope (CLI `toolArgs` vs `tool_input`) and reply in kind; on VS
+  Code, compression rides the preToolUse wrap since its postToolUse
+  can't replace output. `--copilot` covers both; no `--vscode` flag.
 
 ## Build, test, scan
 

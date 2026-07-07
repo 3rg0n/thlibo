@@ -1,18 +1,20 @@
-# thlibo-hook-version: 1
-# thlibo GitHub Copilot CLI postToolUse hook (Windows).
+# thlibo-hook-version: 2
+# thlibo postToolUse hook (Windows) -- GitHub Copilot CLI (output
+# replacement) and VS Code Copilot / Claude Code (observe-only; no-op).
 #
-# PowerShell equivalent of hook-post.sh. Copilot runs this natively on
-# Windows via the hook entry's "powershell" command.
+# PowerShell equivalent of hook-post.sh. Only the Copilot CLI's
+# postToolUse can REPLACE a tool's result (via modifiedResult); VS Code
+# and Claude Code postToolUse are side-effect-only, so on those
+# envelopes shell output is compressed by the preToolUse command-wrap
+# (hook-pre.ps1) and this hook passes through.
 #
-# Replaces the tool result with a compressed version via modifiedResult:
-#   { modifiedResult: { resultType:"success", textResultForLlm:"<c>" } }
+# Envelope detection:
+#   Copilot CLI    : { toolResult: { textResultForLlm } }  -> replace
+#   VS Code/Claude : no toolResult                          -> no-op
 #
-# postToolUse is fail-open, so errors can't break the client; we still
-# exit 0 on every passthrough to keep the log quiet.
-#
-# Double-compression guard: if preToolUse already wrapped the command
-# as `<thlibo> exec -- ...`, the output was already compressed inside
-# `thlibo exec`; re-compressing could mangle it, so we pass through.
+# postToolUse is fail-open on all hosts; we still exit 0 on every
+# passthrough. Double-compression guard skips already-`exec --`-wrapped
+# commands.
 #
 # Requires: thlibo.exe on PATH. Uses ConvertFrom/To-Json (no jq).
 
@@ -26,17 +28,21 @@ try {
 
     $thlibo = Get-Command thlibo -ErrorAction SilentlyContinue
     if (-not $thlibo) {
-        [Console]::Error.WriteLine('[thlibo] WARNING: thlibo not on PATH; Copilot postToolUse hook disabled.')
+        [Console]::Error.WriteLine('[thlibo] WARNING: thlibo not on PATH; postToolUse hook disabled.')
         exit 0
     }
 
     $raw = [Console]::In.ReadToEnd()
     if (-not $raw) { exit 0 }
-
     $obj = $raw | ConvertFrom-Json
+
+    # Only the Copilot CLI envelope (toolResult) supports output
+    # replacement. VS Code / Claude Code postToolUse is observe-only.
+    if ($null -eq $obj.PSObject.Properties['toolResult']) { exit 0 }
 
     # Double-compression guard: skip our own preToolUse-wrapped commands.
     $cmd = $obj.toolArgs.command
+    if ([string]::IsNullOrEmpty($cmd)) { $cmd = $obj.toolArgs.commandLine }
     if ([string]::IsNullOrEmpty($cmd)) { $cmd = $obj.toolArgs.cmd }
     if ([string]::IsNullOrEmpty($cmd)) { $cmd = $obj.toolArgs.script }
     if ($cmd -like '*exec -- *' -or $cmd -like '*thlibo exec*') { exit 0 }
@@ -48,8 +54,8 @@ try {
     if ([string]::IsNullOrEmpty($output)) { exit 0 }
 
     # Mirror the middleware's 2000-BYTE short-circuit. Measure UTF-8
-    # bytes, not .Length (which is UTF-16 char count) so multibyte
-    # output isn't under-counted and wrongly skipped.
+    # bytes, not .Length (UTF-16 char count), so multibyte output isn't
+    # under-counted and wrongly skipped.
     $outBytes = [System.Text.Encoding]::UTF8.GetByteCount($output)
     if ($outBytes -lt 2000) { exit 0 }
 
