@@ -1,4 +1,6 @@
-// Package copilot installs thlibo's hooks into the GitHub Copilot CLI.
+// Package copilot installs thlibo's hooks into the GitHub Copilot CLI —
+// and, as a free consequence of where the file lands, VS Code Copilot
+// (1.111+, currently Insiders).
 //
 // Copilot CLI hooks are external commands registered in a JSON file
 // under ~/.copilot/hooks/ (docs.github.com/copilot/concepts/agents/hooks
@@ -8,6 +10,16 @@
 // instance, ships ~/.copilot/hooks/git-ai.json. So thlibo writes its own
 // ~/.copilot/hooks/thlibo.json and never has to merge into, or risk
 // clobbering, another tool's file. Uninstall just deletes it.
+//
+// VS Code Copilot ALSO reads hooks from ~/.copilot/hooks/ (among other
+// sources), so the same thlibo.json is auto-discovered there with no
+// extra install step. The catch: VS Code uses the Claude-Code wire
+// format (tool_input / hookSpecificOutput.updatedInput) rather than the
+// CLI's camelCase (toolArgs / modifiedArgs), and its postToolUse is
+// observe-only. The hook SCRIPTS therefore detect which envelope is on
+// stdin and reply in kind — see hook-pre.sh / hook-post.sh. This package
+// (the installer + file writer) is host-agnostic; the format bridging
+// lives entirely in the scripts.
 //
 // thlibo installs BOTH hook events Copilot offers for interception:
 //

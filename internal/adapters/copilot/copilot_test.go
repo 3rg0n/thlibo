@@ -33,6 +33,14 @@ func TestPreHookShape(t *testing.T) {
 	if strings.Contains(s, `"permissionDecision": "deny"`) || strings.Contains(s, `"deny"`) {
 		t.Error("preToolUse hook must never deny (Copilot preToolUse is fail-closed; a deny would block the tool)")
 	}
+	// Dual-envelope: must handle BOTH the CLI (toolArgs/modifiedArgs) and
+	// the VS Code/Claude (tool_input/hookSpecificOutput.updatedInput) wire
+	// formats.
+	for _, must := range []string{"toolArgs", "modifiedArgs", "tool_input", "hookSpecificOutput", "updatedInput"} {
+		if !strings.Contains(s, must) {
+			t.Errorf("preToolUse hook missing dual-envelope token %q", must)
+		}
+	}
 }
 
 // TestPostHookShape: the postToolUse bash hook must pipe through
@@ -218,6 +226,83 @@ func TestPreHookWrapsCommand(t *testing.T) {
 	}
 	if ma["command"] != "/x/thlibo exec -- git status" {
 		t.Errorf("modifiedArgs.command = %v, want the wrapped command", ma["command"])
+	}
+	// Cross-wire guard: the CLI envelope must NOT emit the VS Code shape.
+	if _, vscode := resp["hookSpecificOutput"]; vscode {
+		t.Error("CLI envelope must NOT emit VS Code's hookSpecificOutput")
+	}
+}
+
+// TestPreHookVSCodeEnvelope: the VS Code / Claude Code envelope
+// (tool_input, no toolArgs) must produce the Claude-format output —
+// hookSpecificOutput.updatedInput with the command swapped — NOT the
+// CLI's modifiedArgs. Other tool_input keys must survive.
+func TestPreHookVSCodeEnvelope(t *testing.T) {
+	out, code := runPreHook(t,
+		`{"tool_name":"runInTerminal","tool_input":{"command":"git status","explanation":"check status"}}`,
+		"/x/thlibo exec -- git status", 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("hook output not valid JSON: %v (%q)", err, out)
+	}
+	// Must be the Claude/VS Code shape, not the CLI shape.
+	if _, cli := resp["modifiedArgs"]; cli {
+		t.Error("VS Code envelope must NOT emit CLI's modifiedArgs")
+	}
+	hso, ok := resp["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing hookSpecificOutput: %v", resp)
+	}
+	if hso["hookEventName"] != "PreToolUse" || hso["permissionDecision"] != "allow" {
+		t.Errorf("hookSpecificOutput wrong: %v", hso)
+	}
+	ui, ok := hso["updatedInput"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing updatedInput: %v", hso)
+	}
+	if ui["command"] != "/x/thlibo exec -- git status" {
+		t.Errorf("updatedInput.command = %v, want wrapped", ui["command"])
+	}
+	if ui["explanation"] != "check status" {
+		t.Errorf("updatedInput dropped a sibling key: %v", ui)
+	}
+}
+
+// TestPreHookVSCodeCommandLine: VS Code's terminal tool may name the
+// field "commandLine" rather than "command"; the hook must find + swap
+// it.
+func TestPreHookVSCodeCommandLine(t *testing.T) {
+	out, code := runPreHook(t,
+		`{"tool_name":"run","tool_input":{"commandLine":"git status"}}`,
+		"/x/thlibo exec -- git status", 0)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	_ = json.Unmarshal([]byte(out), &resp)
+	hso, _ := resp["hookSpecificOutput"].(map[string]any)
+	ui, _ := hso["updatedInput"].(map[string]any)
+	if ui["commandLine"] != "/x/thlibo exec -- git status" {
+		t.Errorf("commandLine not rewritten: %v", ui)
+	}
+}
+
+// TestPostHookVSCodeEnvelopePassthrough: VS Code / Claude Code
+// postToolUse is observe-only (no toolResult field to replace), so the
+// hook must pass through — compression on those hosts happens at the
+// preToolUse wrap instead.
+func TestPostHookVSCodeEnvelopePassthrough(t *testing.T) {
+	big := strings.Repeat("verbose tool output line\n", 200)
+	stdin := `{"tool_name":"run","tool_input":{"command":"cat big.log"},"tool_response":{"output":"` + big + `"}}`
+	out, code := runPostHook(t, stdin, "SHORT", 0)
+	if code != 0 {
+		t.Errorf("exit = %d, want 0", code)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("VS Code postToolUse must passthrough (observe-only), got %q", out)
 	}
 }
 
@@ -552,6 +637,37 @@ func TestPreHookPS1KillSwitch(t *testing.T) {
 		[]string{"THLIBO_DISABLED=1"})
 	if code != 0 || strings.TrimSpace(out) != "" {
 		t.Errorf("THLIBO_DISABLED should passthrough; got out=%q code=%d", out, code)
+	}
+}
+
+// TestPreHookPS1VSCodeEnvelope: on Windows, the VS Code / Claude
+// envelope must yield hookSpecificOutput.updatedInput, not modifiedArgs.
+func TestPreHookPS1VSCodeEnvelope(t *testing.T) {
+	pwsh := requirePwsh(t)
+	dir := t.TempDir()
+	writeFakeThliboBat(t, dir, "rewrite", "/x/thlibo exec -- git status", 0)
+	out, code := runPS1(t, pwsh, PreHookPS1(), "pre.ps1",
+		`{"tool_name":"run","tool_input":{"command":"git status","explanation":"e"}}`, dir, nil)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &resp); err != nil {
+		t.Fatalf("ps1 output not valid JSON: %v (%q)", err, out)
+	}
+	if _, cli := resp["modifiedArgs"]; cli {
+		t.Error("VS Code envelope must NOT emit modifiedArgs on PS1")
+	}
+	hso, ok := resp["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing hookSpecificOutput: %v", resp)
+	}
+	ui, _ := hso["updatedInput"].(map[string]any)
+	if ui["command"] != "/x/thlibo exec -- git status" {
+		t.Errorf("updatedInput.command = %v, want wrapped", ui["command"])
+	}
+	if ui["explanation"] != "e" {
+		t.Errorf("updatedInput dropped sibling key: %v", ui)
 	}
 }
 

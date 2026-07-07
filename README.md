@@ -48,9 +48,12 @@ density (`CORDON_MAX_WINDOWS=5000`).
 
 Works with Claude Code (Bash + PowerShell + Read + Write/Edit hooks),
 Codex CLI (PostToolUse `decision: block`), Cursor IDE (preToolUse
-`updated_input` command + file-read rewrite; no MCP), and GitHub Copilot
+`updated_input` command + file-read rewrite; no MCP), GitHub Copilot
 CLI (preToolUse `modifiedArgs` command rewrite + postToolUse
-`modifiedResult` output compression).
+`modifiedResult` output compression), and **VS Code Copilot** (1.111+,
+currently Insiders) — the Copilot hook file thlibo installs is
+auto-discovered by VS Code too, and the hook scripts speak both wire
+formats.
 
 ---
 
@@ -255,6 +258,17 @@ thlibo's never collides with another tool's. Two hooks are installed: a
 compressed version via `modifiedResult`. Copilot's preToolUse is
 fail-closed, so the hook only ever *allows* — it never blocks a tool
 call; postToolUse is fail-open. Restart Copilot CLI to load the hooks.
+
+**VS Code Copilot (1.111+, currently Insiders) comes along for free.**
+VS Code reads agent hooks from `~/.copilot/hooks/` too, so the same
+`thlibo.json` is auto-discovered — no extra install step. VS Code uses
+a different wire format than the CLI (the Claude-Code envelope:
+`tool_input` / `hookSpecificOutput.updatedInput`, and an observe-only
+postToolUse), so the hook scripts **detect which host is calling** and
+reply in the matching format. On VS Code, shell output is compressed via
+the preToolUse command-wrap (its postToolUse can't replace output — same
+limitation as Claude Code). No `--vscode` flag is needed; `--copilot`
+covers both.
 
 The model GGUF (~5.1 GB Gemma 4 E4B) is downloaded by inferd on
 first inference request, into a shared per-platform model store

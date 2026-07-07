@@ -1,42 +1,41 @@
 #!/usr/bin/env bash
-# thlibo-hook-version: 1
-# thlibo GitHub Copilot CLI postToolUse hook.
+# thlibo-hook-version: 2
+# thlibo postToolUse hook — GitHub Copilot CLI (output replacement) and
+# VS Code Copilot / Claude Code (observe-only; no-op here).
 #
-# Copilot's postToolUse hook can REPLACE a tool's result via
-# `modifiedResult` (docs.github.com/copilot/reference/hooks-reference):
+# Only the Copilot CLI's postToolUse can REPLACE a tool's result, via
+# `modifiedResult` (docs.github.com/copilot/reference/hooks-reference).
+# VS Code's and Claude Code's PostToolUse are side-effect-only — they
+# expose no field to substitute the model-visible output — so on those
+# envelopes shell output is instead compressed by the preToolUse
+# command-wrap (see hook-pre.sh), and THIS hook simply passes through.
 #
-#   { "modifiedResult": { "resultType":"success",
-#                         "textResultForLlm":"<compressed>" } }
+# Envelope detection:
+#   Copilot CLI    : { "toolResult": { "textResultForLlm" } }  -> replace
+#   VS Code/Claude : { "tool_response" / "tool_input", no toolResult } -> no-op
 #
-# This is thlibo's compression path — the same observable effect as
-# Codex's PostToolUse decision:block. The flow:
-#
+# On the CLI envelope the flow is:
 #   1. Copilot ran a tool, captured its result.
 #   2. postToolUse fires; stdin carries toolResult.textResultForLlm.
-#   3. We pipe that through `thlibo compress` → compressed bytes.
+#   3. We pipe it through `thlibo compress` -> compressed bytes.
 #   4. We emit modifiedResult with the compressed text.
-#   5. Copilot substitutes it for the original in the model's context.
 #
-# postToolUse is FAIL-OPEN (a non-zero exit / crash / timeout is logged
-# and the run continues with the ORIGINAL result), so a bug here can't
-# break the client — but we still exit 0 on every passthrough so no
-# noise is logged.
+# postToolUse is FAIL-OPEN on all hosts (a non-zero exit / crash /
+# timeout is logged and the original result survives), but we still
+# exit 0 on every passthrough to keep the log quiet.
 #
-# Double-compression guard: if the preToolUse hook already wrapped the
-# command as `<thlibo> exec -- …`, the output was ALREADY compressed by
-# the middleware inside `thlibo exec`. Re-running `thlibo compress` on it
-# would reroute already-filtered output through the LLM compressor and
-# could mangle it. So when toolArgs shows a thlibo-wrapped command, we
-# pass through untouched.
+# Double-compression guard: if preToolUse already wrapped the command as
+# `<thlibo> exec -- ...`, the output was ALREADY compressed inside
+# `thlibo exec`; re-compressing could mangle it, so we pass through.
 #
-# Requires: jq, thlibo on PATH. Missing either → passthrough (exit 0).
+# Requires: jq, thlibo on PATH. Missing either -> passthrough (exit 0).
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo "[thlibo] WARNING: jq not installed; Copilot postToolUse hook disabled." >&2
+  echo "[thlibo] WARNING: jq not installed; postToolUse hook disabled." >&2
   exit 0
 fi
 if ! command -v thlibo >/dev/null 2>&1; then
-  echo "[thlibo] WARNING: thlibo not on PATH; Copilot postToolUse hook disabled." >&2
+  echo "[thlibo] WARNING: thlibo not on PATH; postToolUse hook disabled." >&2
   exit 0
 fi
 
@@ -47,15 +46,24 @@ esac
 
 INPUT=$(cat)
 
+# Only the Copilot CLI envelope (toolResult) supports output
+# replacement. VS Code / Claude Code postToolUse is observe-only — the
+# preToolUse command-wrap already handled compression there — so pass
+# through untouched.
+HAS_TOOLRESULT=$(jq -r 'has("toolResult")' <<<"$INPUT" 2>/dev/null)
+if [ "$HAS_TOOLRESULT" != "true" ]; then
+  exit 0
+fi
+
 # Double-compression guard: skip results whose command was wrapped by
-# our own preToolUse hook (`… exec -- …` / `thlibo exec …`).
-CMD=$(jq -r '.toolArgs.command // .toolArgs.cmd // .toolArgs.script // empty' <<<"$INPUT" 2>/dev/null)
+# our own preToolUse hook (`... exec -- ...` / `thlibo exec ...`).
+CMD=$(jq -r '.toolArgs.command // .toolArgs.commandLine // .toolArgs.cmd // .toolArgs.script // empty' <<<"$INPUT" 2>/dev/null)
 case "$CMD" in
   *"exec -- "*|*"thlibo exec"*) exit 0 ;;
 esac
 
 # The model-visible tool output. Fall back to a couple of alternate
-# shapes; empty → nothing to do.
+# shapes; empty -> nothing to do.
 OUTPUT=$(jq -r '
   .toolResult.textResultForLlm //
   .toolResult.output           //

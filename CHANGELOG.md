@@ -32,6 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command per entry, so thlibo ships native `.sh` and `.ps1` scripts and
   Windows runs the PowerShell variant directly — no Git-Bash wrapping.
 
+- **VS Code Copilot support** (1.111+, currently Insiders) — no extra
+  flag. VS Code reads agent hooks from `~/.copilot/hooks/` too, so the
+  `thlibo.json` installed by `--copilot` is auto-discovered there. VS
+  Code uses the Claude-Code wire format (`tool_input` /
+  `hookSpecificOutput.updatedInput`) rather than the Copilot CLI's
+  camelCase (`toolArgs` / `modifiedArgs`), and its postToolUse is
+  observe-only, so the hook scripts now **detect which host is calling**
+  and reply in the matching format: on VS Code, shell output is
+  compressed via the preToolUse command-wrap (its postToolUse can't
+  replace output — the same limitation as Claude Code). One hook file,
+  two hosts (Copilot CLI + VS Code Copilot), with the CLI's fail-closed
+  guarantees preserved.
+
 ## [0.8.0] - 2026-07-07
 
 ### Added
