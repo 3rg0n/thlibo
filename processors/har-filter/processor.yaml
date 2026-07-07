@@ -1,0 +1,25 @@
+name: har-filter
+type: native
+# Match on the HAR envelope: a JSON object whose "log" carries the HAR
+# "version" then an "entries" array. "version" is anchored within a small
+# window of the "log" open (RE2 bounded repeats max out at 1000, and the
+# preamble is tiny), then a lazy gap reaches "entries" — HAR puts a
+# "pages" array between the two, so the gap can't be bounded tightly.
+# This fires on a HAR dump but not on arbitrary JSON that merely mentions
+# "entries".
+match: "\"log\"\\s*:\\s*\\{[\\s\\S]{0,300}\"version\"[\\s\\S]*?\"entries\"\\s*:\\s*\\["
+description: >
+  Distills an HTTP Archive (.har) capture into a compact, redacted,
+  one-line-per-request log. Drops whole static-asset entries
+  (js/css/images/fonts/wasm) and non-text response bodies — usually the
+  bulk of a HAR's bytes — plus per-entry timing/cache/connection
+  plumbing. Keeps method, status, URL, mime, size, and time for every
+  XHR/fetch/document/API call, and a size-bounded preview of small JSON
+  or error (>=400) response bodies.
+
+  Redacts secrets before anything is emitted: query-string values for
+  token/authkey/api_key/secret/scid/sig/password/session keys; auth
+  headers (Authorization, Cookie, Set-Cookie, X-Api-Key, …); request
+  POST-body credentials; and JWTs + long high-entropy tokens anywhere in
+  kept bodies. Non-HAR input passes through unchanged; output is emitted
+  only when strictly smaller than the input.

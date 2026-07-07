@@ -93,7 +93,7 @@ Claude Code: about to run `git status`
 
 The deterministic filters (`git-filter`, `npm-filter`, `cargo-filter`,
 `pytest-filter`, `go-test-filter`, `ndjson-filter`, `stacktrace-filter`,
-`lint-filter`, `trivy-filter`) are **native Go** — compiled into the
+`lint-filter`, `trivy-filter`, `har-filter`) are **native Go** — compiled into the
 binary, run in-process, no inferd and no Python (ADR 0010). `pdf-to-md`
 stays a Python script processor (pypdf + pdfplumber; one exception: a
 *scanned*, image-only PDF has no extractable text, so `thlibo case`
@@ -357,6 +357,7 @@ same name as a built-in override the built-in.
 | `stacktrace-filter` | script | Python / Go / Rust / Java / Node stack traces |
 | `lint-filter` | script | clang, gcc, clippy, eslint, golangci-lint, gosec, shellcheck, flake8, ruff, mypy, rubocop, stylelint. Auto-wraps `gosec`, `staticcheck`, `golangci-lint`, `shellcheck` (not `go`/`make`/`docker` — see below) |
 | `go-test-filter` | script | `go test -v` / `go test -json` — keeps failures + package tally, drops passing-test noise. Auto-wraps `go test` (only that subcommand) |
+| `har-filter` | native | `.har` (HTTP Archive) captures — **content-matched**, not command-wrapped. One redacted line per request (`METHOD status url (mime size ms)`); drops static assets + non-text bodies + timing plumbing; redacts query-string secrets, auth headers, POST-body creds, JWTs + long tokens (typically ~99% smaller) |
 | `pdf-to-md` | script | PDF → GitHub-flavored markdown (text + tables; scanned/image-only pages OCR'd via inferd Gemma vision) |
 | `shorthand` | prompt | LLM-facing prose compression (SKILL.md, CLAUDE.md, system prompts) |
 | `compress` | prompt | Generic verbose output, fallback |
