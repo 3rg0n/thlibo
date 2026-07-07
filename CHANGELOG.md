@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`thlibo uninstall --copilot` no longer errors, and the uninstall plan
+  now names the Copilot hook file** (#75, found in v0.9.0-rc.2 macOS QA).
+  `uninstall` rejected `--copilot` as an unknown flag (it only existed on
+  `install`), and its dry-run plan never mentioned
+  `~/.copilot/hooks/thlibo.json` even though a real run removed it.
+  `uninstall` now accepts `--copilot` (for symmetry with `install`; the
+  file is removed regardless) and lists it in the plan. Removal stays
+  scoped to thlibo's own file — a co-resident `git-ai.json` (or any other
+  tool's hook file) is left byte-identical.
+
 ### Added
 
 - **GitHub Copilot CLI support** (`thlibo install --copilot`, or
