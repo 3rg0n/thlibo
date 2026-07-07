@@ -26,6 +26,7 @@
 #   $env:THLIBO_SKIP_INSTALL=1  Extract only; don't configure.
 #   $env:THLIBO_CODEX=1         Also install the Codex CLI hook (--codex).
 #   $env:THLIBO_CURSOR=1        Also install the Cursor IDE hooks (--cursor).
+#   $env:THLIBO_COPILOT=1       Also install the GitHub Copilot CLI hooks (--copilot).
 #      (The one-liner can't take flags, so these env vars opt in.)
 #
 # What it does NOT do (on purpose):
@@ -198,11 +199,12 @@ try {
     } else {
         Write-Host ''
         # Opt-in extra AI clients via env vars (a piped one-liner can't
-        # take flags). THLIBO_CODEX / THLIBO_CURSOR append the flag.
-        # Without these, the one-liner only wires Claude Code (#169).
+        # take flags). THLIBO_CODEX / THLIBO_CURSOR / THLIBO_COPILOT append
+        # the flag. Without these, the one-liner only wires Claude Code (#169).
         $installArgs = @('install')
-        if ($env:THLIBO_CODEX  -in '1','true','yes','on') { $installArgs += '--codex' }
-        if ($env:THLIBO_CURSOR -in '1','true','yes','on') { $installArgs += '--cursor' }
+        if ($env:THLIBO_CODEX   -in '1','true','yes','on') { $installArgs += '--codex' }
+        if ($env:THLIBO_CURSOR  -in '1','true','yes','on') { $installArgs += '--cursor' }
+        if ($env:THLIBO_COPILOT -in '1','true','yes','on') { $installArgs += '--copilot' }
         Say ("running: thlibo " + ($installArgs -join ' '))
         Say '  (writes Claude Code hooks, mirrors processors,'
         Say '   probe-or-installs the inferd sidecar; inferd then'
