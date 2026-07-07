@@ -1,0 +1,53 @@
+internal/adapters/copilot/hook-pre.sh
+  s_5811b7f24eccc0::t_597eb7c05f5387 2-4,6-11,13-19,21-25,27-31,33,38,42,53-65,74-76,82-117
+internal/adapters/copilot/hook-pre.ps1
+  s_5811b7f24eccc0::t_424090f88f1d0d 2,14
+  s_5811b7f24eccc0::t_27e33822cc0142 1,3,5-6,8-12,15-16,30,37-41,44,46,58-62,64-78
+internal/adapters/copilot/copilot.go
+  s_5811b7f24eccc0::t_715666185fb1cd 1-3,14-22
+  s_a5f13c429c1236::t_f169c9a39cefda 23
+internal/adapters/copilot/hook-post.sh
+  s_5811b7f24eccc0::t_78d3fecfa0f3a2 2-4,6-11,13-15,17,20,23-25,27-29,31,34,38,49-57,59-60,66
+internal/adapters/copilot/copilot_test.go
+  s_5811b7f24eccc0::t_740169ea478c6c 236-306
+  s_5811b7f24eccc0::t_a477e241d9db90 230-233
+  s_5811b7f24eccc0::t_f68fbd9f9328fc 36-43
+  s_5811b7f24eccc0::t_0b5f6087cb6028 234,643-673
+  s_5811b7f24eccc0::t_077d9c7d40ccd5 235
+CHANGELOG.md
+  s_5811b7f24eccc0::t_0dacacb7243d55 35-44,47
+  s_5811b7f24eccc0::t_75c288ee4cddc7 45-46
+README.md
+  s_5811b7f24eccc0::t_f8264c27f9d3d8 262-272
+  s_5811b7f24eccc0::t_e56b26399524ea 51,53-56
+CLAUDE.md
+  s_5811b7f24eccc0::t_67cf4ee1143acf 166-172
+  s_5811b7f24eccc0::t_7860b5e927954e 24-26
+internal/adapters/copilot/hook-post.ps1
+  s_5811b7f24eccc0::t_424090f88f1d0d 2
+  s_5811b7f24eccc0::t_c7590bc40d7fd2 1,3,5-9,11-13,15-17,31,39-42,45,57-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "897791613c314530c7f66e2dc18b8686a863b96c",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_a5f13c429c1236": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "6a143720-a88a-4389-bccc-ac84c3ac02ca",
+        "model": "gpt-5.3-codex"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
