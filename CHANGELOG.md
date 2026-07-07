@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **GitHub Copilot CLI support** (`thlibo install --copilot`, or
+  `THLIBO_COPILOT=1` on the one-liner). Installs
+  `~/.copilot/hooks/thlibo.json` plus four hook scripts (a Bash +
+  PowerShell pair per event). Copilot reads every `*.json` in that
+  directory and each tool owns its own file, so thlibo's never collides
+  with another tool's — install writes it, uninstall deletes it, no
+  merge required. Two hooks:
+  - **preToolUse** — rewrites a shell command's input via `modifiedArgs`
+    (`git status` → `thlibo exec -- git status`), the same command-wrap
+    path used for Claude Code's Bash tool. Copilot's preToolUse is
+    **fail-closed** (a hook error denies the tool call), so the hook
+    exits 0 on every path and only ever emits `"allow"` — it can never
+    block a tool call.
+  - **postToolUse** — replaces any verbose tool's output with a
+    compressed version via `modifiedResult`, piping
+    `toolResult.textResultForLlm` through `thlibo compress`. Fail-open.
+    A double-compression guard skips output whose command was already
+    `exec --`-wrapped by the preToolUse hook.
+
+  The Copilot hook-file schema carries both a `bash` and a `powershell`
+  command per entry, so thlibo ships native `.sh` and `.ps1` scripts and
+  Windows runs the PowerShell variant directly — no Git-Bash wrapping.
+
 ## [0.8.0] - 2026-07-07
 
 ### Added

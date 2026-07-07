@@ -25,6 +25,7 @@ import (
 
 	"github.com/3rg0n/thlibo/internal/adapters/claudecode"
 	"github.com/3rg0n/thlibo/internal/adapters/codex"
+	"github.com/3rg0n/thlibo/internal/adapters/copilot"
 	"github.com/3rg0n/thlibo/internal/adapters/cursor"
 	"github.com/3rg0n/thlibo/internal/install"
 )
@@ -45,13 +46,13 @@ import (
 func Run(argv []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	var (
-		dryRun         bool
-		processorsDir  string
-		hookDir        string
-		settingsPath   string
-		skipHook       bool
-		skipInferd     bool
-		inferdVersion  string
+		dryRun        bool
+		processorsDir string
+		hookDir       string
+		settingsPath  string
+		skipHook      bool
+		skipInferd    bool
+		inferdVersion string
 	)
 	fs.BoolVar(&dryRun, "dry-run", false, "report planned actions without applying them")
 	fs.StringVar(&processorsDir, "processors-dir", "", "override processors dir (default: ~/.thlibo/processors)")
@@ -68,6 +69,10 @@ func Run(argv []string) int {
 	var cursorHooksPath string
 	fs.BoolVar(&installCursor, "cursor", false, "also install the Cursor IDE preToolUse hooks (updated_input rewrites the Shell command + Read file_path to compress output)")
 	fs.StringVar(&cursorHooksPath, "cursor-hooks", "", "override Cursor hooks.json path (default: ~/.cursor/hooks.json)")
+	var installCopilot bool
+	var copilotHooksPath string
+	fs.BoolVar(&installCopilot, "copilot", false, "also install the GitHub Copilot CLI hooks (preToolUse command rewrite + postToolUse output compression)")
+	fs.StringVar(&copilotHooksPath, "copilot-hooks", "", "override Copilot hooks file path (default: ~/.copilot/hooks/thlibo.json)")
 	if err := fs.Parse(argv); err != nil {
 		return 2
 	}
@@ -79,6 +84,9 @@ func Run(argv []string) int {
 	}
 	if skipHook && installCursor {
 		fmt.Fprintln(os.Stderr, "install: --cursor is ignored with --skip-hook (no Cursor hook installed). Drop --skip-hook to install it.")
+	}
+	if skipHook && installCopilot {
+		fmt.Fprintln(os.Stderr, "install: --copilot is ignored with --skip-hook (no Copilot hook installed). Drop --skip-hook to install it.")
 	}
 
 	if processorsDir == "" {
@@ -148,6 +156,15 @@ func Run(argv []string) int {
 		fmt.Printf("  cursor hooks:   %s\n", cp)
 	} else {
 		fmt.Println("  cursor hooks:   (skipped; use --cursor to install)")
+	}
+	if installCopilot {
+		cp := copilotHooksPath
+		if cp == "" && home != "" {
+			cp = filepath.Join(home, ".copilot", "hooks", "thlibo.json")
+		}
+		fmt.Printf("  copilot hooks:  %s\n", cp)
+	} else {
+		fmt.Println("  copilot hooks:  (skipped; use --copilot to install)")
 	}
 	if skipInferd {
 		fmt.Println("  inferd:         (skipped; --skip-inferd)")
@@ -427,6 +444,33 @@ func Run(argv []string) int {
 		}
 	}
 
+	if installCopilot {
+		cp := copilotHooksPath
+		if cp == "" {
+			if homeErr != nil {
+				fmt.Fprintln(os.Stderr, "install: cannot determine home dir for Copilot:", homeErr)
+				return 3
+			}
+			cp = filepath.Join(home, ".copilot", "hooks", "thlibo.json")
+		}
+		if err := copilot.WriteHookScripts(hookDir); err != nil {
+			fmt.Fprintln(os.Stderr, "install: copilot hook scripts:", err)
+			return 11
+		}
+		if err := copilot.WriteHooksJSON(cp, hookDir); err != nil {
+			fmt.Fprintln(os.Stderr, "install: copilot hooks file:", err)
+			return 11
+		}
+		fmt.Printf("  wrote Copilot hooks (preToolUse rewrite + postToolUse compress) to %s\n", cp)
+		// Copilot reads every *.json in ~/.copilot/hooks/, each tool owning
+		// its own file, so thlibo.json never collides with another tool's.
+		// preToolUse rewrites shell commands; postToolUse compresses any
+		// tool's verbose output. Both fail safe (preToolUse always allows;
+		// postToolUse is fail-open).
+		fmt.Println("    Restart Copilot CLI to load the hooks. Shell output is wrapped-and-compressed;")
+		fmt.Println("    other verbose tool output is compressed after it runs.")
+	}
+
 	if hint := wslAPEInteropHint(); hint != "" {
 		fmt.Println()
 		fmt.Println(hint)
@@ -539,4 +583,3 @@ func wslAPEInteropHint() string {
 		"    See https://wsl.dev/technical-documentation/interop/",
 	}, "\n")
 }
-

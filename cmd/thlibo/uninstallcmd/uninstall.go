@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 
 	"github.com/3rg0n/thlibo/internal/adapters/claudecode"
+	"github.com/3rg0n/thlibo/internal/adapters/copilot"
 	"github.com/3rg0n/thlibo/internal/install"
 )
 
@@ -111,6 +112,17 @@ func Run(argv []string) int {
 		}
 	}
 	fmt.Println("  deleted hook scripts (Exec + Read + Write/Edit)")
+
+	// 2a′. Remove the GitHub Copilot CLI hooks. thlibo owns its own file
+	// (~/.copilot/hooks/thlibo.json), so this cleanly deletes it and the
+	// four Copilot hook scripts without touching other tools' hook files.
+	// No-op if --copilot was never used. Non-fatal.
+	copilotHooksJSON := filepath.Join(home, ".copilot", "hooks", "thlibo.json")
+	if err := copilot.RemoveHooks(copilotHooksJSON, hookDir); err != nil {
+		fmt.Fprintln(os.Stderr, "uninstall: remove Copilot hooks (non-fatal):", err)
+	} else {
+		fmt.Println("  removed Copilot hooks (if installed)")
+	}
 
 	// 2b. Remove the /caselog skill directory. RemoveAll is a
 	// no-op if the dir doesn't exist.

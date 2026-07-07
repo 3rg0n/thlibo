@@ -26,6 +26,7 @@
 #   THLIBO_SKIP_INSTALL=1  Extract the binary only; don't configure.
 #   THLIBO_CODEX=1         Also install the Codex CLI hook (--codex).
 #   THLIBO_CURSOR=1        Also install the Cursor IDE hooks (--cursor).
+#   THLIBO_COPILOT=1       Also install the GitHub Copilot CLI hooks (--copilot).
 #      (The one-liner can't take flags, so these env vars opt in.)
 #
 # What it does NOT do (on purpose):
@@ -217,6 +218,7 @@ main() {
       args_display=""
       case "${THLIBO_CODEX:-0}" in 1|true|yes|on) install_args+=(--codex); args_display="$args_display --codex" ;; esac
       case "${THLIBO_CURSOR:-0}" in 1|true|yes|on) install_args+=(--cursor); args_display="$args_display --cursor" ;; esac
+      case "${THLIBO_COPILOT:-0}" in 1|true|yes|on) install_args+=(--copilot); args_display="$args_display --copilot" ;; esac
       say "running: $INSTALL_DIR/thlibo install${args_display}"
       say "  (writes Claude Code hooks, mirrors processors,"
       say "   probe-or-installs the inferd sidecar; inferd then"

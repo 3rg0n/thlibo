@@ -47,8 +47,10 @@ fixtures embedded with [inferd](https://github.com/3rg0n/inferd)'s
 density (`CORDON_MAX_WINDOWS=5000`).
 
 Works with Claude Code (Bash + PowerShell + Read + Write/Edit hooks),
-Codex CLI (PostToolUse `decision: block`), and Cursor IDE (preToolUse
-`updated_input` command + file-read rewrite; no MCP).
+Codex CLI (PostToolUse `decision: block`), Cursor IDE (preToolUse
+`updated_input` command + file-read rewrite; no MCP), and GitHub Copilot
+CLI (preToolUse `modifiedArgs` command rewrite + postToolUse
+`modifiedResult` output compression).
 
 ---
 
@@ -147,19 +149,19 @@ Skip step 5 with `THLIBO_SKIP_INSTALL=1` if you want to inspect the
 binary before running configure.
 
 The one-liner wires **Claude Code** by default. To also install the
-**Codex** or **Cursor** hooks through the one-liner (it can't take
-flags), set an env var:
+**Codex**, **Cursor**, or **Copilot** hooks through the one-liner (it
+can't take flags), set an env var:
 
 ```bash
 # Unix
-curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_CODEX=1 THLIBO_CURSOR=1 bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_CODEX=1 THLIBO_CURSOR=1 THLIBO_COPILOT=1 bash
 ```
 ```powershell
 # Windows
-$env:THLIBO_CODEX=1; $env:THLIBO_CURSOR=1; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+$env:THLIBO_CODEX=1; $env:THLIBO_CURSOR=1; $env:THLIBO_COPILOT=1; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
-(Equivalently, run `thlibo install --codex --cursor` yourself afterward.)
+(Equivalently, run `thlibo install --codex --cursor --copilot` yourself afterward.)
 
 ### Prerequisites for running
 
@@ -233,6 +235,7 @@ a running, login-autostarting daemon with no manual step.
 --inferd-version      Pin inferd to a specific tag (default: latest).
 --codex               Also install the Codex CLI PostToolUse hook.
 --cursor              Also install the Cursor IDE preToolUse hook.
+--copilot             Also install the GitHub Copilot CLI hooks.
 ```
 
 With `--codex`, thlibo writes a PostToolUse hook to `~/.codex/hooks.json`
@@ -241,6 +244,17 @@ gates command hooks behind a **trust step**: after install, run `/hooks`
 inside Codex, review the thlibo hook, and approve it — until you do,
 Codex sees the hook but won't run it (compression stays off). The
 installer prints this reminder.
+
+With `--copilot`, thlibo writes `~/.copilot/hooks/thlibo.json` plus four
+hook scripts (a Bash + PowerShell pair for each event). Copilot reads
+every `*.json` in that directory and each tool owns its own file, so
+thlibo's never collides with another tool's. Two hooks are installed: a
+**preToolUse** hook that rewrites a shell command's input
+(`git status` → `thlibo exec -- git status`) via `modifiedArgs`, and a
+**postToolUse** hook that replaces any verbose tool's output with a
+compressed version via `modifiedResult`. Copilot's preToolUse is
+fail-closed, so the hook only ever *allows* — it never blocks a tool
+call; postToolUse is fail-open. Restart Copilot CLI to load the hooks.
 
 The model GGUF (~5.1 GB Gemma 4 E4B) is downloaded by inferd on
 first inference request, into a shared per-platform model store
@@ -264,6 +278,7 @@ at `<path>.new` and your edit is preserved.
 | inferd binary + `backends/` libs | `~/.local/bin` (Unix) · `%LOCALAPPDATA%\inferd\` (Win), via inferd's installer |
 | inferd autostart | LaunchAgent (macOS) · `systemctl --user` unit (Linux) · Startup-folder shortcut (Windows) |
 | `~/.codex/hooks.json` + `config.toml` | **only** with `--codex` |
+| `~/.copilot/hooks/thlibo.json` + four hook scripts | **only** with `--copilot` |
 
 On macOS the one-liner installer (`install.sh`) also strips the
 Gatekeeper quarantine attribute (`xattr -d com.apple.quarantine`) from
@@ -559,7 +574,9 @@ internal/
   adapters/
     claudecode/       PreToolUse hooks (Bash + PowerShell + Read + Write/Edit),
                       /caselog skill, settings.json merger.
-    codex/            PostToolUse hook (decision: block) + hooks.json merger.
+    codex/            PostToolUse hook (decision: block) + config.toml merger.
+    cursor/           preToolUse hooks (Shell + Read updated_input) + hooks.json merger.
+    copilot/          preToolUse (modifiedArgs) + postToolUse (modifiedResult) hooks.
   casefile/           `thlibo case` directory builder (compressed.log + summary + meta).
   config/             ~/.thlibo/config.yaml read/write.
   execpolicy/         `thlibo exec` allow/deny policy.

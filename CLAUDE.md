@@ -14,13 +14,16 @@ libs beside the daemon, pins the latest *stable* (non-`-rc`) inferd, runs
 the per-user installer (LaunchAgent / systemd-user / Startup-shortcut),
 and probes the daemon for readiness before reporting success
 (fresh-install fixes, #47). `thlibo upgrade` rename-then-replaces its own
-binary so it works while running (#52). Three AI clients: Claude Code
+binary so it works while running (#52). Four AI clients: Claude Code
 hooks (Bash + PowerShell + Read + Write/Edit); Codex PostToolUse hook
 (canonical `[features] hooks` flag + `/hooks` trust reminder, #57);
 Cursor IDE `preToolUse` hooks (Shell command rewrite + Read file_path
 rewrite; bash-wrapped on Windows, invalid-JSON-escape tolerant, #59/#60/
-#62). Full test + scanner CI on linux/macOS/Windows, signed releases via
-Sigstore keyless, CycloneDX SBOM.
+#62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command
+rewrite, fail-closed-safe + `postToolUse` `modifiedResult` output
+compression, fail-open; own `~/.copilot/hooks/thlibo.json`). Full test +
+scanner CI on linux/macOS/Windows, signed releases via Sigstore keyless,
+CycloneDX SBOM.
 
 > History: through v0.5.x thlibo shipped a second binary, `thlibod`,
 > that spawned llamafile directly. ADR 0005 extracted all inference
@@ -147,6 +150,17 @@ failure to reach or parse, it fails open (ADR 0006).
   Non-destructive `~/.cursor/hooks.json` merge; bash-wraps the command
   on Windows (no `.sh` file association); tolerates invalid JSON
   escapes in the envelope. Cannot substitute MCP output (Cursor limit).
+- **`internal/adapters/copilot/`** — GitHub Copilot CLI hooks in
+  `~/.copilot/hooks/thlibo.json` (Copilot reads every `*.json`; each
+  tool owns its file, so no merge — thlibo writes/deletes its own).
+  Two events, both fail-safe: `preToolUse` rewrites the shell command
+  via `modifiedArgs` (fail-**closed** host → the hook only ever
+  `"allow"`s, never denies), and `postToolUse` replaces verbose tool
+  output via `modifiedResult` (fail-open) by piping through
+  `thlibo compress`. A double-compression guard skips output whose
+  command was already `exec --`-wrapped by preToolUse. Ships native
+  `.sh` + `.ps1` per event (config carries both `bash`/`powershell`),
+  so Windows runs the PowerShell variant directly — no bash-wrapping.
 
 ## Build, test, scan
 
