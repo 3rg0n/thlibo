@@ -42,15 +42,22 @@ func Run(argv []string) int {
 		settingsPath  string
 		purge         bool
 		skipAutostart bool
+		copilotFlag   bool // accepted for symmetry with `install --copilot` (#75)
 	)
 	fs.BoolVar(&dryRun, "dry-run", false, "report planned actions without applying them")
 	fs.StringVar(&hookDir, "hook-dir", "", "override hook dir (default: ~/.thlibo/hooks)")
 	fs.StringVar(&settingsPath, "settings", "", "override Claude Code settings path (default: ~/.claude/settings.json)")
 	fs.BoolVar(&skipAutostart, "skip-autostart", false, "skip unregistering the daemon autostart")
 	fs.BoolVar(&purge, "purge", false, "also delete ~/.thlibo (processors, models, logs)")
+	// `uninstall --copilot` mirrors `install --copilot` so the flag isn't
+	// rejected as unknown (#75). It's accepted but not required: uninstall
+	// always removes thlibo's own Copilot hook file if present — the flag
+	// just documents intent.
+	fs.BoolVar(&copilotFlag, "copilot", false, "(accepted; uninstall always removes the Copilot hook file if present)")
 	if err := fs.Parse(argv); err != nil {
 		return ExitUsage
 	}
+	_ = copilotFlag
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -71,10 +78,13 @@ func Run(argv []string) int {
 	writePS1HookPath := filepath.Join(hookDir, "thlibo-write.ps1")
 	// ~/.claude/skills/caselog/ — installed by `thlibo install`.
 	skillDir := filepath.Join(filepath.Dir(settingsPath), "skills", "caselog")
+	// ~/.copilot/hooks/thlibo.json — installed by `thlibo install --copilot`.
+	copilotHooksJSON := filepath.Join(home, ".copilot", "hooks", "thlibo.json")
 
 	fmt.Println("thlibo uninstall plan:")
 	fmt.Println("  remove hook entries from:", settingsPath)
 	fmt.Println("  delete hook scripts in:  ", hookDir)
+	fmt.Println("  remove Copilot hook file:", copilotHooksJSON, "(if present)")
 	if purge {
 		fmt.Println("  purge ~/.thlibo:          yes (processors, models, logs)")
 	} else {
@@ -114,10 +124,10 @@ func Run(argv []string) int {
 	fmt.Println("  deleted hook scripts (Exec + Read + Write/Edit)")
 
 	// 2a′. Remove the GitHub Copilot CLI hooks. thlibo owns its own file
-	// (~/.copilot/hooks/thlibo.json), so this cleanly deletes it and the
-	// four Copilot hook scripts without touching other tools' hook files.
-	// No-op if --copilot was never used. Non-fatal.
-	copilotHooksJSON := filepath.Join(home, ".copilot", "hooks", "thlibo.json")
+	// (~/.copilot/hooks/thlibo.json — path computed above for the plan),
+	// so this cleanly deletes it and the four Copilot hook scripts without
+	// touching other tools' hook files. No-op if --copilot was never used.
+	// Non-fatal.
 	if err := copilot.RemoveHooks(copilotHooksJSON, hookDir); err != nil {
 		fmt.Fprintln(os.Stderr, "uninstall: remove Copilot hooks (non-fatal):", err)
 	} else {
