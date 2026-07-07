@@ -1,0 +1,55 @@
+README.md
+  s_5811b7f24eccc0::t_af68f60f0bb974 360
+  s_5811b7f24eccc0::t_872e293c00d42f 96
+internal/processors/filter_har.go
+  s_5811b7f24eccc0::t_d3d852789f88d7 306-313
+  s_5811b7f24eccc0::t_51e1171a8d88f7 317-325,339-345,348-371
+  s_5811b7f24eccc0::t_8338e0076abdf3 204-207,209-237,239-256,258-265,277-278,283
+  s_5811b7f24eccc0::t_d18179d20b3966 9
+  s_5811b7f24eccc0::t_fb0b2c43a74303 97-98
+  s_5811b7f24eccc0::t_8acb043983f02e 374-378,384-385
+  s_5811b7f24eccc0::t_567049981ea13b 138-139,141-145
+  s_5811b7f24eccc0::t_c3468b58beeed6 286-295,297,302,304
+  s_5811b7f24eccc0::t_254f95fdfb290c 1-8,10-96,99-137,140,146-203,208,238,257,266-276,279-282,284-285,296,298-301,303,305,314-316,326-338,346-347,372-373,379-383,386-405
+processors/har-filter/processor.yaml
+  s_5811b7f24eccc0::t_a0bbe05302eb93 1-2,11-25
+  s_5811b7f24eccc0::t_decf9207cd1f04 3-10
+CHANGELOG.md
+  s_5811b7f24eccc0::t_d59c85783e19f3 10-31
+internal/processors/filter_har_test.go
+  s_5811b7f24eccc0::t_7fb441f9e2a9e9 237-338,340-342,344-346
+  s_5811b7f24eccc0::t_dc1e841c520c1e 339,343
+  s_5811b7f24eccc0::t_873a77605bd1d2 1-5,7-161,166-236,347-352
+  s_5811b7f24eccc0::t_1135a0d1160a99 6
+  s_5811b7f24eccc0::t_658718799fe1ae 162-165
+processors/embed.go
+  s_3f706e3f4b4643::t_941e9679cbffea 20
+CLAUDE.md
+  s_5811b7f24eccc0::t_9244916ed155f5 100,102-103
+internal/middleware/builtins_test.go
+  s_5811b7f24eccc0::t_2795bbc24e40a2 28,39-40,63-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d92f43d73c9f8ff4e73eb7605550ffe38cef22aa",
+  "prompts": {},
+  "sessions": {
+    "s_3f706e3f4b4643": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d91ced6-3b3b-46d0-b2cb-8b38a3429c2a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
