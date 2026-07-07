@@ -54,15 +54,26 @@ INPUT=$(cat)
 # "tool_input". We only need to know which container holds the command.
 HAS_TOOLARGS=$(jq -r 'has("toolArgs")' <<<"$INPUT" 2>/dev/null)
 
+# Normalise the args container to an OBJECT. Ground truth from a live
+# Copilot CLI (1.0.x): toolArgs arrives as a JSON-ENCODED STRING, e.g.
+#   "toolArgs": "{\"command\":\"git status\",\"description\":\"...\"}"
+# not a nested object — so a naive .toolArgs.command yields null. We
+# reparse a string container with fromjson. tool_input (VS Code/Claude)
+# is a real object and passes through untouched. ARGS_OBJ is the decoded
+# object we read the command from and (for the CLI) echo back.
+if [ "$HAS_TOOLARGS" = "true" ]; then
+  ARGS_OBJ=$(jq -c 'if (.toolArgs | type) == "string" then (.toolArgs | fromjson) else .toolArgs end' <<<"$INPUT" 2>/dev/null)
+else
+  ARGS_OBJ=$(jq -c '.tool_input // {}' <<<"$INPUT" 2>/dev/null)
+fi
+if [ -z "$ARGS_OBJ" ] || [ "$ARGS_OBJ" = "null" ]; then
+  exit 0
+fi
+
 # Extract the command from whichever field carries it. Different tools
 # name it differently (docs type these as unknown/varied): .command is
 # most common, with .cmd / .commandLine / .script as fallbacks.
-if [ "$HAS_TOOLARGS" = "true" ]; then
-  CONTAINER=".toolArgs"
-else
-  CONTAINER=".tool_input"
-fi
-CMD=$(jq -r "${CONTAINER}.command // ${CONTAINER}.commandLine // ${CONTAINER}.cmd // ${CONTAINER}.script // empty" <<<"$INPUT" 2>/dev/null)
+CMD=$(jq -r '.command // .commandLine // .cmd // .script // empty' <<<"$ARGS_OBJ" 2>/dev/null)
 if [ -z "$CMD" ]; then
   exit 0
 fi
@@ -80,38 +91,36 @@ fi
 REWRITTEN=${REWRITTEN%$'\n'}
 
 if [ "$HAS_TOOLARGS" = "true" ]; then
-  # --- Copilot CLI: modifiedArgs replaces toolArgs wholesale. Echo the
-  # original args back with only the command field(s) swapped. ---
-  jq -cn --argjson args "$(jq -c '.toolArgs' <<<"$INPUT")" --arg cmd "$REWRITTEN" '
-    ($args // {}) as $a
+  # --- Copilot CLI: modifiedArgs replaces toolArgs. Emit it as an OBJECT
+  # (verified against a live Copilot CLI: an object is applied; a
+  # stringified value is not) — the decoded ARGS_OBJ with only the
+  # command field(s) swapped. ---
+  jq -cn --argjson args "$ARGS_OBJ" --arg cmd "$REWRITTEN" '
+    $args
+    | (if has("command")     then .command     = $cmd else . end)
+    | (if has("commandLine") then .commandLine = $cmd else . end)
+    | (if has("cmd")         then .cmd         = $cmd else . end)
+    | (if has("script")      then .script      = $cmd else . end)
     | {
         "permissionDecision": "allow",
         "permissionDecisionReason": "thlibo auto-rewrite (output compression)",
-        "modifiedArgs": (
-          $a
-          | (if has("command")     then .command     = $cmd else . end)
-          | (if has("commandLine") then .commandLine = $cmd else . end)
-          | (if has("cmd")         then .cmd         = $cmd else . end)
-          | (if has("script")      then .script      = $cmd else . end)
-        )
+        "modifiedArgs": .
       }' 2>/dev/null || exit 0
 else
   # --- VS Code / Claude Code: hookSpecificOutput.updatedInput carries a
-  # full copy of tool_input with the command field swapped. ---
-  jq -cn --argjson ti "$(jq -c '.tool_input // {}' <<<"$INPUT")" --arg cmd "$REWRITTEN" '
-    ($ti // {}) as $t
+  # full copy of tool_input (a real object) with the command swapped. ---
+  jq -cn --argjson ti "$ARGS_OBJ" --arg cmd "$REWRITTEN" '
+    $ti
+    | (if has("command")     then .command     = $cmd else . end)
+    | (if has("commandLine") then .commandLine = $cmd else . end)
+    | (if has("cmd")         then .cmd         = $cmd else . end)
+    | (if has("script")      then .script      = $cmd else . end)
     | {
         "hookSpecificOutput": {
           "hookEventName": "PreToolUse",
           "permissionDecision": "allow",
           "permissionDecisionReason": "thlibo auto-rewrite (output compression)",
-          "updatedInput": (
-            $t
-            | (if has("command")     then .command     = $cmd else . end)
-            | (if has("commandLine") then .commandLine = $cmd else . end)
-            | (if has("cmd")         then .cmd         = $cmd else . end)
-            | (if has("script")      then .script      = $cmd else . end)
-          )
+          "updatedInput": .
         }
       }' 2>/dev/null || exit 0
 fi

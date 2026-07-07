@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command per entry, so thlibo ships native `.sh` and `.ps1` scripts and
   Windows runs the PowerShell variant directly — no Git-Bash wrapping.
 
+  Validated end-to-end against a live GitHub Copilot CLI (1.0.x). That
+  testing surfaced two wire-format facts the docs omit, now handled: the
+  CLI delivers `toolArgs` as a **JSON-encoded string** (not a nested
+  object), so the hooks decode it before reading the command; and
+  `modifiedArgs` must be returned as an **object** (a stringified value
+  is ignored). `toolResult` is decoded the same defensive way.
+
 - **VS Code Copilot support** (1.111+, currently Insiders) — no extra
   flag. VS Code reads agent hooks from `~/.copilot/hooks/` too, so the
   `thlibo.json` installed by `--copilot` is auto-discovered there. VS

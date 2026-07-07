@@ -57,19 +57,28 @@ fi
 
 # Double-compression guard: skip results whose command was wrapped by
 # our own preToolUse hook (`... exec -- ...` / `thlibo exec ...`).
-CMD=$(jq -r '.toolArgs.command // .toolArgs.commandLine // .toolArgs.cmd // .toolArgs.script // empty' <<<"$INPUT" 2>/dev/null)
+# toolArgs arrives as a JSON-encoded STRING on the live Copilot CLI, so
+# decode it before reading the command (fromjson on a string; passthrough
+# on an object).
+ARGS_OBJ=$(jq -c 'if (.toolArgs | type) == "string" then (.toolArgs | fromjson) else (.toolArgs // {}) end' <<<"$INPUT" 2>/dev/null)
+CMD=$(jq -r '.command // .commandLine // .cmd // .script // empty' <<<"$ARGS_OBJ" 2>/dev/null)
 case "$CMD" in
   *"exec -- "*|*"thlibo exec"*) exit 0 ;;
 esac
 
-# The model-visible tool output. Fall back to a couple of alternate
-# shapes; empty -> nothing to do.
+# The model-visible tool output. toolResult may be an object or (like
+# toolArgs) a JSON-encoded string; handle both, then pull the text field.
+# For a string, try to decode it as JSON — but if that fails, keep the
+# ORIGINAL string as the output (a plain-text result is the text itself).
+# NOTE: inside jq `catch`, `.` is the error, so we bind the original
+# string to $s first and fall back to it, not to `.toolResult`.
+RESULT_OBJ=$(jq -c '.toolResult as $tr
+  | if ($tr | type) == "string" then ($tr as $s | try ($s | fromjson) catch $s) else $tr end' <<<"$INPUT" 2>/dev/null)
 OUTPUT=$(jq -r '
-  .toolResult.textResultForLlm //
-  .toolResult.output           //
-  .toolResult                  |
-  if type == "string" then . else empty end
-' <<<"$INPUT" 2>/dev/null)
+  if type == "object" then (.textResultForLlm // .output // empty)
+  elif type == "string" then .
+  else empty end
+' <<<"$RESULT_OBJ" 2>/dev/null)
 
 if [ -z "$OUTPUT" ]; then
   exit 0

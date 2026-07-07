@@ -5,8 +5,8 @@
 # PowerShell equivalent of hook-pre.sh. Detects which host's envelope is
 # on stdin and replies in the matching wire format:
 #
-#   Copilot CLI   : { toolName, toolArgs:{command} }
-#                   -> { permissionDecision:"allow", modifiedArgs }
+#   Copilot CLI   : { toolName, toolArgs:"<json-string>" }  (double-encoded!)
+#                   -> { permissionDecision:"allow", modifiedArgs:{obj} }
 #   VS Code/Claude: { tool_name, tool_input:{command|commandLine} }
 #                   -> { hookSpecificOutput:{ hookEventName, permissionDecision,
 #                                             updatedInput } }
@@ -39,6 +39,13 @@ try {
     # tool_input. NOTE: not $args -- that's a PowerShell automatic var.
     $isCli = $null -ne $obj.PSObject.Properties['toolArgs']
     if ($isCli) { $targs = $obj.toolArgs } else { $targs = $obj.tool_input }
+    if (-not $targs) { exit 0 }
+
+    # Ground truth from a live Copilot CLI (1.0.x): toolArgs arrives as a
+    # JSON-ENCODED STRING (e.g. "{\"command\":\"git status\"}"), not a
+    # nested object, so $targs.command would be null. Reparse a string.
+    # tool_input (VS Code/Claude) is a real object and is left as-is.
+    if ($targs -is [string]) { $targs = $targs | ConvertFrom-Json }
     if (-not $targs) { exit 0 }
 
     # Probe the command field (naming varies across tools/hosts).
