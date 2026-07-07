@@ -97,9 +97,10 @@ Live in `~/.thlibo/processors/<name>/`. Two kinds:
 
 Built-ins are embedded via `go:embed` under `processors/` (see
 `processors/embed.go`): `compress`, `casefolder`, `shorthand` (prompt
-processors) plus the deterministic script filters `git-filter`,
+processors) plus the deterministic native-Go filters `git-filter`,
 `npm-filter`, `cargo-filter`, `pytest-filter`, `ndjson-filter`,
-`stacktrace-filter`, `lint-filter`, `trivy-filter`, `cordon-filter`,
+`stacktrace-filter`, `lint-filter`, `trivy-filter`, `go-test-filter`,
+`har-filter` (ADR 0010) and the Python script filters `cordon-filter`
 and `pdf-to-md`. A user processor of the same name overrides a
 built-in; the registry emits a `ShadowWarning` at load time so it's
 visible.

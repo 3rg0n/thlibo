@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`har-filter` — new native-Go built-in processor for HTTP Archive
+  (`.har`) captures.** A HAR is a large JSON object whose bulk is
+  static-asset response bodies an AI never needs, with secrets hidden in
+  query strings, auth headers, cookies, and request bodies. The filter
+  distils a capture into one redacted line per request
+  (`METHOD status url (mime size ms)`) plus a size-bounded preview of
+  small JSON / error (≥400) bodies, and drops whole static-asset entries
+  (js/css/images/fonts/wasm), non-text response bodies, and per-entry
+  timing/cache/connection plumbing. Redaction runs before anything is
+  emitted: query-string secret params (token/authkey/api_key/secret/
+  scid/sig/session/password), auth headers (Authorization, Cookie,
+  Set-Cookie, X-Api-Key, …), POST-body credentials, and JWTs + long
+  high-entropy tokens in kept bodies. JSON bodies are content-sniffed and
+  structurally redacted even when a server mislabels them `text/plain`,
+  so short secrets in secret-named fields don't slip past. It's
+  content-matched (fires on a HAR envelope in tool output), not
+  command-wrapped, and runs in-process with no Python or inferd
+  ([ADR 0010](docs/adr/0010-native-go-processors.md)). Non-HAR input
+  passes through unchanged; output is emitted only when strictly smaller.
+
 ### Fixed
 
 - **Codex hook now written inline in `config.toml`, not a separate
