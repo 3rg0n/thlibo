@@ -1,0 +1,26 @@
+cmd/thlibo/uninstallcmd/uninstall_test.go
+  s_5811b7f24eccc0::t_f32c6852f40b98 102
+  s_5811b7f24eccc0::t_b60e6025c8762a 1-101,103-121
+cmd/thlibo/uninstallcmd/uninstall.go
+  s_5811b7f24eccc0::t_0148e00a1e68bf 127-130
+  s_5811b7f24eccc0::t_b7bf284392b12f 45,52-56,60
+  s_5811b7f24eccc0::t_c53ef99a5f56ef 81-82,87
+CHANGELOG.md
+  s_5811b7f24eccc0::t_88ffca00c57a39 10-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fe10bb8c09974b40a903cbf0e24ef661573aceeb",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
