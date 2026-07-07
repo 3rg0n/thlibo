@@ -1,0 +1,67 @@
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_df9e974daf337f 49-55
+  s_5811b7f24eccc0::t_08c3e58950f536 72-75
+  s_5811b7f24eccc0::t_d28801205b0cf6 28
+  s_5811b7f24eccc0::t_b3bcdd09624c52 160-168
+  s_5811b7f24eccc0::t_34769895c0d288 88-90
+  s_5811b7f24eccc0::t_4cfdb15068468f 447-473
+internal/adapters/copilot/copilot_test.go
+  s_5811b7f24eccc0::t_d1492e12fcf6af 55-58
+  s_5811b7f24eccc0::t_74b20669b20dba 1-54,59-452,615-632
+  s_5811b7f24eccc0::t_3929d0ab7a83c0 453-614
+cmd/thlibo/uninstallcmd/uninstall.go
+  s_5811b7f24eccc0::t_301c5bfe2d095e 25
+  s_5811b7f24eccc0::t_90e734f21dcff9 116-126
+internal/adapters/copilot/hook-pre.sh
+  s_5811b7f24eccc0::t_d6b2a6e6cda02e 1-89
+internal/adapters/copilot/hook-post.sh
+  s_5811b7f24eccc0::t_691411b8095e84 84,87-88
+  s_5811b7f24eccc0::t_05b696cc1bbecf 70-78
+  s_5811b7f24eccc0::t_656a52c6933e28 1-69,79-83,85-86,89-100
+README.md
+  s_5811b7f24eccc0::t_72d0f0189e31da 50-53
+  s_5811b7f24eccc0::t_89c20d6dd66714 238
+  s_5811b7f24eccc0::t_4eea54739fa3e4 152-153,157,161,164
+  s_5811b7f24eccc0::t_ff2ce6851e4382 248-258
+  s_5811b7f24eccc0::t_920b573d5af7c5 281
+  s_5811b7f24eccc0::t_9277cea7e3796a 577-579
+scripts/install.ps1
+  s_5811b7f24eccc0::t_4ec8d9a5c9d810 202-203,205-207
+  s_5811b7f24eccc0::t_db0ac3d371c4cd 29
+internal/adapters/copilot/copilot.go
+  s_5811b7f24eccc0::t_6d239b11c013c1 1-209
+CHANGELOG.md
+  s_5811b7f24eccc0::t_ffcd691bcda137 10-34
+internal/adapters/copilot/hook-pre.ps1
+  s_5811b7f24eccc0::t_1cc111a98c2349 38-40,43-45
+  s_5811b7f24eccc0::t_48c0a6766f32e7 59-61,66
+  s_5811b7f24eccc0::t_73ad55df82e9e4 1-5,7,9-36,41-42,46-58,62-65,67-73
+  s_5811b7f24eccc0::t_e8bda4e7a7f167 6,8
+  s_5811b7f24eccc0::t_68c0e45f8251ea 37
+CLAUDE.md
+  s_5811b7f24eccc0::t_71a4775562ebc9 17,22-26
+  s_5811b7f24eccc0::t_742cd30fc9a50a 153-163
+scripts/install.sh
+  s_5811b7f24eccc0::t_0207ed39935bf2 29
+  s_5811b7f24eccc0::t_2883e330489c0d 221
+internal/adapters/copilot/hook-post.ps1
+  s_5811b7f24eccc0::t_63506f2eb3a102 50-54,58-60
+  s_5811b7f24eccc0::t_2361812ac6ed3d 1-13,15-49,55-57,61-73
+  s_5811b7f24eccc0::t_07f59afa2e6128 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "656bcf238b813f4f823f13628128183dce958097",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
