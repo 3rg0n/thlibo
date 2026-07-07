@@ -1,0 +1,36 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_9221a91cbf597d 35-41
+internal/adapters/copilot/hook-pre.ps1
+  s_5811b7f24eccc0::t_4d2db2b571aaf4 44-50
+  s_5811b7f24eccc0::t_5cb71a9900ec3b 8-9
+internal/adapters/copilot/hook-post.sh
+  s_5811b7f24eccc0::t_70abca242937c6 71-76
+  s_5811b7f24eccc0::t_3264ffda1f66c1 60-64,69-70,78-81
+internal/adapters/copilot/hook-post.ps1
+  s_5811b7f24eccc0::t_0a2ba3cf15c72b 44-51,54-57,61-67
+  s_5811b7f24eccc0::t_37f7de2daa87cc 58-60
+internal/adapters/copilot/hook-pre.sh
+  s_5811b7f24eccc0::t_a989a66bbe08fb 57-63,65,67-70,72-76
+  s_5811b7f24eccc0::t_1bfc357d5bc5a6 94-103,107,111-117,123
+internal/adapters/copilot/copilot_test.go
+  s_5811b7f24eccc0::t_499ac1a90059e5 510-514,517
+  s_5811b7f24eccc0::t_25127c2ef7ffc1 328-380
+  s_5811b7f24eccc0::t_b6e43c0bf4a52f 44-47
+  s_5811b7f24eccc0::t_7d5f359c0acabc 240-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c5d358fca5a346ea7d795368e5bb4cd364aa67f3",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
