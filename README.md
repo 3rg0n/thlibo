@@ -241,12 +241,15 @@ a running, login-autostarting daemon with no manual step.
 --copilot             Also install the GitHub Copilot CLI hooks.
 ```
 
-With `--codex`, thlibo writes a PostToolUse hook to `~/.codex/hooks.json`
-and sets `[features] hooks = true` in `~/.codex/config.toml`. Codex
-gates command hooks behind a **trust step**: after install, run `/hooks`
-inside Codex, review the thlibo hook, and approve it — until you do,
-Codex sees the hook but won't run it (compression stays off). The
-installer prints this reminder.
+With `--codex`, thlibo appends an inline `[[hooks.PostToolUse]]` block
+(matcher `^Bash$`) to `~/.codex/config.toml` and sets `[features] hooks =
+true` in the same file — written inline, not to a separate `hooks.json`,
+because Codex warns and hides hooks when one config layer mixes both
+representations (#170); any stale thlibo `hooks.json` entry from an older
+install is removed. Codex gates command hooks behind a **trust step**:
+after install, run `/hooks` inside Codex, review the thlibo hook, and
+approve it — until you do, Codex sees the hook but won't run it
+(compression stays off). The installer prints this reminder.
 
 With `--copilot`, thlibo writes `~/.copilot/hooks/thlibo.json` plus four
 hook scripts (a Bash + PowerShell pair for each event). Copilot reads
@@ -291,7 +294,7 @@ at `<path>.new` and your edit is preserved.
 | `~/.claude/skills/caselog/` | the `/caselog` skill |
 | inferd binary + `backends/` libs | `~/.local/bin` (Unix) · `%LOCALAPPDATA%\inferd\` (Win), via inferd's installer |
 | inferd autostart | LaunchAgent (macOS) · `systemctl --user` unit (Linux) · Startup-folder shortcut (Windows) |
-| `~/.codex/hooks.json` + `config.toml` | **only** with `--codex` |
+| `~/.codex/config.toml` | **only** with `--codex` — inline `[[hooks.PostToolUse]]` block + `[features] hooks = true` appended (a stale `hooks.json` entry, if any, is removed) |
 | `~/.copilot/hooks/thlibo.json` + four hook scripts | **only** with `--copilot` |
 
 On macOS the one-liner installer (`install.sh`) also strips the
@@ -328,6 +331,12 @@ surprise:
 thlibo uninstall            # remove hooks + scripts; leave ~/.thlibo
 thlibo uninstall --purge    # also delete ~/.thlibo (processors + state)
 ```
+
+`uninstall` removes the Claude Code hook entries and thlibo's own
+`~/.copilot/hooks/thlibo.json` (leaving any other tool's hook file
+untouched). It does **not** unpick the inline hook thlibo appended to
+`~/.codex/config.toml` or the Cursor `hooks.json` entry — remove those by
+hand if you installed them.
 
 Inferd is left running because other tools may use it. To remove
 inferd separately, use inferd's own uninstaller — see
