@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -79,6 +80,132 @@ func extractMsg(rec map[string]any) string {
 		}
 	}
 	return ""
+}
+
+// HTTP access-log field synonyms. Traefik, nginx, envoy, k8s ingress,
+// and app request logs all log every request with a constant level+msg
+// (often level:"info", msg:""), so a (level,msg) signature collapses the
+// whole stream to one row and drops every path/status/method distinction
+// (#27). extractMethod/Status/Path pull the fields that actually vary so
+// they join the signature. All return "" when absent — a record with no
+// HTTP fields (a generic log line) contributes empty components and the
+// signature reduces to (level,msg), preserving prior behaviour exactly.
+
+// extractHTTPField returns the first present string/number field among
+// the given synonym keys, stringified. Empty when none present.
+func extractHTTPField(rec map[string]any, keys ...string) string {
+	for _, k := range keys {
+		v, ok := rec[k]
+		if !ok {
+			continue
+		}
+		switch t := v.(type) {
+		case string:
+			if t != "" {
+				return t
+			}
+		case float64:
+			// Status codes and the like arrive as JSON numbers.
+			return strconv.Itoa(int(t))
+		}
+	}
+	return ""
+}
+
+func extractMethod(rec map[string]any) string {
+	return extractHTTPField(rec, "method", "RequestMethod", "http_method", "verb", "requestMethod")
+}
+
+// extractStatusClass returns the status class (e.g. "5xx") rather than the
+// exact code, so /foo returning 500 vs 503 still collapse — the class is
+// what a "which paths 5xx'd" question needs, and it keeps compression high.
+func extractStatusClass(rec map[string]any) string {
+	s := extractHTTPField(rec, "status", "DownstreamStatus", "http_status", "statusCode", "status_code", "response_code", "OriginStatus")
+	if s == "" {
+		return ""
+	}
+	// Reduce a 3-digit code to its class ("500" -> "5xx"); leave anything
+	// else (already a class, or non-numeric) as-is.
+	if len(s) == 3 && s[0] >= '1' && s[0] <= '5' {
+		allDigits := true
+		for i := 0; i < 3; i++ {
+			if s[i] < '0' || s[i] > '9' {
+				allDigits = false
+				break
+			}
+		}
+		if allDigits {
+			return string(s[0]) + "xx"
+		}
+	}
+	return s
+}
+
+func extractPathShape(rec map[string]any) string {
+	p := extractHTTPField(rec, "RequestPath", "path", "url", "uri", "target", "http_path", "request_uri", "requestPath")
+	if p == "" {
+		return ""
+	}
+	return pathShape(p)
+}
+
+// pathShape normalises a URL path into a template by replacing high-
+// cardinality segments (numeric IDs, UUIDs, long hex/tokens) with a
+// placeholder, so /api/users/1007 and /api/users/1008 share a shape while
+// /api/users and /api/orders stay distinct. This is what keeps the "300
+// requests -> ~N distinct route+status groups" compression meaningful
+// without dropping the route distribution.
+func pathShape(p string) string {
+	// Trim query string / fragment — they're per-request high-cardinality.
+	if i := strings.IndexAny(p, "?#"); i >= 0 {
+		p = p[:i]
+	}
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		if s == "" {
+			continue
+		}
+		if segLooksVariable(s) {
+			segs[i] = "<var>"
+		}
+	}
+	return strings.Join(segs, "/")
+}
+
+// segLooksVariable reports whether a path segment is a high-cardinality
+// value (a numeric id, a uuid, or a long hex/opaque token) rather than a
+// stable route word.
+func segLooksVariable(s string) bool {
+	// All digits -> numeric id.
+	allDigits := true
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			allDigits = false
+			break
+		}
+	}
+	if allDigits {
+		return true
+	}
+	// UUID (8-4-4-4-12 hex).
+	if len(s) == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-' {
+		return true
+	}
+	// Long hex/opaque token (>=24 chars, hex-ish) — commit SHAs, ids.
+	if len(s) >= 24 {
+		hexish := true
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				hexish = false
+				break
+			}
+		}
+		if hexish {
+			return true
+		}
+	}
+	return false
 }
 
 // jsonFieldOrder extracts field names in the order they appear in a JSON string.
@@ -205,13 +332,18 @@ func ndjsonFilter(raw []byte) []byte {
 		lines = lines[:n-1]
 	}
 
-	// Group by (level, msg). Value is [count, firstRecordJSON, firstLineStr].
+	// Group by (level, msg, method, statusClass, pathShape). The extra
+	// HTTP fields keep access-log records distinct so route/status
+	// distribution survives (#27); they're empty for non-HTTP records, so
+	// the signature reduces to (level, msg) and generic logs behave as
+	// before. Value is [count, firstRecordJSON, firstLineStr].
 	type groupValue struct {
-		count    int
-		rec      map[string]any
-		lineStr  string
+		count   int
+		rec     map[string]any
+		lineStr string
 	}
-	groups := make(map[[2]string]groupValue)
+	groups := make(map[[5]string]groupValue)
+	var order [][5]string // group keys in first-seen order (Python dict parity)
 	var nonJSON []string
 
 	for _, line := range lines {
@@ -230,13 +362,20 @@ func ndjsonFilter(raw []byte) []byte {
 
 		level := extractLevel(rec)
 		msg := extractMsg(rec)
-		key := [2]string{level, msg}
+		key := [5]string{
+			level,
+			msg,
+			extractMethod(rec),
+			extractStatusClass(rec),
+			extractPathShape(rec),
+		}
 
 		if gv, exists := groups[key]; exists {
 			gv.count++
 			groups[key] = gv
 		} else {
 			groups[key] = groupValue{count: 1, rec: rec, lineStr: stripped}
+			order = append(order, key) // first-seen order
 		}
 	}
 
@@ -248,12 +387,15 @@ func ndjsonFilter(raw []byte) []byte {
 	// Sort group entries by (level rank descending, original arrival).
 	// Build a slice of (key, value) pairs and sort by rank.
 	type kvPair struct {
-		key   [2]string
+		key   [5]string
 		value groupValue
 	}
+	// Iterate in first-seen order (not Go's random map order) so the
+	// stable sort's secondary key is deterministic arrival order —
+	// matching Python's insertion-ordered dict for byte parity.
 	var items []kvPair
-	for k, v := range groups {
-		items = append(items, kvPair{k, v})
+	for _, k := range order {
+		items = append(items, kvPair{k, groups[k]})
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {

@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 """ndjson-filter: compress NDJSON / structured-log streams.
 
-Reads stdin, parses each line as JSON, groups by (level, msg)
-signature, deduplicates with a count multiplier, and emits the
-result sorted with errors first.
+Reads stdin, parses each line as JSON, groups by a
+(level, msg, method, status-class, path-shape) signature,
+deduplicates with a count multiplier, and emits the result sorted
+with errors first.
 
-Lossless guarantees:
-  - Every distinct (level, msg) appears in the output once.
-  - The first occurrence of each signature is kept verbatim — so
-    every distinct file path, error code, SHA, version string,
-    request ID, and timestamp present in *some* record survives.
+Guarantees:
+  - Every distinct signature appears in the output once. The
+    signature includes HTTP access-log fields (method, status class,
+    normalised path) so access logs keep their route/status
+    distribution instead of collapsing to one row (#27). Records with
+    no HTTP fields contribute empty components, so the signature
+    reduces to (level, msg) — generic logs behave exactly as before.
+  - The first occurrence of each signature is kept verbatim.
   - Counts on duplicates are preserved as `_count` field.
+  - Note: distinctness is captured by the signature fields, not every
+    field — two records that differ only in an arbitrary field (e.g.
+    `user`) still collapse. The signature targets the high-value
+    access-log case, not universal per-field preservation.
 
 What gets compressed:
   - The 499 duplicate records of the same error → 1 + count=500.
@@ -77,6 +85,72 @@ def _msg(rec: dict) -> str:
     return ""
 
 
+# HTTP access-log field synonyms. Traefik/nginx/envoy/k8s ingress and app
+# request logs emit a constant level+msg for every request, so a
+# (level,msg) signature collapses the whole stream to one row and drops
+# every path/status/method distinction (#27). These pull the fields that
+# actually vary into the signature. All return "" when absent — a generic
+# log record then contributes empty components and the signature reduces
+# to (level,msg), preserving prior behaviour exactly.
+def _http_field(rec: dict, *keys) -> str:
+    for k in keys:
+        v = rec.get(k)
+        if isinstance(v, str) and v:
+            return v
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return str(int(v))
+    return ""
+
+
+def _ascii_digits(s: str) -> bool:
+    """True iff s is non-empty and all ASCII 0-9. NOT str.isdigit(),
+    which also accepts Unicode numerals ('²', '٣') — the Go port uses an
+    ASCII 0-9 loop, so this keeps the two byte-identical (ADR 0010)."""
+    return bool(s) and all("0" <= c <= "9" for c in s)
+
+
+def _method(rec: dict) -> str:
+    return _http_field(rec, "method", "RequestMethod", "http_method", "verb", "requestMethod")
+
+
+def _status_class(rec: dict) -> str:
+    """Status class ('5xx') not the exact code, so 500 vs 503 on the same
+    route still collapse — the class is what a 'which paths 5xx'd'
+    question needs, and it keeps compression high."""
+    s = _http_field(rec, "status", "DownstreamStatus", "http_status",
+                    "statusCode", "status_code", "response_code", "OriginStatus")
+    if len(s) == 3 and _ascii_digits(s) and s[0] in "12345":
+        return s[0] + "xx"
+    return s
+
+
+def _seg_variable(s: str) -> bool:
+    """A high-cardinality path segment (numeric id, uuid, long hex token)
+    rather than a stable route word."""
+    if _ascii_digits(s):
+        return True
+    if len(s) == 36 and s[8] == "-" and s[13] == "-" and s[18] == "-" and s[23] == "-":
+        return True
+    if len(s) >= 24 and all(c in "0123456789abcdefABCDEF" for c in s):
+        return True
+    return False
+
+
+def _path_shape(rec: dict) -> str:
+    """Normalise a URL path to a template: /api/users/1007 -> /api/users/<var>
+    so per-id requests collapse while distinct routes stay separate."""
+    p = _http_field(rec, "RequestPath", "path", "url", "uri", "target",
+                    "http_path", "request_uri", "requestPath")
+    if not p:
+        return ""
+    for sep in ("?", "#"):
+        i = p.find(sep)
+        if i >= 0:
+            p = p[:i]
+    segs = p.split("/")
+    return "/".join("<var>" if s and _seg_variable(s) else s for s in segs)
+
+
 def compress(raw: str) -> str:
     try:
         lines = raw.splitlines()
@@ -103,7 +177,8 @@ def compress(raw: str) -> str:
                 non_json.append(line)
                 continue
 
-            key = (_level(rec), _msg(rec))
+            key = (_level(rec), _msg(rec), _method(rec),
+                   _status_class(rec), _path_shape(rec))
             if key in groups:
                 groups[key][0] += 1
             else:
