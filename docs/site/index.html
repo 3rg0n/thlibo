@@ -369,6 +369,48 @@ html.no-js .bar .bar-compressed{ opacity:1 }
 .demo-foot code{ color:var(--ink); background:var(--paper); padding:0.1rem 0.35rem; border:1px solid var(--rule) }
 
 /* ------------------------------------------------------------------
+   EXAMPLES — real before/after, side by side. A chart says how much;
+   a diff says what. Two dark terminal panes per example.
+   ------------------------------------------------------------------ */
+.examples{ margin-top: clamp(2.5rem, 5vh, 3.5rem) }
+.example{ margin-top: clamp(1.6rem, 3vh, 2.4rem) }
+.example > .ex-head{
+  font-family:var(--f-mono); font-size:0.95rem; color:var(--ink);
+  font-weight:600; margin-bottom:0.15rem;
+}
+.example > .ex-sub{
+  font-family:var(--f-sans); font-size:0.76rem; letter-spacing:0.04em;
+  color:var(--ink-ghost); margin-bottom:0.8rem;
+}
+.ex-sub b{ color:var(--oxblood); font-weight:600 }
+.ex-panes{ display:grid; grid-template-columns:1fr 1fr; gap:1.1rem }
+@media (max-width:760px){ .ex-panes{ grid-template-columns:1fr } }
+.pane{
+  background:#1a1612; border:1px solid #000; border-radius:2px;
+  box-shadow: 5px 5px 0 var(--oxblood);
+  overflow:hidden; min-width:0;
+}
+.pane.after{ box-shadow: 5px 5px 0 var(--crt) }
+.pane .pane-bar{
+  font-family:var(--f-sans); text-transform:uppercase; letter-spacing:0.2em;
+  font-size:0.6rem; color:#a59a88;
+  padding:0.5rem 0.9rem; border-bottom:1px solid #2c2620;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.pane.after .pane-bar{ color:var(--crt-dim) }
+.pane .pane-bar .tok{ color:#c9bda6; text-transform:none; letter-spacing:0 }
+.pane pre{
+  margin:0; padding:0.85rem 1rem; overflow-x:auto;
+  font-family:var(--f-mono); font-size:0.78rem; line-height:1.45;
+  color:#d8ccb8; white-space:pre;
+}
+.pane pre .dim{ color:#6a6155 }              /* dropped / noise */
+.pane pre .keep{ color:#e8decf }             /* kept */
+.pane pre .red{ color:#e0894f; font-weight:600 }   /* <redacted> */
+.pane pre .tag{ color:var(--crt-dim) }       /* header/summary line */
+.pane pre .ell{ color:#6a6155 }
+
+/* ------------------------------------------------------------------
    HOW IT WORKS — three cards with classical numerals
    ------------------------------------------------------------------ */
 
@@ -652,6 +694,27 @@ html.no-js .reveal{ opacity:1; transform:none }
         </div>
       </article>
 
+      <!-- har capture ........................................................ -->
+      <article class="bar reveal"
+               data-raw="2601" data-compressed="115" data-scale="0.0443">
+        <div class="bar-label">
+          <span class="cmd">.har capture (30 requests)</span>
+          <span class="processor">via <b>har-filter</b> · native Go · redacts secrets</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.0443"></div>
+            <div class="bar-compressed" style="--pct:4.43%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">~2,601&nbsp;tok</span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="115">~115<span class="unit">&nbsp;tok</span></span>
+            <span class="reduction">−95.6%</span>
+          </div>
+        </div>
+      </article>
+
       <!-- pdf → markdown (atc-sse-prd) ......................................... -->
       <article class="bar reveal"
                data-raw="38250" data-compressed="12173" data-scale="0.3183">
@@ -719,6 +782,74 @@ html.no-js .reveal{ opacity:1; transform:none }
 
     <div class="demo-foot">
       <span>Methodology + reproduction notes in the <a href="https://github.com/3rg0n/thlibo#methodology">README</a>.</span>
+    </div>
+
+    <!-- examples: real before/after ........................................... -->
+    <div class="examples">
+      <div class="section-head" style="margin-top:0">
+        <span class="section-num">§ i·b</span>
+        <h2 class="section-title">Same runs, actual output.</h2>
+        <span class="section-tag">before → after · verbatim</span>
+      </div>
+
+      <!-- app log ............................................................. -->
+      <div class="example">
+        <div class="ex-head">application log — 122 ndjson lines, one error repeating</div>
+        <div class="ex-sub">via <b>ndjson-filter</b> · collapses identical records, keeps the distinct ones · 18,925 → 333 bytes</div>
+        <div class="ex-panes">
+          <div class="pane before">
+            <div class="pane-bar"><span>before</span><span class="tok">~4,731 tok</span></div>
+<pre><span class="keep">{"level":"error","ts":"2026-07-08T17:01:03Z","msg":"connection refused","host":"db-primary.internal:5432","attempt":1,"request_id":"req-7001"}</span>
+<span class="dim">{"level":"error","ts":"2026-07-08T17:02:03Z","msg":"connection refused","host":"db-primary.internal:5432","attempt":2,"request_id":"req-7002"}</span>
+<span class="dim">{"level":"error","ts":"2026-07-08T17:03:03Z","msg":"connection refused","host":"db-primary.internal:5432","attempt":3,"request_id":"req-7003"}</span>
+<span class="ell">…  117 more identical "connection refused" lines  …</span>
+<span class="keep">{"level":"warn","ts":"2026-07-08T17:40:00Z","msg":"pool exhausted","size":20}</span>
+<span class="keep">{"level":"info","ts":"2026-07-08T17:59:00Z","msg":"reconnected","host":"db-primary.internal:5432"}</span></pre>
+          </div>
+          <div class="pane after">
+            <div class="pane-bar"><span>after</span><span class="tok">~83 tok · −98.2%</span></div>
+<pre><span class="keep">{"level":"error","ts":"2026-07-08T17:01:03Z","msg":"connection refused","host":"db-primary.internal:5432","attempt":1,"request_id":"req-7001",<span class="tag">"_count":120</span>}</span>
+<span class="keep">{"level":"warn","ts":"2026-07-08T17:40:00Z","msg":"pool exhausted","size":20}</span>
+<span class="keep">{"level":"info","ts":"2026-07-08T17:59:00Z","msg":"reconnected","host":"db-primary.internal:5432"}</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- har capture ......................................................... -->
+      <div class="example">
+        <div class="ex-head">.har capture — 30 requests, secrets in headers/URLs/bodies</div>
+        <div class="ex-sub">via <b>har-filter</b> · drops static assets, keeps API calls, <b>redacts every secret</b> · 10,405 → 461 bytes</div>
+        <div class="ex-panes">
+          <div class="pane before">
+            <div class="pane-bar"><span>before</span><span class="tok">~2,601 tok</span></div>
+<pre><span class="dim">{ "log": { "version": "1.2", "creator": {…},</span>
+<span class="dim">  "entries": [</span>
+<span class="dim">    { "request": { "method":"GET",</span>
+<span class="dim">        "url":"…/assets/chunk.1.js" },   ← 26 static assets</span>
+<span class="dim">      "response": { "status":200, "content":</span>
+<span class="dim">        { "size":48120, "mimeType":"application/javascript" }}},</span>
+<span class="dim">    …</span>
+<span class="keep">    { "request": { "method":"POST",</span>
+<span class="keep">        "url":"…/v2/auth/login?client_id=PUBLICAPP",</span>
+<span class="keep">        "headers":[{"name":"Authorization",</span>
+<span class="red">          "value":"Bearer sk-live-9a8b7c6d5e4f3g2h1i0j"}],</span>
+<span class="keep">        "postData":{"text":</span>
+<span class="red">          "{\"password\":\"tr1n1ty!42\",\"username\":\"neo\"}"}},</span>
+<span class="keep">      "response":{"content":{"text":</span>
+<span class="red">        "{\"token\":\"eyJhbGciOiJIUzI1NiJ9.eyJ…\"}"}}}, …</span></pre>
+          </div>
+          <div class="pane after">
+            <div class="pane-bar"><span>after</span><span class="tok">~115 tok · −95.6%</span></div>
+<pre><span class="tag">HAR 1.2: 2 requests (26 static dropped)</span>
+<span class="keep">POST 200 …/v2/auth/login?client_id=PUBLICAPP  (json 180B 312ms)</span>
+<span class="keep">  Authorization: <span class="red">&lt;redacted&gt;</span></span>
+<span class="keep">  → {"password":<span class="red">"&lt;redacted&gt;"</span>,"username":"neo"}</span>
+<span class="keep">  ← {"expires_in":3600,"token":<span class="red">"&lt;redacted&gt;"</span>,"user_id":1007}</span>
+<span class="keep">GET 200 …/v2/profile?access_token=<span class="red">&lt;redacted&gt;</span>&amp;scid=<span class="red">&lt;redacted&gt;</span>  (json 140B 88ms)</span>
+<span class="keep">  ← {"email":"neo@example.com","name":"Neo Anderson"}</span></pre>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
