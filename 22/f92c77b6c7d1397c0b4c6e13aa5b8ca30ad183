@@ -1,0 +1,50 @@
+processors/ndjson-filter/run.py
+  s_5811b7f24eccc0::t_ffffde97ca7f14 4-16,18-21
+  s_5811b7f24eccc0::t_9c41b4f29a1d07 180-181
+  s_5811b7f24eccc0::t_01ee06abe93393 105-111,122,130
+  s_5811b7f24eccc0::t_2cdae707647a11 88-104,112-121,123-129,131-153
+internal/processors/testdata/ndjson-filter/http_access.golden
+  s_5811b7f24eccc0::t_8a8ee9f8ff40a8 1-4
+CHANGELOG.md
+  s_5811b7f24eccc0::t_7ca3cbf99d682f 10-30
+internal/processors/filter_ndjson_test.go
+  s_5811b7f24eccc0::t_1ef8ae8ed2dcc7 4
+  s_5811b7f24eccc0::t_ab75e19b989e9c 40-149
+internal/processors/filter_ndjson.go
+  s_5811b7f24eccc0::t_478dd9416981c3 390
+  s_5811b7f24eccc0::t_3890b388ec9579 365-371
+  s_5811b7f24eccc0::t_b5708f344e5324 85-210
+  s_5811b7f24eccc0::t_c68ed714cf8a23 335-339,341-343,345
+  s_5811b7f24eccc0::t_47e62833046ec0 346
+  s_5811b7f24eccc0::t_c32aa2978a491e 7
+  s_5811b7f24eccc0::t_efab522116a75e 393-395,397-398
+  s_5811b7f24eccc0::t_8ebd79c52f96a2 378
+internal/processors/testdata/ndjson-filter/http_access.input
+  s_5811b7f24eccc0::t_8a8ee9f8ff40a8 1-6
+.gitattributes
+  s_5e38537fd2cf36::t_a1e3283ea4b25b 14-17,19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "22f92c77b6c7d1397c0b4c6e13aa5b8ca30ad183",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5e38537fd2cf36": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38315268-d55d-4da6-95ec-df3dc1923a00",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
