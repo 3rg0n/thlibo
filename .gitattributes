@@ -11,8 +11,12 @@
 # them LF for byte-stable go:embed + SHA-stamping across platforms.
 *.ps1 text eol=lf
 
-# Keep other line-ending-sensitive text stable.
+# Keep other line-ending-sensitive text stable. The Python processor
+# references (run.py) are executed by the parity tests and compared
+# byte-for-byte against the Go ports — pin LF so a Windows checkout can't
+# introduce CRLF and break TestNdjsonFilterParity et al.
 *.go text eol=lf
+*.py text eol=lf
 *.md text eol=lf
 *.json text eol=lf
 *.yaml text eol=lf

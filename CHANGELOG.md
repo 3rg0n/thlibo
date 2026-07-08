@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ndjson-filter` no longer collapses HTTP access logs to a single row**
+  (#27). It grouped records by a `(level, msg)` signature; traefik / nginx
+  / envoy / k8s-ingress logs emit a constant `level:"info", msg:""` for
+  every request, so all 300 records merged into one — dropping every
+  distinct path, method, and status (a violation of thlibo's never-drop
+  contract). The signature is now
+  `(level, msg, method, status-class, path-shape)`: HTTP fields are pulled
+  by synonym (`RequestPath`/`path`/`url`…, `RequestMethod`/`method`…,
+  `DownstreamStatus`/`status`…), status collapses to its class (`503`→
+  `5xx`), and path IDs/UUIDs/long hex segments normalise to `<var>` so
+  `/api/users/1007` and `/1008` share a group while distinct routes stay
+  separate. Records with no HTTP fields contribute empty components, so
+  the signature reduces to `(level, msg)` and generic logs are unchanged.
+- **`ndjson-filter` output is now deterministic** for logs with multiple
+  same-level groups. It ranged over a Go map (random iteration order) then
+  stable-sorted by level only, so equal-level groups could emit in any
+  order run-to-run. Groups are now emitted in first-seen order, matching
+  the Python reference's insertion-ordered dict (restores byte parity).
+
 ## [0.9.0] - 2026-07-08
 
 ### Fixed

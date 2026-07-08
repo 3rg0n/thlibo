@@ -1,0 +1,6 @@
+{"level":"info","msg":"","RequestMethod":"POST","RequestPath":"/api/otel/v1/metrics","DownstreamStatus":400,"TraceId":"t-1","ClientHost":"10.0.0.1"}
+{"level":"info","msg":"","RequestMethod":"POST","RequestPath":"/api/otel/v1/metrics","DownstreamStatus":400,"TraceId":"t-2","ClientHost":"10.0.0.2"}
+{"level":"info","msg":"","RequestMethod":"GET","RequestPath":"/api/users/1007","DownstreamStatus":200,"TraceId":"t-3","ClientHost":"10.0.0.1"}
+{"level":"info","msg":"","RequestMethod":"GET","RequestPath":"/api/users/2008","DownstreamStatus":200,"TraceId":"t-4","ClientHost":"10.0.0.3"}
+{"level":"info","msg":"","RequestMethod":"GET","RequestPath":"/api/users/9999","DownstreamStatus":503,"TraceId":"t-5","ClientHost":"10.0.0.2"}
+{"level":"info","msg":"","RequestMethod":"GET","RequestPath":"/healthz","DownstreamStatus":200,"TraceId":"t-6","ClientHost":"10.0.0.4"}
