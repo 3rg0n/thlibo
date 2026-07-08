@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>thlibo — tool output compression for Claude Code, Codex + Cursor</title>
-<meta name="description" content="AI tool output compressor. Local Gemma 4 for unknown output, deterministic Python filters for git/npm/cargo. 98% fewer tokens on common dev commands. MIT-licensed, runs on your machine.">
+<title>thlibo — tool output compression for Claude Code, Codex, Cursor + Copilot</title>
+<meta name="description" content="AI tool output compressor. Local Gemma 4 for unknown output, deterministic native-Go filters for git/npm/cargo. 98% fewer tokens on common dev commands. Works with Claude Code, Codex CLI, Cursor, GitHub Copilot CLI + VS Code Copilot. MIT-licensed, runs on your machine.">
 <meta name="color-scheme" content="light only">
-<meta property="og:title" content="thlibo — tool output compression for Claude Code, Codex + Cursor">
+<meta property="og:title" content="thlibo — tool output compression for Claude Code, Codex, Cursor + Copilot">
 <meta property="og:description" content="θλίβω — to press, crush, compress. 98% fewer tokens on common dev commands. Local-first, no telemetry, MIT.">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f4eedd'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='48' text-anchor='middle' fill='%238b1a1a'%3E%CE%B8%3C/text%3E%3C/svg%3E">
@@ -547,10 +547,10 @@ html.no-js .reveal{ opacity:1; transform:none }
   </h1>
 
   <p class="hero-lede">
-    <strong>thlibo</strong> sits between Claude Code / Codex / Cursor and the shell.
+    <strong>thlibo</strong> sits between your AI coding agent — Claude&nbsp;Code, Codex, Cursor, GitHub&nbsp;Copilot&nbsp;CLI, or VS&nbsp;Code&nbsp;Copilot — and the shell.
     It rewrites <code>git&nbsp;diff</code>, <code>npm&nbsp;install</code>, <code>cargo&nbsp;test</code>
     and other verbose commands so the model sees the summary, not the
-    noise. Deterministic Python filters handle the usual suspects; a
+    noise. Deterministic native-Go filters handle the usual suspects; a
     local Gemma&nbsp;4 model compresses everything else. Nothing leaves
     your machine.
   </p>
@@ -594,7 +594,7 @@ html.no-js .reveal{ opacity:1; transform:none }
                data-raw="17205" data-compressed="232" data-scale="0.0135">
         <div class="bar-label">
           <span class="cmd">git diff HEAD~5</span>
-          <span class="processor">via <b>git-filter</b> · python</span>
+          <span class="processor">via <b>git-filter</b> · native Go</span>
         </div>
         <div class="bar-canvas">
           <div class="bar-track" aria-hidden="true">
@@ -615,7 +615,7 @@ html.no-js .reveal{ opacity:1; transform:none }
                data-raw="2307" data-compressed="13" data-scale="0.0056">
         <div class="bar-label">
           <span class="cmd">npm list (200 deps)</span>
-          <span class="processor">via <b>npm-filter</b> · python</span>
+          <span class="processor">via <b>npm-filter</b> · native Go</span>
         </div>
         <div class="bar-canvas">
           <div class="bar-track" aria-hidden="true">
@@ -636,7 +636,7 @@ html.no-js .reveal{ opacity:1; transform:none }
                data-raw="3307" data-compressed="359" data-scale="0.1084">
         <div class="bar-label">
           <span class="cmd">cargo test (20 failures)</span>
-          <span class="processor">via <b>cargo-filter</b> · python</span>
+          <span class="processor">via <b>cargo-filter</b> · native Go</span>
         </div>
         <div class="bar-canvas">
           <div class="bar-track" aria-hidden="true">
@@ -745,19 +745,23 @@ html.no-js .reveal{ opacity:1; transform:none }
         <code>git&nbsp;status</code> for <code>thlibo&nbsp;exec&nbsp;--&nbsp;git&nbsp;status</code>.
       </p>
       <p>
-        Codex uses the symmetric PostToolUse path — <code>decision:block</code>
-        with the compressed result as the reason. Same engine underneath.
+        The same idea reaches four more agents. Codex and GitHub&nbsp;Copilot&nbsp;CLI
+        use the symmetric PostToolUse path — the compressed result replaces
+        the tool output. Cursor and VS&nbsp;Code&nbsp;Copilot rewrite the command
+        on the way in, like Claude&nbsp;Code. One engine underneath.
       </p>
     </article>
 
     <article class="card reveal">
       <span class="card-num">ii.</span>
-      <h3>Python filters, where a regex will do.</h3>
+      <h3>Native filters, where a regex will do.</h3>
       <p>
-        <code>git-filter</code>, <code>npm-filter</code>, <code>cargo-filter</code>.
-        Short Python scripts with tight regex rules. They collapse
-        diff hunks, strip dep-tree chatter, keep the failing tests.
-        Nothing a model could do better, faster, or more reliably.
+        <code>git-filter</code>, <code>npm-filter</code>, <code>cargo-filter</code>,
+        <code>har-filter</code>, and more. Compiled Go with tight regex rules,
+        run in-process. They collapse diff hunks, strip dep-tree chatter,
+        keep the failing tests, redact secrets from HTTP archives. Nothing
+        a model could do better, faster, or more reliably — and no Python
+        needed.
       </p>
       <p>
         Add your own in <code>~/.thlibo/processors/&lt;name&gt;/</code> — a
