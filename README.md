@@ -107,7 +107,10 @@ hands its pages to inferd's Gemma vision model for OCR — see below).
 Prompt processors (`compress`, `casefolder`, `shorthand`) dispatch
 through inferd for LLM-driven summarisation of unfamiliar output.
 `cordon-filter` (semantic anomaly surfacer, Python + numpy) embeds
-windows via inferd and surfaces the rare ones.
+windows via inferd and surfaces the rare ones — it runs automatically as
+a fallback when `ndjson-filter` over-collapses a log (e.g. an access log
+where every line shares the same level+msg), restoring the outliers a
+signature-based collapse would hide.
 
 Everything runs on your machine. No network calls during inference,
 no telemetry, nothing leaves localhost.
