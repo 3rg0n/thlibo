@@ -1,0 +1,35 @@
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_25c58643c0ddb8 17
+  s_15b6464673ef8b::t_9ac353a47cca13 114-127,156-223
+internal/middleware/cordon_fallback_test.go
+  s_5811b7f24eccc0::t_5659d6645d22c3 1-110,116,120-203
+  s_5811b7f24eccc0::t_e0733349d9ac07 111-115,117-119
+README.md
+  s_5811b7f24eccc0::t_6f294b33215ddd 110-113
+CHANGELOG.md
+  s_5811b7f24eccc0::t_8d19cf05af6514 10-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "76df5628240496cc513a78145eea78caba6e2d48",
+  "prompts": {},
+  "sessions": {
+    "s_15b6464673ef8b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0488aaa5-b1a9-4922-a6c3-1bef91271e93",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
