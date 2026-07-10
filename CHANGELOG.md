@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Bumped the Go toolchain to 1.26.5** (`go.mod` + CI + release
+  workflows). Clears `GO-2026-5856`, a `crypto/tls` vulnerability in the
+  1.26.4 standard library (govulncheck now reports no vulnerabilities).
+  Direct dependencies (`golang.org/x/net`, `x/sys`, `x/term`,
+  `yaml.v3`) were already at their latest versions.
+
 ### Added
 
 - **`mhtml-filter` — new native-Go built-in for MHTML saved-web-page
