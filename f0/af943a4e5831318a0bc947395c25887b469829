@@ -1,0 +1,25 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_1b32b8c7e2c3f6 10-17
+go.mod
+  s_5811b7f24eccc0::t_17af1616a1e920 3
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_4db2038ab679b8 35,69
+.github/workflows/release.yml
+  s_5811b7f24eccc0::t_5b24e3132ae303 51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "f0af943a4e5831318a0bc947395c25887b469829",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
