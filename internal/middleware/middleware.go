@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	builtins "github.com/3rg0n/thlibo/processors"
 
@@ -110,6 +111,20 @@ func (p *Pipeline) decide(ctx context.Context, raw string) string {
 			p.warn("fast-path " + d.Name + ": " + err.Error())
 			return raw // B8d/B8e fallback
 		}
+		// Cordon fallback (#28): ndjson-filter groups by signature and
+		// can over-collapse an access log (every line the same
+		// level+msg) down to a couple of rows, hiding the outliers a
+		// model would want. When its output looks over-collapsed, run
+		// the semantic-anomaly surfacer over the ORIGINAL input and keep
+		// its result only if it's a strict improvement. cordon-filter
+		// fails open (input verbatim) when inferd's embed socket is
+		// unreachable, so this never breaks the client — worst case we
+		// keep ndjson's output.
+		if d.Name == "ndjson-filter" && overCollapsed(raw, out) {
+			if better := p.cordonFallback(ctx, raw, out); better != "" {
+				return better
+			}
+		}
 		return out
 	}
 
@@ -136,6 +151,74 @@ func (p *Pipeline) warn(msg string) {
 	if p.OnWarning != nil {
 		p.OnWarning(msg)
 	}
+}
+
+// CordonMinInputLines is the floor below which the cordon fallback never
+// fires — anomaly surfacing over a handful of lines is pointless and the
+// embed round-trip isn't worth it.
+const CordonMinInputLines = 30
+
+// overCollapsed reports whether ndjson-filter's output looks like it
+// discarded meaningful variation — the #27 failure mode where an access
+// log with a constant level+msg collapses to a couple of rows. The
+// heuristic (issue #28 option C): a non-trivial input (>= CordonMinInput
+// Lines) whose structured output is < 3 groups, OR whose group-to-input
+// ratio is under 5%. Both signal "the signature couldn't tell these
+// records apart", which is exactly cordon's job.
+func overCollapsed(raw, out string) bool {
+	inLines := countNonEmptyLines(raw)
+	if inLines < CordonMinInputLines {
+		return false
+	}
+	outLines := countNonEmptyLines(out)
+	if outLines < 3 {
+		return true
+	}
+	return float64(outLines)/float64(inLines) < 0.05
+}
+
+func countNonEmptyLines(s string) int {
+	n := 0
+	for _, ln := range strings.Split(s, "\n") {
+		if strings.TrimSpace(ln) != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// cordonFallback runs the cordon-filter processor over the original input
+// and returns its output only if it is a strict improvement over the
+// ndjson output (ndjsonOut) — i.e. non-empty, different from the raw
+// input (cordon fails open to verbatim when inferd's embed socket is
+// unreachable), and smaller than the raw input. Returns "" to signal
+// "keep the ndjson output". Never errors out of the pipeline.
+func (p *Pipeline) cordonFallback(ctx context.Context, raw, ndjsonOut string) string {
+	if p.Registry == nil {
+		return ""
+	}
+	d := p.Registry.Get("cordon-filter")
+	if d == nil {
+		return "" // not installed (e.g. mirrored dir without it)
+	}
+	out, err := p.Dispatcher.Run(ctx, d, raw)
+	if err != nil {
+		p.warn("cordon fallback: " + err.Error())
+		return ""
+	}
+	// cordon failed open (embed unreachable) → output == raw verbatim.
+	// In that case there's no gain; keep ndjson's collapse.
+	if out == raw || strings.TrimSpace(out) == "" {
+		return ""
+	}
+	// Only prefer cordon if it actually surfaced a more informative view
+	// than ndjson's over-collapsed output. We treat "more lines than the
+	// collapsed output, still well under the raw input" as the win: it
+	// restored discarded variation without regressing compression.
+	if countNonEmptyLines(out) > countNonEmptyLines(ndjsonOut) && len(out) < len(raw) {
+		return out
+	}
+	return ""
 }
 
 func joinNames(names []string) string {

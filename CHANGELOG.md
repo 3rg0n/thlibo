@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`cordon-filter` is now auto-wired into dispatch as a fallback** for
+  over-collapsed ndjson (#28). When `ndjson-filter` fires but its output
+  looks over-collapsed — a non-trivial input (≥30 lines) reduced to <3
+  groups, or a group-to-input ratio under 5% (the #27 access-log failure
+  mode) — the middleware runs the `cordon-filter` semantic-anomaly
+  surfacer over the *original* input and prefers its result only when
+  it's a strict improvement (more informative than the collapse, still
+  smaller than the raw input). cordon fails open (returns the input
+  verbatim when inferd's embed socket is unreachable), so this never
+  breaks the client: worst case the pipeline keeps ndjson's output.
+  Healthy, well-distributed logs never trigger it, so the common path
+  pays no embed-latency cost.
+
 ### Changed
 
 - **Bumped the Go toolchain to 1.26.5** (`go.mod` + CI + release
