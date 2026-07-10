@@ -1,0 +1,21 @@
+name: mhtml-filter
+type: native
+# Match on the MHTML/MIME envelope: a multipart/related container (what
+# Chromium "Save as .mhtml", Edge, and Firefox "Save Page As → Web Page,
+# complete" all write). Anchored on the Content-Type so it fires on a
+# saved-page archive but not on arbitrary MIME mail.
+match: "(?i)Content-Type:\\s*multipart/related"
+description: >
+  Distills an MHTML (.mhtml/.mht) saved-web-page archive into Markdown.
+  An MHTML file is a MIME multipart/related bundle: one text/html part
+  plus every stylesheet, script, font, and image the page referenced,
+  each a separate part (images base64-encoded) — the embedded assets are
+  usually 90%+ of the bytes and an AI reading the article needs none of
+  them.
+
+  Picks the primary text/html part, decodes it (quoted-printable), walks
+  the DOM and renders Markdown — headings, paragraphs, lists, links,
+  code/pre blocks, blockquotes, tables, and images as `![alt](src)`
+  references (never the bytes). Drops script/style/nav/footer chrome and
+  all base64 asset parts. Non-MHTML input passes through unchanged;
+  output is emitted only when strictly smaller than the input.
