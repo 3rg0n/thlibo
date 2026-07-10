@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`mhtml-filter` — new native-Go built-in for MHTML saved-web-page
+  archives** (`.mhtml` / `.mht`). An MHTML file is a MIME
+  `multipart/related` bundle: one `text/html` part plus every stylesheet,
+  script, font, and image the page referenced (images base64-encoded) —
+  the embedded assets are typically 90%+ of the bytes and an AI reading
+  the article needs none of them. The filter parses the MIME container
+  (stdlib), picks the primary HTML part, decodes quoted-printable, walks
+  the DOM (`golang.org/x/net/html`), and renders Markdown — headings,
+  paragraphs, lists, links, code/`pre` blocks, blockquotes, tables, and
+  images as `![alt](src)` references (never the bytes) — dropping
+  script/style/nav/footer chrome and all base64 asset parts. On a real
+  7 MB saved article: **98% smaller** (→ ~130 KB of clean Markdown).
+  Content-matched on the `multipart/related` envelope (not
+  command-wrapped); runs in-process, no Python or inferd (ADR 0010).
+  Non-MHTML input passes through unchanged; output emitted only when
+  strictly smaller. Adds `golang.org/x/net` as a direct dependency
+  (Go-team maintained; the repo already uses `golang.org/x/{sys,term}`).
+
 ### Fixed
 
 - **`ndjson-filter` no longer collapses HTTP access logs to a single row**

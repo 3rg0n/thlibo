@@ -39,6 +39,12 @@ func TestEmbeddedFSContainsAllBuiltins(t *testing.T) {
 		"lint-filter",
 		// v0.7.2 — trivy-filter
 		"trivy-filter",
+		// v0.7.5 — go-test-filter
+		"go-test-filter",
+		// v0.8.0 — har-filter
+		"har-filter",
+		// v0.10.0 — mhtml-filter (MHTML web-page archive → Markdown)
+		"mhtml-filter",
 	}
 	for _, name := range want {
 		if d := r.Get(name); d == nil {

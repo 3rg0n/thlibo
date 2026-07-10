@@ -26,6 +26,7 @@ import (
 // v0.7.2: + trivy-filter
 // v0.7.5: + go-test-filter
 // v0.8.0: + har-filter
+// v0.10.0: + mhtml-filter
 func TestBuiltinsLoadedWithNoUserDir(t *testing.T) {
 	reg, warnings, err := BuildRegistry("")
 	if err != nil {
@@ -36,8 +37,9 @@ func TestBuiltinsLoadedWithNoUserDir(t *testing.T) {
 	}
 	want := []string{
 		"cargo-filter", "casefolder", "compress", "cordon-filter", "git-filter",
-		"go-test-filter", "har-filter", "lint-filter", "ndjson-filter", "npm-filter",
-		"pdf-to-md", "pytest-filter", "shorthand", "stacktrace-filter", "trivy-filter",
+		"go-test-filter", "har-filter", "lint-filter", "mhtml-filter", "ndjson-filter",
+		"npm-filter", "pdf-to-md", "pytest-filter", "shorthand", "stacktrace-filter",
+		"trivy-filter",
 	}
 	for _, n := range want {
 		if reg.Get(n) == nil {
@@ -60,8 +62,8 @@ func TestBuiltinsLoadedWithMissingUserDir(t *testing.T) {
 	}
 	// Count must match the embedded set; see the named list in
 	// TestBuiltinsLoadedWithNoUserDir for what's expected.
-	if reg.Len() != 15 {
-		t.Errorf("registry has %d processors, want 15", reg.Len())
+	if reg.Len() != 16 {
+		t.Errorf("registry has %d processors, want 16", reg.Len())
 	}
 }
 
