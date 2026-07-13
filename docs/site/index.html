@@ -736,6 +736,27 @@ html.no-js .reveal{ opacity:1; transform:none }
         </div>
       </article>
 
+      <!-- scanned PDF (OCR via vision) ........................................ -->
+      <article class="bar reveal"
+               data-raw="3180" data-compressed="499" data-scale="0.1569">
+        <div class="bar-label">
+          <span class="cmd">scanned PDF (2 pages, image-only)</span>
+          <span class="processor">via <b>pdf-to-md → vision OCR</b> · inferd Gemma · vs Claude's PNG reads</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.1569"></div>
+            <div class="bar-compressed" style="--pct:15.69%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">~3,180&nbsp;tok<sup>‡</sup></span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="499">~499<span class="unit">&nbsp;tok</span></span>
+            <span class="reduction">−84%</span>
+          </div>
+        </div>
+      </article>
+
       <!-- traefik 7d log ...................................................... -->
       <article class="bar reveal"
                data-raw="135761000" data-compressed="42315" data-scale="0.0003">
@@ -782,6 +803,8 @@ html.no-js .reveal{ opacity:1; transform:none }
 
     <div class="demo-foot">
       <span>Methodology + reproduction notes in the <a href="https://github.com/3rg0n/thlibo#methodology">README</a>.</span>
+      <span><sup>†</sup> raw-token figure estimated from byte count; the log never fits a context window, so it's the size thlibo saves you from sending.</span>
+      <span><sup>‡</sup> baseline is Claude's own fallback for an image-only PDF: install PDF libs, render each page to PNG, read the pages as multimodal images (~1,590 tok/page).</span>
     </div>
 
     <!-- examples: real before/after ........................................... -->
@@ -847,6 +870,39 @@ html.no-js .reveal{ opacity:1; transform:none }
 <span class="keep">  ← {"expires_in":3600,"token":<span class="red">"&lt;redacted&gt;"</span>,"user_id":1007}</span>
 <span class="keep">GET 200 …/v2/profile?access_token=<span class="red">&lt;redacted&gt;</span>&amp;scid=<span class="red">&lt;redacted&gt;</span>  (json 140B 88ms)</span>
 <span class="keep">  ← {"email":"neo@example.com","name":"Neo Anderson"}</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- scanned PDF (vision OCR) ............................................ -->
+      <div class="example">
+        <div class="ex-head">scanned PDF — 2 image-only pages, no extractable text</div>
+        <div class="ex-sub">via <b>pdf-to-md → vision OCR</b> · each page rendered &amp; read by inferd's Gemma vision model → text · 60 KB → ~2 KB</div>
+        <div class="ex-panes">
+          <div class="pane before">
+            <div class="pane-bar"><span>without thlibo</span><span class="tok">~3,180 tok</span></div>
+<pre><span class="dim"># Claude can't read the image-only PDF as text, so it</span>
+<span class="dim"># bootstraps its own pipeline, then reads the pages as images:</span>
+<span class="dim">$ pip install pypdf pdfplumber pypdfium2   ← install noise</span>
+<span class="dim">$ python render.py  → page-1.png (1191×1684)</span>
+<span class="dim">$ python render.py  → page-2.png (1191×1684)</span>
+<span class="red">[image] page-1.png   ~1,590 tok</span>
+<span class="red">[image] page-2.png   ~1,590 tok</span>
+<span class="dim"># multi-step, multimodal, and the model re-reads pixels</span>
+<span class="dim"># on every follow-up question.</span></pre>
+          </div>
+          <div class="pane after">
+            <div class="pane-bar"><span>with thlibo</span><span class="tok">~499 tok · −84%</span></div>
+<pre><span class="tag">## Page 1</span>
+<span class="keep"># Peninsula Property Surveying Ltd</span>
+<span class="keep">16. The client agrees to pay the full survey fee, which</span>
+<span class="keep">    is £250, within 7 days of the invoice date. If payment</span>
+<span class="keep">    is not received within 7 days, a £50 late fee is added…</span>
+<span class="keep">Signed: ____________  Date: ___ / ___ / ___</span>
+<span class="tag">## Page 2</span>
+<span class="keep">Phil Routledge MRICS FISVA MRPSA MAE</span>
+<span class="keep">Chartered Building Surveyor · RICS Registered Valuer</span>
+<span class="dim">[RICs Logo]   [Signature]</span></pre>
           </div>
         </div>
       </div>

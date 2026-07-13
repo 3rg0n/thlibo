@@ -11,8 +11,11 @@ commands: []
 description: >
   Convert a PDF to GitHub-flavored markdown. Born-digital text
   extracts directly via pdfplumber; tables come out as markdown
-  tables; images are surfaced as `[image: page N]` placeholders in
-  v0.7. Scanned (image-only) PDFs return `[scanned page N — OCR not
-  yet supported]` placeholders pending v0.8 (pytesseract). Vision-
-  model image descriptions are pending v0.9 + inferd protocol-v2.
-  See ADR 0007 for the staged rollout.
+  tables. Scanned (image-only) PDFs are OCR'd: the Go side renders
+  each page and sends it to inferd's Gemma vision model, which returns
+  the transcribed text (ADR 0009). This script itself is text-only and
+  emits a `[scanned page N]` placeholder per image page; the caller
+  (`thlibo case`) detects that low-value output and takes over the
+  vision OCR. When inferd's vision path is unreachable, the placeholder
+  is left in place (fail-open). See ADR 0007 (extraction) + ADR 0009
+  (vision OCR).

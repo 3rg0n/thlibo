@@ -65,10 +65,13 @@ type Meta struct {
 	Fallback bool `json:"fallback,omitempty"`
 	// LowValue is true iff the pipeline produced output that's
 	// structurally a success but carries no usable signal — e.g. a
-	// scanned-image PDF where every page returns an "OCR not yet
-	// supported" placeholder. Callers (the Read hook) should treat
-	// LowValue cases as "don't divert the read; let the upstream
-	// reader handle it natively." See issue #31.
+	// scanned-image PDF whose every page is a `[scanned page N]`
+	// placeholder AND the vision OCR fallback couldn't replace them
+	// (inferd vision unreachable). When OCR succeeds, the placeholders
+	// are replaced with real transcription and LowValue stays false.
+	// Callers (the Read hook) treat a still-LowValue case as "don't
+	// divert the read; let the upstream reader handle it natively."
+	// See issue #31 (resolved: OCR works via ADR 0009) + ADR 0006.
 	LowValue bool `json:"low_value,omitempty"`
 	// ThliboVersion is the build tag of the tool that wrote the
 	// case. Filled in from internal/version.Tag by callers.
@@ -294,7 +297,7 @@ func writeSummary(dir string, meta Meta) error {
 	}
 	lvNote := ""
 	if meta.LowValue {
-		lvNote = "- **Note:** compressed.log contains placeholder content only (e.g. scanned PDF, OCR not yet supported). The Read hook should have let the original read pass through.\n"
+		lvNote = "- **Note:** compressed.log contains placeholder content only (e.g. a scanned PDF whose vision OCR was unavailable). The Read hook should have let the original read pass through.\n"
 	}
 	body := fmt.Sprintf(`# thlibo case %s
 

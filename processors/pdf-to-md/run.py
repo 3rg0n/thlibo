@@ -7,11 +7,17 @@ Strategy (per ADR 0007):
   - Per-page pass via pdfplumber for text + tables.
   - Per-page strategy:
       * substantive text → emit markdown for the page
-      * empty / gibberish text → flag scanned/OCR placeholder (v0.8)
-      * mostly-empty + images present → flag chart/vision placeholder (v0.9)
+      * empty / gibberish text → emit a `[scanned page N]` placeholder
+      * mostly-empty + images present → `[chart on page N]` placeholder
   - Tables go out as GHFM tables.
-  - Images surface as `[image: page N — vision not yet supported]`
-    placeholders for now.
+
+This script is text-only. Image-only (scanned) pages can't be read
+here, so they get a placeholder; the Go caller (`thlibo case`) detects
+the resulting low-value output and OCRs each page via inferd's Gemma
+vision model (ADR 0009), replacing the placeholders with real text.
+The placeholders survive only when vision is unreachable (fail-open).
+This script also serves `--page-count` and `--render-page N` modes that
+the Go OCR path uses to rasterize pages.
 
 Non-destructive: input that doesn't parse as a PDF returns as a
 single error line + the first 200 bytes echoed back so the AI can
@@ -372,15 +378,18 @@ def main() -> int:
                             block.append(rendered)
                 if has_images:
                     block.append(
-                        f"_[image{'s' if len(page.images) > 1 else ''} on page {i} — vision not yet supported]_"
+                        f"_[image{'s' if len(page.images) > 1 else ''} on page {i}]_"
                     )
             elif strategy == "scanned":
+                # Placeholder only: the Go caller OCRs image-only pages via
+                # inferd vision (ADR 0009). This survives only if vision is
+                # unreachable (fail-open).
                 block.append(
-                    f"_[scanned page {i} — OCR not yet supported]_"
+                    f"_[scanned page {i}]_"
                 )
             elif strategy == "chart":
                 block.append(
-                    f"_[chart on page {i} — vision not yet supported]_"
+                    f"_[chart on page {i}]_"
                 )
                 if text.strip():
                     # Surface what little text we did get; might be
