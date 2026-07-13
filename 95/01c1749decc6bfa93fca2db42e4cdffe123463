@@ -1,0 +1,37 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_f705b579a9d5d7 27-38
+processors/pdf-to-md/run.py
+  s_5811b7f24eccc0::t_8b4f3a01c6effd 10
+  s_5811b7f24eccc0::t_f4d226d78c358d 11,13-16
+  s_9b8d68f5aabdc1::t_a173bc4fced8a8 17-20,381,384-386,388,392
+processors/pdf-to-md/processor.yaml
+  s_9b8d68f5aabdc1::t_b8f857867f20fc 14-21
+docs/site/index.html
+  s_5811b7f24eccc0::t_54b7b5ff481c6b 739-759,806-807,876-908
+internal/casefile/casefile.go
+  s_5811b7f24eccc0::t_792ffdba6f7027 68-74,300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "9501c1749decc6bfa93fca2db42e4cdffe123463",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_9b8d68f5aabdc1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7333820e-bccc-4f3b-9eb9-50e606acc9ac",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
