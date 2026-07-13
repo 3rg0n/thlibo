@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Empty processor output no longer blanks the tool result** — the
+  middleware now falls open to the original bytes when a processor
+  succeeds (exit 0) but writes nothing, at both the fast-path and the
+  routed-chain dispatch points (never-break-the-client, ADR 0006).
+  Previously an empty return was written straight through, blanking what
+  the model sees. Original contribution by @rbrundav-gh (#36), applied on
+  top of the current dispatch code + covered by a regression test.
+
 ## [0.10.0] - 2026-07-13
 
 ### Added
