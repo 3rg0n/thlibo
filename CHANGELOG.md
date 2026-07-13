@@ -24,6 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Scanned-PDF OCR is confirmed working end-to-end** and the docs that
+  said otherwise are corrected (#31). The vision OCR path (ADR 0009) —
+  `thlibo case` renders each image-only page and sends it to inferd's
+  Gemma vision model, replacing the `[scanned page N]` placeholder with
+  real transcription — was built but had never run against a
+  vision-capable daemon; inferd 0.6.0 (vision: `image_url` → RGB
+  attachment) is that daemon. Verified: a 60 KB scanned PDF → accurate
+  Markdown (~97% smaller), no code change needed. The `pdf-to-md`
+  processor description, `run.py` placeholders/docstring, and casefile
+  comments no longer say "OCR not yet supported" — the placeholder is
+  now only the fail-open fallback when inferd vision is unreachable.
+
 - **Bumped the Go toolchain to 1.26.5** (`go.mod` + CI + release
   workflows). Clears `GO-2026-5856`, a `crypto/tls` vulnerability in the
   1.26.4 standard library (govulncheck now reports no vulnerabilities).
