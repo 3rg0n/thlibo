@@ -111,6 +111,13 @@ func (p *Pipeline) decide(ctx context.Context, raw string) string {
 			p.warn("fast-path " + d.Name + ": " + err.Error())
 			return raw // B8d/B8e fallback
 		}
+		// A processor that succeeds but returns nothing must not be
+		// allowed to blank the tool output — fail open to the original
+		// (never-break-the-client, ADR 0006).
+		if out == "" {
+			p.warn("fast-path " + d.Name + ": empty output")
+			return raw
+		}
 		// Cordon fallback (#28): ndjson-filter groups by signature and
 		// can over-collapse an access log (every line the same
 		// level+msg) down to a couple of rows, hiding the outliers a
@@ -143,6 +150,10 @@ func (p *Pipeline) decide(ctx context.Context, raw string) string {
 	if err != nil {
 		p.warn("chain " + joinNames(decision.Chain) + ": " + err.Error())
 		return raw // B8d/B8e/B8f fallback
+	}
+	if out == "" {
+		p.warn("chain " + joinNames(decision.Chain) + ": empty output")
+		return raw
 	}
 	return out
 }
