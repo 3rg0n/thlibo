@@ -715,6 +715,27 @@ html.no-js .reveal{ opacity:1; transform:none }
         </div>
       </article>
 
+      <!-- mhtml saved page .................................................... -->
+      <article class="bar reveal"
+               data-raw="1764141" data-compressed="33147" data-scale="0.0188">
+        <div class="bar-label">
+          <span class="cmd">saved web page (.mhtml, 7 MB)</span>
+          <span class="processor">via <b>mhtml-filter</b> · native Go · drops embedded assets</span>
+        </div>
+        <div class="bar-canvas">
+          <div class="bar-track" aria-hidden="true">
+            <div class="bar-raw" style="--scale:0.0188"></div>
+            <div class="bar-compressed" style="--pct:1.88%"></div>
+          </div>
+          <div class="bar-figures">
+            <span class="from">~1.76&nbsp;M&nbsp;tok</span>
+            <span class="arrow">→</span>
+            <span class="to" data-counter-to="33147">~33,147<span class="unit">&nbsp;tok</span></span>
+            <span class="reduction">−98.1%</span>
+          </div>
+        </div>
+      </article>
+
       <!-- pdf → markdown (atc-sse-prd) ......................................... -->
       <article class="bar reveal"
                data-raw="38250" data-compressed="12173" data-scale="0.3183">
@@ -903,6 +924,40 @@ html.no-js .reveal{ opacity:1; transform:none }
 <span class="keep">Phil Routledge MRICS FISVA MRPSA MAE</span>
 <span class="keep">Chartered Building Surveyor · RICS Registered Valuer</span>
 <span class="dim">[RICs Logo]   [Signature]</span></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- mhtml saved web page ............................................... -->
+      <div class="example">
+        <div class="ex-head">saved web page — .mhtml archive, one article + 87 embedded assets</div>
+        <div class="ex-sub">via <b>mhtml-filter</b> · extracts the article HTML → Markdown, drops the base64 images/CSS/scripts (~93% of the file) · 7 MB → ~130 KB</div>
+        <div class="ex-panes">
+          <div class="pane before">
+            <div class="pane-bar"><span>before</span><span class="tok">~1.76 M tok</span></div>
+<pre><span class="dim">From: &lt;Saved by Blink&gt;</span>
+<span class="dim">Content-Type: multipart/related; boundary="----MultipartB…"</span>
+<span class="dim">------MultipartBoundary…</span>
+<span class="dim">Content-Type: text/html</span>
+<span class="dim">Content-Transfer-Encoding: quoted-printable</span>
+<span class="keep">&lt;!DOCTYPE html&gt;&lt;html lang=3D"en"&gt;… the article …</span>
+<span class="dim">------MultipartBoundary…</span>
+<span class="dim">Content-Type: image/webp        ← 67 jpeg + 11 webp + svg,</span>
+<span class="red">Content-Transfer-Encoding: base64</span>
+<span class="red">iVBORw0KGgoAAAANSUhEUgAAAA…  (megabytes of base64) …</span>
+<span class="dim">------MultipartBoundary…  (6 CSS parts too)</span></pre>
+          </div>
+          <div class="pane after">
+            <div class="pane-bar"><span>after</span><span class="tok">~33,147 tok · −98.1%</span></div>
+<pre><span class="tag"># Inside Hyper-V Sockets: A Deep Dive…</span>
+<span class="keep">## Introduction</span>
+<span class="keep">Microsoft introduced its Hyper-V virtualization technology</span>
+<span class="keep">quite some time ago… Hyper-V Sockets connect to VMs from the</span>
+<span class="keep">host using the VMBus as transport instead of TCP/IP.</span>
+<span class="keep">- Root partition — Windows Server with the Hyper-V role.</span>
+<span class="keep">- Guest OS — a Generation 2 virtual machine.</span>
+<span class="keep">[image ref] · [More on VMBus](https://…/vmbus)</span>
+<span class="dim"># prose, headings, lists, links, code — no asset bytes.</span></pre>
           </div>
         </div>
       </div>
