@@ -1,0 +1,24 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_14d2317df3fdee 10-19
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_4d3b7a41a47eea 114-120
+  s_5811b7f24eccc0::t_a7243851713cbe 154-157
+internal/middleware/empty_output_test.go
+  s_5811b7f24eccc0::t_1070b69a6ecd4c 1-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "f9c48db4d6db9d760213c1ece1a325811cc5f4cc",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
