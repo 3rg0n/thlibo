@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`AGENTS.md`** — a thin pointer to `CLAUDE.md` so agents that look for
+  `AGENTS.md` by convention (Codex, Cursor, GitHub Copilot) auto-discover the
+  repo's guidance. `CLAUDE.md` remains the single source of truth.
+
+### Changed
+
+- **`main` is now branch-protected** — PRs require green CI (test on
+  linux/macOS/Windows + scanners + secret-scanning) and a linear history;
+  force-push and branch deletion are blocked.
+
 ## [0.10.1] - 2026-07-14
 
 ### Fixed

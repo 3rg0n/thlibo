@@ -60,6 +60,10 @@ Thumbs.db
 # Local reference material (docs you've stashed for me to read)
 .references/
 
+# Agent-readiness scan output (local only — cites internal taxonomy; keep
+# out of this public repo)
+.ai-readiness/
+
 # Python (script processors)
 __pycache__/
 *.pyc
