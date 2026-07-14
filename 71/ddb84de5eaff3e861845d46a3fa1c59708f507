@@ -1,0 +1,31 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_8f8f9f0094e177 10-21
+AGENTS.md
+  s_5811b7f24eccc0::t_9e1bf56f384ff8 1-22
+.gitignore
+  s_e235e14927312e::t_8eab280b9cee59 63-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "71ddb84de5eaff3e861845d46a3fa1c59708f507",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_e235e14927312e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4ff4b505-745a-4f5b-8d6b-181ff86bb3fe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
