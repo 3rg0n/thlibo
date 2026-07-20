@@ -1,0 +1,27 @@
+docs/adr/README.md
+  s_5811b7f24eccc0::t_d31557a1503a5a 18
+THREAT_MODEL.md
+  s_5811b7f24eccc0::t_0bab55b5aa7cb8 380
+  s_5811b7f24eccc0::t_9b4244781f1aec 354-379,381-404
+docs/adr/0011-optional-otel-emission.md
+  s_5811b7f24eccc0::t_f6a5a0526d5d76 133-136
+  s_5811b7f24eccc0::t_3831d4a9681d73 1-79,88-99,116-122,128-132,137-195,213-226
+  s_5811b7f24eccc0::t_844e59290e599e 196-212
+  s_5811b7f24eccc0::t_7b1281eda1f17a 80-87,100-115,123-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d7103990f942580f4dd80d70db4f91de0a92bc77",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
