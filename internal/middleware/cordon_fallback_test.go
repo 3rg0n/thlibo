@@ -106,7 +106,7 @@ func TestCordonFallbackFiresOnOverCollapse(t *testing.T) {
 	p := &Pipeline{Registry: reg, Dispatcher: &processors.Dispatcher{}}
 
 	raw := accessLog(300)
-	out := p.decide(context.Background(), raw)
+	out, _ := p.decide(context.Background(), raw)
 
 	// Normalise CRLF: a script stub on Windows may emit \r\n. What matters
 	// is that cordon's content (the anomaly lines), not ndjson's collapse,
@@ -130,7 +130,7 @@ func TestCordonFallbackFailOpenKeepsNdjson(t *testing.T) {
 	reg := registryWithCordonStub(t, raw)
 	p := &Pipeline{Registry: reg, Dispatcher: &processors.Dispatcher{}}
 
-	out := p.decide(context.Background(), raw)
+	out, _ := p.decide(context.Background(), raw)
 
 	// Must NOT be the raw input (that would be a no-op / data-not-
 	// compressed); must be ndjson's collapsed output instead.
@@ -160,7 +160,7 @@ func TestCordonFallbackSkippedForHealthyLog(t *testing.T) {
 		b.WriteString(itoa(i))
 		b.WriteString(`","DownstreamStatus":200}` + "\n")
 	}
-	out := p.decide(context.Background(), b.String())
+	out, _ := p.decide(context.Background(), b.String())
 
 	if strings.Contains(out, "CORDON-WAS-WRONGLY-CALLED") {
 		t.Errorf("cordon fallback fired on a healthy (well-distributed) log; it must only fire on over-collapse")

@@ -112,6 +112,11 @@ Flags:
 	if pipelineErr != nil {
 		log.Warn("pipeline_unavailable", logx.Err(pipelineErr))
 	}
+	if p != nil {
+		p.ToolName = "Read" // case is the Read-hook path; telemetry label only
+		// Flush telemetry before this short-lived process exits (ADR 0011).
+		defer p.Shutdown(context.Background())
+	}
 
 	res, err := casefile.Create(context.Background(), source, casefile.Options{
 		CasesRoot:     casesDir,

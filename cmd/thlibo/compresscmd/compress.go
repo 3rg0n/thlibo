@@ -22,6 +22,7 @@ import (
 	"github.com/3rg0n/thlibo/internal/middleware"
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/router"
+	"github.com/3rg0n/thlibo/internal/telemetry"
 )
 
 // Run reads stdin, compresses, writes stdout. Returns 0 on success
@@ -44,6 +45,9 @@ func Run(argv []string) int {
 		_, _ = os.Stdout.Write(raw)
 		return 0
 	}
+	// Flush any telemetry before this short-lived process exits (ADR
+	// 0011). No-op when telemetry is disabled.
+	defer p.Shutdown(context.Background())
 
 	// Pipeline.Process handles every fallback internally and
 	// always writes something, so we can ignore its error.
@@ -78,5 +82,10 @@ func BuildPipeline() (*middleware.Pipeline, error) {
 		Registry:   reg,
 		Router:     &router.ClientAdapter{Client: client},
 		Dispatcher: &processors.Dispatcher{PromptClient: promptRunner},
+		// Optional OTel emission (ADR 0011). Init returns a no-op when
+		// THLIBO_ENABLE_TELEMETRY is unset — the default — so this costs
+		// nothing on the common path. Callers defer p.Shutdown to flush
+		// before the short-lived process exits.
+		Telemetry: telemetry.Init(context.Background()),
 	}, nil
 }
