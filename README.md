@@ -113,7 +113,9 @@ where every line shares the same level+msg), restoring the outliers a
 signature-based collapse would hide.
 
 Everything runs on your machine. No network calls during inference,
-no telemetry, nothing leaves localhost.
+no telemetry, nothing leaves localhost — unless you explicitly opt in
+to [OpenTelemetry metrics](#monitoring-opentelemetry), which emit
+content-free usage/savings stats to a collector *you* configure.
 
 ---
 
@@ -497,6 +499,66 @@ Every hook honours this flag and exits passthrough immediately.
 
 ---
 
+## Monitoring (OpenTelemetry)
+
+thlibo can emit **OpenTelemetry metrics and events** so you can see how
+much it's saving — for a single developer, or aggregated org-wide. It
+mirrors [Claude Code's monitoring model](https://code.claude.com/docs/en/monitoring-usage):
+**off by default**, enabled by one flag, configured through the
+standard `OTEL_*` environment variables, and pointed at **your own**
+collector. thlibo only emits; you own the collector, storage, and
+dashboards (Grafana, Honeycomb, a raw OTLP receiver — your choice). See
+[ADR 0011](docs/adr/0011-optional-otel-emission.md).
+
+```bash
+# Enable + point at a collector (recommended: one on localhost).
+export THLIBO_ENABLE_TELEMETRY=1
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf   # or grpc
+# Optional: label your data for org rollups.
+export OTEL_RESOURCE_ATTRIBUTES=team.id=platform,department=eng
+```
+
+Config is read from the process environment (your shell/profile), not
+from the AI client — Claude Code doesn't pass its own `OTEL_*` to hook
+subprocesses, so thlibo's telemetry is configured independently.
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `THLIBO_ENABLE_TELEMETRY` | master enable | unset → **off** |
+| `OTEL_METRICS_EXPORTER` | `otlp` \| `console` \| `none` | `otlp` |
+| `OTEL_LOGS_EXPORTER` | `otlp` \| `console` \| `none` | `otlp` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | collector endpoint | `http://localhost:4318` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` \| `grpc` | `http/protobuf` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | auth headers | — |
+| `OTEL_SERVICE_NAME` / `OTEL_RESOURCE_ATTRIBUTES` | resource / org labels | `thlibo` / — |
+
+**Metrics** (namespaced `thlibo.*`): `invocations`,
+`bytes.processed`, `bytes.saved`, `compression.ratio`,
+`dispatch.duration`, `fallbacks`. Savings are reported in **exact
+bytes** (`thlibo.bytes.saved` = bytes in − bytes out); thlibo has no
+tokenizer, so convert bytes → tokens → cost in your dashboard. One
+**event** (`thlibo.compression`) is emitted per invocation with
+`{ processor, path, outcome, bytes_in, bytes_out, duration_ms }`.
+
+**What is never emitted:** tool output, prompts, shell commands, or
+file paths — only sizes, counts, durations, and fixed enum labels.
+There is no content-capture opt-in. Built-in processor names appear
+verbatim; **user** processor names are redacted to `"custom"`.
+
+**Cost when off:** zero. With `THLIBO_ENABLE_TELEMETRY` unset, no SDK
+is constructed and nothing runs on the hook path.
+
+**Latency when on:** thlibo's hook subcommands are short-lived (they
+exit per tool call), so telemetry is force-flushed on exit within a
+fixed **2-second** cap. Against a localhost collector that's
+microseconds; a misconfigured/unreachable *remote* endpoint makes each
+call wait up to 2 s before dropping the batch — telemetry is always
+best-effort and **never blocks or breaks the AI client**. Run a
+collector on localhost.
+
+---
+
 ## Security model
 
 - **All-local at runtime.** No network calls during inference. The
@@ -530,6 +592,15 @@ Every hook honours this flag and exits passthrough immediately.
   GitHub PATs, HuggingFace tokens, generic `SECRET=` / `API_KEY=`
   assignments). The redactor is a best-effort backstop, not a
   replacement for keeping secrets out of subprocess output.
+- **Telemetry is opt-in and content-free.** OpenTelemetry emission
+  (see [Monitoring](#monitoring-opentelemetry)) is off unless
+  `THLIBO_ENABLE_TELEMETRY` is set. When on, it emits only sizes,
+  counts, durations, and fixed enum labels to a collector *you*
+  configure — never tool output, prompts, commands, or file paths;
+  user processor names redact to `"custom"`. It fails open (a dead
+  collector never blocks a tool call). See
+  [`THREAT_MODEL.md`](THREAT_MODEL.md) (2026-07-14 addendum) and
+  [ADR 0011](docs/adr/0011-optional-otel-emission.md).
 - **Inferd version gate.** thlibo refuses to delegate to inferd
   binaries older than `MinInferdVersion` (currently v0.4.0 — the first
   release with the unified IPC wire thlibo's codec speaks; earlier

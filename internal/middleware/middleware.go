@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	builtins "github.com/3rg0n/thlibo/processors"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/3rg0n/thlibo/internal/processors"
 	"github.com/3rg0n/thlibo/internal/promptsan"
 	"github.com/3rg0n/thlibo/internal/router"
+	"github.com/3rg0n/thlibo/internal/telemetry"
 )
 
 // BuildRegistry constructs the middleware's processor registry using
@@ -61,10 +63,21 @@ const MinBytesForRouting = 2000
 // Built once at startup by the adapter (claudecode, codex, proxy)
 // and reused per call.
 type Pipeline struct {
-	Registry     *processors.Registry
-	Router       RouterClient
-	Dispatcher   *processors.Dispatcher
-	OnWarning    func(string) // optional: log quarantined processors etc.
+	Registry   *processors.Registry
+	Router     RouterClient
+	Dispatcher *processors.Dispatcher
+	OnWarning  func(string) // optional: log quarantined processors etc.
+
+	// Telemetry receives one content-free record per Process call
+	// (ADR 0011). Nil is treated as the no-op recorder, so the common
+	// path (telemetry disabled) costs nothing.
+	Telemetry telemetry.Recorder
+
+	// ToolName is the AI-client tool this pipeline is serving (Bash,
+	// Read, …), used only as a telemetry label. Empty → "unknown". Set
+	// per-process by the adapter; safe because the emitting subcommands
+	// are one-shot (no concurrent reuse).
+	ToolName string
 }
 
 // RouterClient is what the middleware calls to decide routing. The
@@ -87,36 +100,62 @@ func (p *Pipeline) Process(ctx context.Context, in io.Reader, out io.Writer) err
 		// Can't even read input -> write nothing, return nil.
 		return nil
 	}
-	result := p.decide(ctx, raw)
+	start := time.Now()
+	result, inv := p.decide(ctx, raw)
 	_, _ = out.Write([]byte(result))
+
+	// Telemetry is best-effort and content-free (ADR 0011). Fill in the
+	// per-call fields decide() couldn't know, then record once. A nil
+	// recorder is the disabled default and costs nothing.
+	if p.Telemetry != nil {
+		inv.Tool = p.ToolName
+		inv.BytesIn = len(raw)
+		inv.BytesOut = len(result)
+		inv.Duration = time.Since(start)
+		p.Telemetry.RecordInvocation(inv)
+	}
 	return nil
 }
 
-func (p *Pipeline) decide(ctx context.Context, raw string) string {
+// decide applies the pipeline and returns the output plus a
+// content-free telemetry.Invocation classifying what happened. Every
+// return path sets the invocation's path/outcome (and processor/kind/
+// fallback where applicable); Process fills in the size/duration/tool
+// fields and records it. The output-selection logic is unchanged from
+// the pre-telemetry version — instrumentation only observes.
+func (p *Pipeline) decide(ctx context.Context, raw string) (string, telemetry.Invocation) {
 	// B1: short-circuit small inputs.
 	if len(raw) < MinBytesForRouting {
-		return raw
+		return raw, telemetry.Invocation{Path: telemetry.PathShortCircuit, Outcome: telemetry.OutcomePassthrough}
 	}
 
 	// B8h: no processors -> passthrough.
 	if p.Registry == nil || p.Registry.Len() == 0 {
-		return raw
+		return raw, telemetry.Invocation{Path: telemetry.PathPassthrough, Outcome: telemetry.OutcomePassthrough}
 	}
 
 	// B4: fast-path regex. A hit dispatches immediately without a
 	// daemon call.
 	if d := p.Registry.MatchFastPath(raw); d != nil {
+		proc := telemetry.ProcessorLabel(d.Name, d.Origin.Source == processors.OriginBuiltin)
+		kind := string(d.Type)
 		out, err := p.Dispatcher.Run(ctx, d, raw)
 		if err != nil {
 			p.warn("fast-path " + d.Name + ": " + err.Error())
-			return raw // B8d/B8e fallback
+			return raw, telemetry.Invocation{ // B8d/B8e fallback
+				Path: telemetry.PathFastPath, Outcome: telemetry.OutcomeFallback,
+				Processor: proc, Kind: kind, Fallback: dispatchFailReason(err),
+			}
 		}
 		// A processor that succeeds but returns nothing must not be
 		// allowed to blank the tool output — fail open to the original
 		// (never-break-the-client, ADR 0006).
 		if out == "" {
 			p.warn("fast-path " + d.Name + ": empty output")
-			return raw
+			return raw, telemetry.Invocation{
+				Path: telemetry.PathFastPath, Outcome: telemetry.OutcomeFallback,
+				Processor: proc, Kind: kind, Fallback: telemetry.ReasonEmptyOutput,
+			}
 		}
 		// Cordon fallback (#28): ndjson-filter groups by signature and
 		// can over-collapse an access log (every line the same
@@ -129,10 +168,16 @@ func (p *Pipeline) decide(ctx context.Context, raw string) string {
 		// keep ndjson's output.
 		if d.Name == "ndjson-filter" && overCollapsed(raw, out) {
 			if better := p.cordonFallback(ctx, raw, out); better != "" {
-				return better
+				return better, telemetry.Invocation{
+					Path: telemetry.PathFastPath, Outcome: telemetry.OutcomeCompressed,
+					Processor: telemetry.ProcessorLabel("cordon-filter", true), Kind: kind,
+				}
 			}
 		}
-		return out
+		return out, telemetry.Invocation{
+			Path: telemetry.PathFastPath, Outcome: telemetry.OutcomeCompressed,
+			Processor: proc, Kind: kind,
+		}
 	}
 
 	// B5/B6/B7: routing call.
@@ -140,27 +185,88 @@ func (p *Pipeline) decide(ctx context.Context, raw string) string {
 	if err != nil {
 		// B8a/B8b: daemon unreachable or timeout -> passthrough.
 		p.warn("router: " + err.Error())
-		return raw
+		return raw, telemetry.Invocation{
+			Path: telemetry.PathRouter, Outcome: telemetry.OutcomeFallback,
+			Fallback: telemetry.ReasonRouterError,
+		}
 	}
 	if decision.Passthrough() {
-		return raw // B6: "none"
+		return raw, telemetry.Invocation{Path: telemetry.PathRouter, Outcome: telemetry.OutcomePassthrough} // B6: "none"
 	}
 
+	chainProc, chainKind := p.chainLabels(decision.Chain)
 	out, err := p.Dispatcher.RunChain(ctx, p.Registry, decision.Chain, raw)
 	if err != nil {
 		p.warn("chain " + joinNames(decision.Chain) + ": " + err.Error())
-		return raw // B8d/B8e/B8f fallback
+		return raw, telemetry.Invocation{ // B8d/B8e/B8f fallback
+			Path: telemetry.PathRouter, Outcome: telemetry.OutcomeFallback,
+			Processor: chainProc, Kind: chainKind, Fallback: dispatchFailReason(err),
+		}
 	}
 	if out == "" {
 		p.warn("chain " + joinNames(decision.Chain) + ": empty output")
-		return raw
+		return raw, telemetry.Invocation{
+			Path: telemetry.PathRouter, Outcome: telemetry.OutcomeFallback,
+			Processor: chainProc, Kind: chainKind, Fallback: telemetry.ReasonEmptyOutput,
+		}
 	}
-	return out
+	return out, telemetry.Invocation{
+		Path: telemetry.PathRouter, Outcome: telemetry.OutcomeCompressed,
+		Processor: chainProc, Kind: chainKind,
+	}
+}
+
+// chainLabels derives the telemetry processor/kind labels for a routed
+// chain. A single-processor chain reports that processor; a multi-
+// processor chain reports "chain" (content-free, low cardinality). The
+// kind is the last processor's kind (the one that produced the output).
+func (p *Pipeline) chainLabels(names []string) (proc, kind string) {
+	if len(names) == 0 {
+		return "", ""
+	}
+	last := p.Registry.Get(names[len(names)-1])
+	if last != nil {
+		kind = string(last.Type)
+	}
+	if len(names) == 1 {
+		d := p.Registry.Get(names[0])
+		if d != nil {
+			return telemetry.ProcessorLabel(d.Name, d.Origin.Source == processors.OriginBuiltin), kind
+		}
+		return "", kind
+	}
+	return "chain", kind
+}
+
+// dispatchFailReason maps a dispatch error to a fixed fallback-reason
+// enum label (content-free — never the error message itself).
+func dispatchFailReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "timed out"):
+		return telemetry.ReasonTimeout
+	default:
+		return telemetry.ReasonScriptError
+	}
 }
 
 func (p *Pipeline) warn(msg string) {
 	if p.OnWarning != nil {
 		p.OnWarning(msg)
+	}
+}
+
+// Shutdown force-flushes and releases the telemetry recorder. Callers
+// (the emitting subcommands) defer this so the short-lived process
+// flushes before exit (ADR 0011). Safe to call with a nil recorder
+// (the disabled default) — it does nothing. Bounded by the recorder's
+// own flush timeout; never blocks the caller beyond that.
+func (p *Pipeline) Shutdown(ctx context.Context) {
+	if p.Telemetry != nil {
+		_ = p.Telemetry.Shutdown(ctx)
 	}
 }
 

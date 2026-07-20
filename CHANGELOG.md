@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Optional OpenTelemetry emission (ADR 0011)** — thlibo can now emit
+  content-free OTel **metrics + events** so you can see how much it's
+  saving, for one developer or aggregated org-wide. Off by default;
+  enable with `THLIBO_ENABLE_TELEMETRY=1` and configure the collector
+  through the standard `OTEL_*` env vars (mirrors Claude Code's
+  monitoring model). thlibo only emits — you own the collector,
+  storage, and dashboards. Metrics (`thlibo.*`): `invocations`,
+  `bytes.processed`, `bytes.saved`, `compression.ratio`,
+  `dispatch.duration`, `fallbacks`; savings in exact bytes (no
+  tokenizer). One `thlibo.compression` event per invocation. Never
+  emits tool output, prompts, commands, or file paths; user processor
+  names redact to `"custom"`. Fails open and force-flushes within a
+  fixed 2 s bound on exit — never blocks or breaks the AI client. See
+  the README "Monitoring" section and the 2026-07-14 `THREAT_MODEL.md`
+  addendum.
 - **`AGENTS.md`** — a thin pointer to `CLAUDE.md` so agents that look for
   `AGENTS.md` by convention (Codex, Cursor, GitHub Copilot) auto-discover the
   repo's guidance. `CLAUDE.md` remains the single source of truth.

@@ -285,6 +285,11 @@ func (b *daemonBackend) Run(ctx context.Context, input string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("registry: %w", err)
 		}
+		// We only need the registry here, not the Process path, so release
+		// the telemetry recorder BuildPipeline constructed immediately
+		// (no-op when telemetry is disabled). shorthand's own emission, if
+		// any, is out of scope for ADR 0011's initial cut.
+		p.Shutdown(ctx)
 		d := p.Registry.Get("shorthand")
 		if d == nil {
 			return "", fmt.Errorf("processors: 'shorthand' not registered (run `thlibo install` to mirror built-ins)")

@@ -34,6 +34,7 @@ import (
 	"github.com/3rg0n/thlibo/internal/logx"
 	"github.com/3rg0n/thlibo/internal/middleware"
 	"github.com/3rg0n/thlibo/internal/router"
+	"github.com/3rg0n/thlibo/internal/telemetry"
 )
 
 // Exit codes reserved by the subcommand itself. Any other exit code
@@ -170,6 +171,9 @@ func emitCompressedAndReport(raw []byte, w io.Writer, mkPipeline pipelineFactory
 		n, _ := w.Write(raw)
 		return n, append(warnings, "pipeline_unavailable:"+err.Error())
 	}
+	// Flush telemetry before this short-lived process exits (ADR 0011).
+	// No-op when telemetry is disabled.
+	defer p.Shutdown(context.Background())
 	p.OnWarning = func(s string) {
 		warnings = append(warnings, s)
 		log.Debug("middleware_warning", logx.Str("detail", s))
@@ -239,6 +243,10 @@ func defaultPipeline() (*middleware.Pipeline, error) {
 		Registry:   reg,
 		Router:     &router.ClientAdapter{Client: client},
 		Dispatcher: nil,
+		// exec wraps a Bash command; label telemetry accordingly.
+		// Init is a no-op when telemetry is disabled (ADR 0011).
+		Telemetry: telemetry.Init(context.Background()),
+		ToolName:  "Bash",
 	}
 	// Dispatcher wires prompt runner into the processor dispatcher.
 	// Keep this local import out of the top section so the package

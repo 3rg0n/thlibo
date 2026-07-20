@@ -15,6 +15,7 @@ implementation choices aren't.
 | [0008](0008-numpy-as-processor-dep.md) | numpy as a processor dep, soft-imported with passthrough fallback | Accepted |
 | [0009](0009-pdf-image-ocr-via-gemma-vision.md) | Scanned-PDF OCR via Gemma vision, dispatched Go-side | Accepted |
 | [0010](0010-native-go-processors.md) | Reimplement the 9 deterministic built-in processors as native Go (`pdf-to-md` / `cordon-filter` stay Python) | Accepted |
+| [0011](0011-optional-otel-emission.md) | Optional OpenTelemetry emission (metrics + events), opt-in and content-free | Accepted |
 
 ## Writing a new ADR
 
