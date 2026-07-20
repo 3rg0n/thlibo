@@ -192,8 +192,17 @@ update-check.
 - Repo layout: `cmd/thlibo` (the only binary), `internal/*`
   (adapters, casefile, config, execpolicy, inferd, install, logx,
   middleware, processors, promptsan, router, shellcmd, shorthand,
-  update, version), `processors/` for embedded built-ins, `skills/`
-  for Claude Code skill definitions.
+  telemetry, update, version), `processors/` for embedded built-ins,
+  `skills/` for Claude Code skill definitions.
+- **Optional OTel emission (ADR 0011):** `internal/telemetry` emits
+  content-free metrics + events, off by default
+  (`THLIBO_ENABLE_TELEMETRY`), configured via standard `OTEL_*` env,
+  drained to an operator collector. The middleware `decide()` returns a
+  `telemetry.Invocation` alongside its output; emitting subcommands
+  (exec/compress/case) `defer Pipeline.Shutdown` to force-flush within a
+  2s bound. Fails open (never blocks the client); never emits tool
+  output/prompts/commands/paths; user processor names redact to
+  `"custom"`.
 - New user-facing features: add a scanner annotation if one fires
   (gosec / semgrep / staticcheck all block CI). Keep `#nosec` and
   `nosemgrep` reasons short but honest.

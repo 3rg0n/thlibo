@@ -152,5 +152,10 @@ Environment:
   THLIBO_UPDATE_INTERVAL=0   Alternate way to disable the check; or
                              a Go duration like "168h" to change the
                              cooldown (default: 24h).
+  THLIBO_ENABLE_TELEMETRY=1  Opt in to OpenTelemetry metrics + events
+                             (off by default). Configure the collector
+                             via the standard OTEL_* env vars; content-
+                             free, fails open. See the README's
+                             Monitoring section and ADR 0011.
 `)
 }
