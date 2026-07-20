@@ -1,0 +1,27 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_b38f56734c78d8 12-26
+README.md
+  s_5811b7f24eccc0::t_38f8dcb9b85cc7 595-603
+  s_5811b7f24eccc0::t_235e10967d092a 116-118
+  s_5811b7f24eccc0::t_277a05649dc5ce 502-561
+CLAUDE.md
+  s_5811b7f24eccc0::t_246151e46b7282 195-205
+cmd/thlibo/main.go
+  s_5811b7f24eccc0::t_9e05d62e1e7f20 155-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "786dbdfbcd7110cdbc2a4e7a6599476b6b0a2312",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
