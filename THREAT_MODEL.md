@@ -351,3 +351,54 @@ Claude Code                  thlibo CLI                   thlibod               
 ```
 
 Every lateral arrow ends in a known artefact: the hook envelope JSON, the IPC NDJSON, or the GBNF-constrained model output. The only unbounded free-form data that touches the model is the **content** of the prompt-processor turn — which is exactly what L1 finding #1 names.
+
+---
+
+## Addendum — 2026-07-14: opt-in OpenTelemetry egress (ADR 0011)
+
+The body of this document is a point-in-time MAESTRO snapshot of
+v0.1.0. This addendum records a deliberate posture change introduced
+after that snapshot; it does not rewrite the immutable risk table
+above.
+
+**What changed.** ADR 0011 adds optional OpenTelemetry emission
+(metrics + events) to a collector the operator configures. This is a
+new network-egress path and it **supersedes, for the telemetry-enabled
+configuration, the MA-4/T19 integrity claim** in the Agent/Skill
+Integrity table above ("No network calls, no telemetry, nothing leaves
+localhost"). With telemetry enabled, thlibo *does* make an outbound
+OTLP call. That claim remains accurate in thlibo's **default**
+configuration: telemetry is off unless `THLIBO_ENABLE_TELEMETRY` is
+set, and when off no SDK is constructed and no socket is opened.
+
+**Threat decisions.**
+
+| Threat | Decision |
+|---|---|
+| **T19 / MA-4 — undisclosed egress.** A tool that claimed "nothing leaves localhost" now can emit. | **Mitigated by disclosure + opt-in.** Off by default; the README "Monitoring" section and ADR 0011 name the egress explicitly; the enable flag is an affirmative operator action. |
+| **BV-4 / LLM06 — data exfiltration via telemetry content.** Tool output, prompts, commands, or file paths could leak through metric/event attributes. | **Mitigated by construction.** thlibo emits only sizes, counts, durations, and a fixed enum-label set. There is no content-capture opt-in of the kind Claude Code offers (`OTEL_LOG_USER_PROMPTS` et al.). The sole variable-cardinality label — processor name — emits verbatim only for the closed, source-reviewed **built-in** set; **user** processor names redact to the constant `"custom"`. A privacy regression test asserts no raw input bytes reach any exported attribute. |
+| **T32 / CWE-400 — a slow/hostile collector degrades the client.** thlibo sits in the critical path of every matched tool call. | **Mitigated by fail-open + bounded flush (ADR 0006, 0011).** Every telemetry op is best-effort; export failure or timeout drops data silently and never changes the tool output bytes or exit code. The on-exit flush is capped at a **fixed 2 s** (not operator-configurable). Against the recommended localhost collector the flush is microseconds; a misconfigured/unreachable **remote** endpoint makes each emitting invocation wait up to that 2 s ceiling before dropping the batch — the deliberate cap that stops a dead collector from hanging the client. A dead-endpoint test asserts the flush returns within the bound and the tool output is byte-identical. |
+| **T13 / CWE-522 — credentials in telemetry config.** `OTEL_EXPORTER_OTLP_HEADERS` may carry a bearer token. | **Accepted, operator-owned.** Same handling as the AI client's own OTLP auth; thlibo reads it from the process environment, never logs it, and never writes it to the NDJSON trail. |
+
+**Trust-boundary delta.** A new one-way outbound boundary is added,
+active only when telemetry is enabled:
+
+```
+   ┌─────────▼──────────┐
+   │  thlibo CLI        │
+   │  (middleware)      │
+   └─────────┬──────────┘
+             │  TB-6  (OTLP → operator collector, opt-in via
+             │         THLIBO_ENABLE_TELEMETRY; content-free;
+             │         fail-open, bounded flush; recommended
+             │         localhost:4318)
+   ┌─────────▼──────────┐
+   │ Operator's OTel    │
+   │ collector          │   (storage/dashboards are the operator's)
+   └────────────────────┘
+```
+
+Like every other boundary, TB-6 is one-way: thlibo pushes; nothing
+inbound crosses it. The collector, its storage, and any onward
+forwarding are the operator's responsibility, outside thlibo's trust
+boundary.
