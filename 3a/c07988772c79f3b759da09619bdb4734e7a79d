@@ -1,0 +1,52 @@
+internal/middleware/telemetry_test.go
+  s_5811b7f24eccc0::t_695319de4aeb77 1-114
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_1390d9fa71a150 66-80
+  s_5811b7f24eccc0::t_3d1ac46cdaea9a 262-272
+  s_5811b7f24eccc0::t_cd0eab34bba1a1 103-104,106-116,120-126,129,134,140-141,145-148,155-158,171-174,177-180,188-191,194,197,201-204,208-252
+  s_5811b7f24eccc0::t_f5954ae07d9d45 18,26
+internal/middleware/cordon_fallback_test.go
+  s_5811b7f24eccc0::t_f325562df213c1 133
+  s_5811b7f24eccc0::t_9a9d710a34adaf 109
+  s_5811b7f24eccc0::t_d540187c7a8f81 163
+cmd/thlibo/casecmd/case.go
+  s_e235e14927312e::t_dbeb9850d4ee4f 115-119
+cmd/thlibo/compresscmd/compress.go
+  s_e235e14927312e::t_8d1ea0453c28b7 25,48-50,85-89
+cmd/thlibo/execcmd/exec.go
+  s_3f706e3f4b4643::t_74be56198083f8 37,174-176,246-249
+cmd/thlibo/shorthandcmd/shorthand.go
+  s_e235e14927312e::t_0b420bafa4db5d 288-292
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "3ac07988772c79f3b759da09619bdb4734e7a79d",
+  "prompts": {},
+  "sessions": {
+    "s_3f706e3f4b4643": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d91ced6-3b3b-46d0-b2cb-8b38a3429c2a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_e235e14927312e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4ff4b505-745a-4f5b-8d6b-181ff86bb3fe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
