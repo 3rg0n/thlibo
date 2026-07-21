@@ -55,6 +55,11 @@ currently Insiders) — the Copilot hook file thlibo installs is
 auto-discovered by VS Code too, and the hook scripts speak both wire
 formats.
 
+Want to see how much it's saving you? thlibo can emit **optional
+OpenTelemetry** metrics + events to a collector you run — off by
+default, content-free, one env var to enable. See
+[Monitoring](#monitoring-opentelemetry).
+
 ---
 
 ## How it works
@@ -130,7 +135,7 @@ curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.s
 Pin to a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.10.1 bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.11.0 bash
 ```
 
 ### One-liner (Windows PowerShell)
@@ -142,7 +147,7 @@ irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | ie
 Or pinned:
 
 ```powershell
-$env:THLIBO_VERSION='v0.10.1'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+$env:THLIBO_VERSION='v0.11.0'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
 Both installers:
