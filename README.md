@@ -557,6 +557,33 @@ call wait up to 2 s before dropping the batch — telemetry is always
 best-effort and **never blocks or breaks the AI client**. Run a
 collector on localhost.
 
+### Setup notes (two gotchas)
+
+Both follow standard OpenTelemetry behaviour, but they bite the first
+time:
+
+1. **Set `OTEL_*` in your shell profile, not just the AI client's
+   env.** When thlibo runs from an AI client's hook (Claude Code's
+   Bash-tool PreToolUse hook, for example), the client does **not**
+   pass its own `OTEL_*` into hook subprocesses — Claude Code
+   deliberately strips them. `THLIBO_ENABLE_TELEMETRY` set in the
+   client env still reaches thlibo, but the `OTEL_EXPORTER_OTLP_*`
+   endpoint/protocol vars won't. Export them from your `~/.bashrc` /
+   `~/.zshrc` / PowerShell `$PROFILE` (or a system-wide env) so every
+   thlibo subprocess inherits them.
+2. **A plaintext local collector needs an `http://` endpoint (or
+   `INSECURE`).** With no endpoint set the OTLP exporter defaults to
+   **TLS**, which fails silently against a plaintext collector (thlibo
+   fails open and drops the data). Either give an explicit
+   `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`, or set
+   `OTEL_EXPORTER_OTLP_INSECURE=true`.
+
+A collector is a **shared sink**: thlibo, the AI client, and any other
+instrumented tool can all point at the same one. Separate the sources
+at query time by `service.name` (thlibo sets `thlibo`) or by the
+metric-name prefix (`thlibo.*` vs `claude_code.*`). thlibo only ever
+emits its own `thlibo.*` signals.
+
 ---
 
 ## Security model

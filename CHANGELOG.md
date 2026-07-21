@@ -23,7 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names redact to `"custom"`. Fails open and force-flushes within a
   fixed 2 s bound on exit — never blocks or breaks the AI client. See
   the README "Monitoring" section and the 2026-07-14 `THREAT_MODEL.md`
-  addendum.
+  addendum. The Monitoring section also documents two setup gotchas
+  found in end-to-end validation: `OTEL_*` must be set in the shell
+  profile (AI clients strip them from hook subprocesses), and a
+  plaintext local collector needs an `http://` endpoint or
+  `OTEL_EXPORTER_OTLP_INSECURE=true` (the OTLP exporter defaults to
+  TLS).
 - **`AGENTS.md`** — a thin pointer to `CLAUDE.md` so agents that look for
   `AGENTS.md` by convention (Codex, Cursor, GitHub Copilot) auto-discover the
   repo's guidance. `CLAUDE.md` remains the single source of truth.
