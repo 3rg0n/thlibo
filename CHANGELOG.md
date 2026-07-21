@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-07-21
+
+### Fixed
+
+- **One-line installer no longer 403s behind shared/corporate NAT**
+  (#89). `install.sh` / `install.ps1` resolved `THLIBO_VERSION=latest`
+  via `api.github.com`, whose anonymous 60-req/hr/IP limit is easily
+  exhausted on a NAT'd egress IP — the install died with a bare
+  `curl: (56) ... 403` before downloading anything. Tag resolution now
+  follows the `github.com/.../releases/latest` **web redirect** (not
+  the API, not rate-limited, no token or `jq` needed), falling back to
+  the JSON API only if the redirect can't be parsed. Hardened against
+  network-error null-refs (PowerShell), empty/malformed redirects, and
+  PS 5.1-vs-7 header access; preserves the macOS bash 3.2 empty-array
+  handling. Reported by a macOS user; validated on darwin-arm64.
+
 ## [0.11.0] - 2026-07-21
 
 ### Added
