@@ -6,7 +6,7 @@ agents that need architectural context in a single shot.
 
 ## Status
 
-v0.10.1 (current). Single binary shipped (`thlibo`); inference runs in
+v0.11.0 (current). Single binary shipped (`thlibo`); inference runs in
 a separate sidecar, **`inferd`** (its own repo, github.com/3rg0n/inferd),
 which `thlibo install` probe-or-installs. `thlibo install` is zero-touch
 on all three OSes (incl. Windows arm64): it copies inferd's `backends/`

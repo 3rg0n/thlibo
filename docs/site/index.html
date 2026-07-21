@@ -7,7 +7,7 @@
 <meta name="description" content="AI tool output compressor. Local Gemma 4 for unknown output, deterministic native-Go filters for git/npm/cargo. 98% fewer tokens on common dev commands. Works with Claude Code, Codex CLI, Cursor, GitHub Copilot CLI + VS Code Copilot. MIT-licensed, runs on your machine.">
 <meta name="color-scheme" content="light only">
 <meta property="og:title" content="thlibo — tool output compression for Claude Code, Codex, Cursor + Copilot">
-<meta property="og:description" content="θλίβω — to press, crush, compress. 98% fewer tokens on common dev commands. Local-first, no telemetry, MIT.">
+<meta property="og:description" content="θλίβω — to press, crush, compress. 98% fewer tokens on common dev commands. Local-first, telemetry off by default, MIT.">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f4eedd'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='48' text-anchor='middle' fill='%238b1a1a'%3E%CE%B8%3C/text%3E%3C/svg%3E">
 <style>
@@ -556,7 +556,7 @@ html.no-js .reveal{ opacity:1; transform:none }
 
 <!-- masthead ................................................................ -->
 <header class="masthead">
-  <div class="mark"><b>θ</b>&nbsp;thlibo <span style="color:var(--ink-ghost)">·&nbsp;v0.10.1</span></div>
+  <div class="mark"><b>θ</b>&nbsp;thlibo <span style="color:var(--ink-ghost)">·&nbsp;v0.11.0</span></div>
   <nav>
     <a href="#demo">demo</a>
     <a href="#how">how it works</a>
@@ -611,7 +611,7 @@ html.no-js .reveal{ opacity:1; transform:none }
   </div>
 
   <p class="hero-meta">
-    <span>v <b>0.10.1</b></span>
+    <span>v <b>0.11.0</b></span>
     <span>binary <b>~7&nbsp;MB</b></span>
     <span>model <b>5.1&nbsp;GB</b> (opt-in)</span>
     <span>hf tokens <b>none</b></span>
@@ -1063,10 +1063,14 @@ html.no-js .reveal{ opacity:1; transform:none }
           network.</strong>
         </p>
         <p>
-          No telemetry. No opt-in-to-ship-anonymised-usage-data. No
-          HuggingFace token required — the model pull is a plain
-          anonymous HTTPS GET against a public Apache-licensed repack,
-          SHA-256 pinned at build time.
+          <strong>No telemetry by default.</strong> Optional
+          OpenTelemetry emission is off unless you set
+          <span class="k" style="display:inline">THLIBO_ENABLE_TELEMETRY</span>,
+          and even then it ships only sizes, counts, and durations to a
+          collector <em>you</em> run — never your code, prompts,
+          commands, or file paths. No HuggingFace token required — the
+          model pull is a plain anonymous HTTPS GET against a public
+          Apache-licensed repack, SHA-256 pinned at build time.
         </p>
         <p>
           If your repo has a clause against uploading source, thlibo
@@ -1078,7 +1082,7 @@ html.no-js .reveal{ opacity:1; transform:none }
           <li><span class="k">transport</span>unix socket / named pipe · never network</li>
           <li><span class="k">unix acl</span>0660 · group inferd-users (or user-only)</li>
           <li><span class="k">windows acl</span>pipe DACL · current user SID only</li>
-          <li><span class="k">telemetry</span>none</li>
+          <li><span class="k">telemetry</span>off by default · opt-in OTel, content-free</li>
           <li><span class="k">model</span>unsloth/gemma-4-E4B-it · Apache-2.0</li>
           <li><span class="k">install</span>per-user · no sudo, no admin</li>
         </ul>
