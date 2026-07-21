@@ -1,0 +1,21 @@
+scripts/install.sh
+  s_5811b7f24eccc0::t_68b7374a732f1c 83-101
+scripts/install.ps1
+  s_5811b7f24eccc0::t_7317f93cfb162c 64-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "446f626fefab12a7fa3d89005765017d6e495c68",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
