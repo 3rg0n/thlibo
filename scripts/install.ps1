@@ -61,7 +61,26 @@ try {
 
 function Resolve-Tag {
     if ($script:Version -ne 'latest') { return $script:Version }
-    # /latest is a public endpoint, no auth needed.
+
+    # Resolve "latest" WITHOUT the rate-limited API where possible.
+    # The releases/latest *web* URL (github.com, not api.github.com)
+    # 302-redirects to /releases/tag/<tag> and is NOT subject to the
+    # anonymous 60-req/hr/IP API limit that 403s users behind shared or
+    # corporate NAT (#install-403). Read the redirect Location and parse
+    # the tag from it — no token needed.
+    try {
+        $resp = Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 `
+            -Uri 'https://github.com/3rg0n/thlibo/releases/latest' `
+            -ErrorAction SilentlyContinue
+        $loc = $resp.Headers.Location
+    } catch {
+        # PowerShell throws on 3xx when MaximumRedirection is 0; the
+        # Location still rides on the response.
+        $loc = $_.Exception.Response.Headers.Location.ToString()
+    }
+    if ($loc -match '/tag/(?<tag>[^/]+)$') { return $Matches['tag'] }
+
+    # Fallback: the JSON API (rate-limited; may 403 on shared IPs).
     $latest = Invoke-RestMethod -UseBasicParsing -Uri "$script:ReleasesApi/latest"
     if (-not $latest.tag_name) { Die 'could not resolve latest thlibo tag' 3 }
     return $latest.tag_name

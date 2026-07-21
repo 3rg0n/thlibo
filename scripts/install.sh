@@ -80,8 +80,25 @@ resolve_tag() {
     echo "$THLIBO_VERSION"
     return
   fi
-  # Pass GITHUB_TOKEN if set — avoids 403 on rate-limited IPs.
-  # grep+head keeps us from needing jq as a prerequisite.
+
+  # Resolve "latest" WITHOUT the rate-limited API where possible.
+  #
+  # The releases/latest *web* URL (github.com, not api.github.com) 302-
+  # redirects to /releases/tag/<tag>. It is NOT subject to the
+  # anonymous 60-req/hr/IP API limit that 403s users behind shared or
+  # corporate NAT (#install-403). Read the redirect target and parse the
+  # tag out of it — no token, no jq needed.
+  local tag=""
+  tag=$(curl -fsS -o /dev/null -w '%{redirect_url}' \
+          "https://github.com/3rg0n/thlibo/releases/latest" 2>/dev/null \
+        | sed -E 's#.*/tag/([^/]+)$#\1#')
+  if [ -n "$tag" ] && [ "$tag" != "latest" ]; then
+    echo "$tag"
+    return
+  fi
+
+  # Fallback: the JSON API (rate-limited). Pass GITHUB_TOKEN if set to
+  # lift the limit. grep+head keeps us from needing jq as a prerequisite.
   local auth_args=()
   if [ -n "${GITHUB_TOKEN:-}" ]; then
     auth_args=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
