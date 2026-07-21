@@ -68,17 +68,33 @@ function Resolve-Tag {
     # anonymous 60-req/hr/IP API limit that 403s users behind shared or
     # corporate NAT (#install-403). Read the redirect Location and parse
     # the tag from it — no token needed.
+    # PowerShell 7 throws on a 3xx when -MaximumRedirection is 0; Windows
+    # PowerShell 5.1 returns the response. Handle both, and — critically —
+    # tolerate a genuine network error (DNS/timeout/proxy block) where
+    # there is NO response at all: $_.Exception.Response is $null then, so
+    # blindly dereferencing .Headers.Location would crash. On any failure
+    # we simply leave $loc empty and fall through to the API.
+    $loc = ''
     try {
         $resp = Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 `
             -Uri 'https://github.com/3rg0n/thlibo/releases/latest' `
             -ErrorAction SilentlyContinue
-        $loc = $resp.Headers.Location
+        if ($resp) { $loc = [string]$resp.Headers.Location }
     } catch {
-        # PowerShell throws on 3xx when MaximumRedirection is 0; the
-        # Location still rides on the response.
-        $loc = $_.Exception.Response.Headers.Location.ToString()
+        $r = $_.Exception.Response
+        if ($null -ne $r) {
+            # PS 5.1: Headers is a WebHeaderCollection (indexer);
+            # PS 7: HttpResponseMessage with .Headers.Location. Try both.
+            try { $loc = [string]$r.Headers.Location } catch { $loc = '' }
+            if ([string]::IsNullOrEmpty($loc)) {
+                try { $loc = [string]$r.Headers['Location'] } catch { $loc = '' }
+            }
+        }
     }
-    if ($loc -match '/tag/(?<tag>[^/]+)$') { return $Matches['tag'] }
+    # Only accept a redirect that points at /releases/tag/<tag>; anything
+    # else (empty, or a redirect elsewhere) falls through to the API
+    # rather than being mistaken for a tag.
+    if ($loc -match '/releases/tag/(?<tag>[^/]+)/?$') { return $Matches['tag'] }
 
     # Fallback: the JSON API (rate-limited; may 403 on shared IPs).
     $latest = Invoke-RestMethod -UseBasicParsing -Uri "$script:ReleasesApi/latest"
@@ -108,6 +124,9 @@ try {
             Say "version:  $tag (from local archive $($env:THLIBO_LOCAL_ARCHIVE))"
         } else {
             $tag = Resolve-Tag
+            if ([string]::IsNullOrWhiteSpace($tag)) {
+                Die 'could not resolve thlibo release tag' 3
+            }
             $assetUrl = "https://github.com/3rg0n/thlibo/releases/download/$tag/$asset"
             $sumsUrl  = "https://github.com/3rg0n/thlibo/releases/download/$tag/SHA256SUMS"
             $sumsPath = Join-Path $tmp 'SHA256SUMS'

@@ -88,10 +88,28 @@ resolve_tag() {
   # anonymous 60-req/hr/IP API limit that 403s users behind shared or
   # corporate NAT (#install-403). Read the redirect target and parse the
   # tag out of it — no token, no jq needed.
-  local tag=""
-  tag=$(curl -fsS -o /dev/null -w '%{redirect_url}' \
-          "https://github.com/3rg0n/thlibo/releases/latest" 2>/dev/null \
-        | sed -E 's#.*/tag/([^/]+)$#\1#')
+  #
+  # Capture the redirect URL and the tag separately so we can validate.
+  # `curl` failing inside $(...) doesn't trip `set -e` (command subs are
+  # exempt), which is what we want here: a failed/blocked redirect must
+  # fall THROUGH to the API fallback, not abort the script.
+  local redir="" tag=""
+  redir=$(curl -fsS -o /dev/null -w '%{redirect_url}' \
+            "https://github.com/3rg0n/thlibo/releases/latest" 2>/dev/null) || redir=""
+  # Only accept a redirect that actually points at /releases/tag/<tag>.
+  # A missing/blocked redirect (empty), or a redirect to anything else
+  # (e.g. /releases with no tag), must NOT be treated as a tag — sed
+  # would otherwise echo the whole URL back and we'd build a bogus
+  # download URL from it. Require the /tag/ path, and reject any value
+  # that still looks like a URL.
+  case "$redir" in
+    *"/releases/tag/"*)
+      tag=$(printf '%s\n' "$redir" | sed -E 's#.*/releases/tag/([^/]+)/?$#\1#')
+      ;;
+  esac
+  case "$tag" in
+    *://*|"") tag="" ;;   # URL-shaped or empty -> reject, fall to API
+  esac
   if [ -n "$tag" ] && [ "$tag" != "latest" ]; then
     echo "$tag"
     return
