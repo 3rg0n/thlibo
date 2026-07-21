@@ -1,0 +1,21 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_748c17f5341965 26-31
+README.md
+  s_5811b7f24eccc0::t_5e8ff383776a38 560-586
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "15eb1b5ef0867627f9d05c0a13f05ec6a6933b34",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
