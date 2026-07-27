@@ -62,18 +62,18 @@ jobs:
         # can't reach. PYTHONUTF8 because processor output contains
         # em-dashes and smart quotes that crash cp1252 consoles.
         #
-        # One `unittest` invocation per file, not one batched run: some
+        # One `unittest` subprocess per file, not one batched run: some
         # of these tests do a bare `import run`, so batching lets the
         # first processor's run.py win the `run` module name for all of
         # them. Separate processes keep each test importing its own.
+        #
+        # Driven by python rather than a shell loop because this job is
+        # a matrix across ubuntu/macos/windows, and the Windows runner's
+        # default shell is pwsh — a bash `while ... done` loop is a
+        # PowerShell parse error there.
         env:
           PYTHONUTF8: "1"
-        run: |
-          set -e
-          find processors -name 'test_*.py' -print0 | sort -z | while IFS= read -r -d '' t; do
-            echo "== $t"
-            python -m unittest "$t"
-          done
+        run: python scripts/run_processor_tests.py
 
   scanners:
     name: scanners
