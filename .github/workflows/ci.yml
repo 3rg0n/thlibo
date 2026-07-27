@@ -56,6 +56,24 @@ jobs:
         # 120s timeout is generous; current suite is ~70s on a dev
         # box, most of which is the daemon integration tests.
         run: go test ./... -timeout 120s
+      - name: python processor tests
+        # The script processors' own unit tests (pure-python, no PDF or
+        # model fixtures) — they pin parsing heuristics the Go suite
+        # can't reach. PYTHONUTF8 because processor output contains
+        # em-dashes and smart quotes that crash cp1252 consoles.
+        #
+        # One `unittest` subprocess per file, not one batched run: some
+        # of these tests do a bare `import run`, so batching lets the
+        # first processor's run.py win the `run` module name for all of
+        # them. Separate processes keep each test importing its own.
+        #
+        # Driven by python rather than a shell loop because this job is
+        # a matrix across ubuntu/macos/windows, and the Windows runner's
+        # default shell is pwsh — a bash `while ... done` loop is a
+        # PowerShell parse error there.
+        env:
+          PYTHONUTF8: "1"
+        run: python scripts/run_processor_tests.py
 
   scanners:
     name: scanners
