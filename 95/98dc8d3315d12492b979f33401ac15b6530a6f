@@ -1,0 +1,38 @@
+processors/pdf-to-md/run.py
+  s_5811b7f24eccc0::t_1dddf36e001307 470-472,476-477,484,486-489,491-494,499-502,504-507,510
+  s_5811b7f24eccc0::t_c99c316628677a 211-218,225-227,232-233,236-251,254-261
+  s_5811b7f24eccc0::t_68aef6f7b97d5f 515
+  s_5811b7f24eccc0::t_9db8f901ed7975 228-231,234
+  s_5811b7f24eccc0::t_3e40e1113e9cdf 252-253
+  s_5811b7f24eccc0::t_8c94e6305cf75a 127-186
+  s_5811b7f24eccc0::t_9f9023ae60b6b4 235
+  s_5811b7f24eccc0::t_d174669b33236f 12-17
+  s_5811b7f24eccc0::t_d877ca701d6207 219-224
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_0167b11aa312c8 64
+  s_5811b7f24eccc0::t_d31e269cad0a17 73
+  s_5811b7f24eccc0::t_cb35ff8749fb79 59-63,69-70
+  s_5811b7f24eccc0::t_c7bc8a77ab8a67 65-68,71-72,74-76
+CHANGELOG.md
+  s_5811b7f24eccc0::t_1e63f7e0ff51eb 10-33
+processors/pdf-to-md/testdata/test_layout.py
+  s_5811b7f24eccc0::t_e178a8e3b5c49f 72-94
+  s_5811b7f24eccc0::t_0bebde3b9d36db 127-140
+  s_5811b7f24eccc0::t_fd147094fc0398 1-71,95-126,141-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "9598dc8d3315d12492b979f33401ac15b6530a6f",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
