@@ -1,0 +1,22 @@
+scripts/run_processor_tests.py
+  s_5811b7f24eccc0::t_ef8ada914139b3 1-21,23-54
+  s_5811b7f24eccc0::t_5451c6b66664bd 22
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_8f07ff2396ae54 65,69-73,76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "59fda230f4cfa471d96ec3149d70e83163f317e7",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
