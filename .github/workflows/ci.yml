@@ -56,6 +56,24 @@ jobs:
         # 120s timeout is generous; current suite is ~70s on a dev
         # box, most of which is the daemon integration tests.
         run: go test ./... -timeout 120s
+      - name: python processor tests
+        # The script processors' own unit tests (pure-python, no PDF or
+        # model fixtures) — they pin parsing heuristics the Go suite
+        # can't reach. PYTHONUTF8 because processor output contains
+        # em-dashes and smart quotes that crash cp1252 consoles.
+        #
+        # One `unittest` invocation per file, not one batched run: some
+        # of these tests do a bare `import run`, so batching lets the
+        # first processor's run.py win the `run` module name for all of
+        # them. Separate processes keep each test importing its own.
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          set -e
+          find processors -name 'test_*.py' -print0 | sort -z | while IFS= read -r -d '' t; do
+            echo "== $t"
+            python -m unittest "$t"
+          done
 
   scanners:
     name: scanners

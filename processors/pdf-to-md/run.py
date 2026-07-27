@@ -9,7 +9,12 @@ Strategy (per ADR 0007):
       * substantive text → emit markdown for the page
       * empty / gibberish text → emit a `[scanned page N]` placeholder
       * mostly-empty + images present → `[chart on page N]` placeholder
-  - Tables go out as GHFM tables.
+  - Tables go out as GHFM tables, but invisible layout grids (slide
+    decks position content with them) are rejected — their text is
+    already in the page's extracted text, so keeping them duplicates
+    content. See is_layout_grid.
+  - Running headers/footers/nav that repeat on most pages are dropped
+    once identified document-wide. See find_furniture.
 
 This script is text-only. Image-only (scanned) pages can't be read
 here, so they get a placeholder; the Go caller (`thlibo case`) detects
@@ -119,6 +124,66 @@ def promote_headings(text: str) -> str:
     return "\n".join(out_lines)
 
 
+# Repeated-furniture (running header/footer/nav) detection.
+#
+# A line that appears on nearly every page is chrome, not content:
+# "Cisco Confidential" (34/35 pages), "Table of Contents" (33/35),
+# the nav sidebar labels. Emitting each one 30+ times is pure noise.
+#
+#   - 0.60 threshold: the sampled deck's furniture ran 23/35 (0.66) to
+#     34/35 (0.97); the highest genuine content line was 4/35 (0.11).
+#     Wide margin either side.
+#   - 120-char cap: only short lines are furniture. A repeated
+#     paragraph is boilerplate the reader may still want.
+#   - 4-page floor: on a 2-3 page document "appears on 60% of pages"
+#     is one or two pages, which is not a pattern.
+_FURNITURE_MIN_PAGE_FRACTION = 0.60
+_FURNITURE_MAX_LINE_CHARS = 120
+_FURNITURE_MIN_PAGES = 4
+
+
+def find_furniture(page_texts: list[str]) -> set[str]:
+    """Return the set of lines that recur on enough pages to be running
+    headers/footers/navigation rather than content.
+
+    Counts each line once per page (a line repeated twice on one page
+    counts once) so a single busy page can't nominate its own text as
+    furniture.
+    """
+    n_pages = len(page_texts)
+    if n_pages < _FURNITURE_MIN_PAGES:
+        return set()
+    counts: dict[str, int] = {}
+    for text in page_texts:
+        seen = {
+            line.strip()
+            for line in (text or "").split("\n")
+            if line.strip() and len(line.strip()) <= _FURNITURE_MAX_LINE_CHARS
+        }
+        for line in seen:
+            counts[line] = counts.get(line, 0) + 1
+    threshold = n_pages * _FURNITURE_MIN_PAGE_FRACTION
+    return {line for line, c in counts.items() if c >= threshold}
+
+
+def strip_furniture(text: str, furniture: set[str]) -> str:
+    """Drop furniture lines from a page's text, collapsing the runs of
+    blank lines the removal leaves behind.
+    """
+    if not furniture or not text:
+        return text
+    out: list[str] = []
+    for line in text.split("\n"):
+        if line.strip() in furniture:
+            continue
+        if not line.strip() and out and not out[-1].strip():
+            continue
+        out.append(line)
+    while out and not out[-1].strip():
+        out.pop()
+    return "\n".join(out)
+
+
 def page_strategy(text: str, has_images: bool) -> str:
     """Classify a page based on what extract_text + page.images returned.
 
@@ -141,6 +206,57 @@ def page_strategy(text: str, has_images: bool) -> str:
     if alpha < 20 and has_images:
         return "chart"
     return "text"
+
+
+# Layout-grid rejection thresholds (see is_layout_grid).
+#
+# Slide decks and brochures position content with invisible grids that
+# pdfplumber reports as tables. Two signals separate those from real
+# data tables, both measured on a 35-slide deck (issue: slide-deck
+# false positives):
+#
+#   - max cell length: a layout grid dumps a whole slide's prose into
+#     one cell. Real tables held 212 chars in their longest cell; the
+#     grids that ONLY this rule catches (the others fail on columns or
+#     density) started at 1097. The threshold sits near the top of that
+#     gap deliberately: a real table with one long descriptive column
+#     is plausible and must survive, whereas dropping a real table
+#     loses data. False-positive here is far cheaper than false-negative.
+#   - fill density: real tables were >=0.46 non-empty; the repeated
+#     nav-sidebar grids sat at 0.11-0.30. 0.40 splits them, and a
+#     2-cell table (density 1.00) still passes.
+#   - column count: a one-column "table" carries no row/column
+#     relationship, so it conveys nothing a plain paragraph doesn't.
+#     Every real table in the sample had >=2 columns; the leftover
+#     single-column grids were stacked TOC panels.
+#
+# A grid must fail only ONE test to be rejected — they catch different
+# shapes, and none alone caught every case in the sample.
+_MAX_TABLE_CELL_CHARS = 1000
+_MIN_TABLE_DENSITY = 0.40
+
+
+def is_layout_grid(table: list[list[str | None]]) -> bool:
+    """True when a pdfplumber "table" is really an invisible layout grid.
+
+    Rejecting these is what keeps a slide deck's repeated nav sidebar
+    out of the output. A rejected grid loses nothing: its text is
+    already present verbatim in the page's extract_text() output, so
+    dropping the table drops a duplicate, not content.
+    """
+    if not table:
+        return True
+    cells = [c for row in table for c in row]
+    if not cells:
+        return True
+    if max(len(row) for row in table) < 2:
+        return True
+    filled = [str(c).strip() for c in cells if c is not None and str(c).strip()]
+    if not filled:
+        return True
+    if max(len(c) for c in filled) > _MAX_TABLE_CELL_CHARS:
+        return True
+    return len(filled) / len(cells) < _MIN_TABLE_DENSITY
 
 
 def render_table(table: list[list[str | None]]) -> str:
@@ -351,34 +467,52 @@ def main() -> int:
         sys.stdout.write("\n")
         return 0
 
+    # Two passes over the pages: the first collects text so
+    # find_furniture can see the whole document (running headers are
+    # only identifiable document-wide), the second renders.
     page_blocks: list[str] = []
     text_pages = 0
     with pdf:
-        for i, page in enumerate(pdf.pages, start=1):
+        extracted: list[tuple[str, list, bool, int]] = []
+        for page in pdf.pages:
             text = page.extract_text() or ""
             try:
                 tables = page.extract_tables() or []
             except Exception:  # noqa: BLE001
                 tables = []
             try:
-                has_images = bool(page.images)
+                images = list(page.images)
             except Exception:  # noqa: BLE001
-                has_images = False
+                images = []
+            extracted.append((text, tables, bool(images), len(images)))
 
+        furniture = find_furniture([t for t, _, _, _ in extracted])
+
+        for i, (text, tables, has_images, n_images) in enumerate(extracted, start=1):
+            # Classify on the raw text: furniture stripping is a
+            # presentation concern and must not turn a text page into a
+            # "scanned" one, which would trigger the OCR path (ADR 0009).
             strategy = page_strategy(text, has_images)
             block: list[str] = [f"## Page {i}"]
             if strategy == "text":
                 text_pages += 1
-                block.append(promote_headings(text.strip()))
+                body = strip_furniture(text.strip(), furniture)
+                # A page that is nothing but furniture keeps its original
+                # text rather than emitting an empty section.
+                block.append(promote_headings(body or text.strip()))
                 if tables:
-                    for j, t in enumerate(tables, start=1):
+                    j = 0
+                    for t in tables:
+                        if is_layout_grid(t):
+                            continue
                         rendered = render_table(t)
                         if rendered:
+                            j += 1
                             block.append(f"### Table {i}.{j}")
                             block.append(rendered)
                 if has_images:
                     block.append(
-                        f"_[image{'s' if len(page.images) > 1 else ''} on page {i}]_"
+                        f"_[image{'s' if n_images > 1 else ''} on page {i}]_"
                     )
             elif strategy == "scanned":
                 # Placeholder only: the Go caller OCRs image-only pages via

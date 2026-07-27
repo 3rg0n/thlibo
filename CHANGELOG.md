@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pdf-to-md` no longer inflates slide decks.** A 35-slide PDF
+  extracted to 125 KB of markdown from a 55 KB text layer — 2.3×
+  larger than its own text. Two causes, both fixed: pdfplumber reports
+  the invisible grids decks use for positioning as tables (47 "tables"
+  on that file, only 5 real, 130 structurally empty rows), duplicating
+  text already present in the page's extracted text; and running
+  headers/footers/nav were emitted on every page ("Cisco Confidential"
+  ×34, "Table of Contents" ×33). `is_layout_grid()` now rejects grids
+  that are single-column, sparse (<0.40 filled), or carry a
+  prose-crammed cell (>1000 chars); repeated short lines are detected
+  document-wide and stripped once. Same deck now emits 53 KB with all
+  35 pages, all 5 real tables, and **zero** vocabulary loss (verified
+  token-set identical); three unrelated PDFs also shrank 7–49% losing
+  only a copyright footer. Thresholds are pinned by unit tests.
+
+### Changed
+
+- CI now runs the script processors' own Python unit tests (79 across
+  `cordon-filter`, `go-test-filter`, `lint-filter`, `pdf-to-md`,
+  `trivy-filter`) — they existed but nothing executed them. One
+  process per file, since several do a bare `import run`.
+
 ## [0.11.1] - 2026-07-21
 
 ### Fixed
