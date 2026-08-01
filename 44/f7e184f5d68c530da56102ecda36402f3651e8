@@ -1,0 +1,23 @@
+internal/inferd/timeout_test.go
+  s_5811b7f24eccc0::t_753fd1ed7e17b4 104-126
+internal/inferd/client.go
+  s_5811b7f24eccc0::t_d514878fa8676c 130-136,138
+docs/adr/0012-bounded-inference-calls.md
+  s_5811b7f24eccc0::t_7bc26afb5d4256 69-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "44f7e184f5d68c530da56102ecda36402f3651e8",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
