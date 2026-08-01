@@ -101,6 +101,29 @@ func TestNegativeTimeoutDisablesDeadline(t *testing.T) {
 	}
 }
 
+// A dead daemon plus an expired context is both an unreachable backend
+// and a timeout. ErrBackendNotReady must survive: it is the fail-open
+// signal callers switch on (ADR 0006) and the more actionable of the two
+// classifications. Relabelling it as a timeout would report a
+// daemon-down event as slowness.
+func TestBackendNotReadySurvivesExpiredContext(t *testing.T) {
+	cl := &Client{
+		Timeout: 50 * time.Millisecond,
+		dialFunc: func(ctx context.Context) (net.Conn, error) {
+			// Outlive the deadline, then fail the way a down daemon does.
+			<-ctx.Done()
+			return nil, errors.New("connect: connection refused")
+		},
+	}
+	_, err := cl.Post(context.Background(), Request{ID: "down"})
+	if !errors.Is(err, ErrBackendNotReady) {
+		t.Fatalf("want ErrBackendNotReady preserved, got %v", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("daemon-down must not be relabelled a timeout: %v", err)
+	}
+}
+
 func TestResolveTimeout(t *testing.T) {
 	cases := []struct {
 		env  string

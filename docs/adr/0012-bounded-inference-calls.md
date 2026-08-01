@@ -66,6 +66,13 @@ as `script_error` and a wedged daemon is invisible in the metrics —
 observability that only works when nothing is wrong is not
 observability.
 
+`ErrBackendNotReady` is exempt from that normalisation. A dead daemon
+whose context also expired is both things at once, and "unreachable" is
+both the more actionable classification and the fail-open signal callers
+switch on (ADR 0006). Rewriting it to a timeout would report a
+daemon-down event as slowness — the same mislabelling the normaliser
+exists to prevent, inverted.
+
 ## Consequences
 
 - A wedged daemon now costs 15s of latency once, then passes through,

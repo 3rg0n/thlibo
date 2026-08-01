@@ -127,8 +127,15 @@ func (c *Client) Post(ctx context.Context, req Request) (res Result, err error) 
 	// instead, so callers can tell a blown deadline from a wire fault —
 	// middleware.dispatchFailReason keys its `timeout` label on exactly
 	// this, and a mislabelled timeout reads as a script error in metrics.
+	//
+	// ErrBackendNotReady is exempt: it is already a precise classification
+	// and it is the fail-open signal callers switch on (ADR 0006). A dead
+	// daemon plus an expired context is both things at once, and
+	// "unreachable" is the more actionable of the two — rewriting it to a
+	// timeout would relabel a daemon-down event as slowness, which is the
+	// same mislabelling this block exists to prevent, just inverted.
 	defer func() {
-		if err != nil && ctx.Err() != nil {
+		if err != nil && ctx.Err() != nil && !errors.Is(err, ErrBackendNotReady) {
 			res, err = Result{}, ctx.Err()
 		}
 	}()
