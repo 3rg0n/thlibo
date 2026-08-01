@@ -3,6 +3,10 @@ name: shorthand
 type: prompt
 temperature: 0.2
 max_tokens: 4096
+# Never model-selected: this rewrites prose documents in place, so
+# picking it for tool output is a correctness bug, not a wasted call.
+# Reached via `thlibo shorthand` only.
+routable: false
 description: >
   Compress LLM-facing prose (SKILL.md, CLAUDE.md, agents.md, system
   prompts) into token-efficient shorthand while preserving every

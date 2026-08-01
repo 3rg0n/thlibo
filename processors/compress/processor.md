@@ -5,6 +5,9 @@ temperature: 0.0
 top_p: 0.1
 top_k: 1
 max_tokens: 1200
+route_hint: >
+  Verbose or repetitive output with no dedicated filter — logs, build
+  chatter, mixed noise. The general fallback.
 description: >
   General-purpose compressor for verbose tool output that doesn't
   match any specialised filter. Emits a structured, deterministic

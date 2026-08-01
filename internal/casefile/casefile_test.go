@@ -1,6 +1,7 @@
 package casefile
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -174,5 +175,79 @@ func TestReductionPct(t *testing.T) {
 		if got := reductionPct(tc.src, tc.dst); got != tc.want {
 			t.Errorf("reductionPct(%d, %d) = %v, want %v", tc.src, tc.dst, got, tc.want)
 		}
+	}
+}
+
+// A binary source's byte count isn't comparable to extracted text, so the
+// reduction figure must be labelled rather than presented as a saving.
+// This is the metric that let pdf-to-md's slide-deck inflation read as an
+// 85% win (fixed in v0.11.2) — the number was right, the basis was wrong.
+func TestReductionBasis(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  []byte
+		want string
+	}{
+		{"plain text", []byte("On branch main\nnothing to commit\n"), BasisBytes},
+		{"utf-8 text with accents", []byte("café — naïve\n"), BasisBytes},
+		{"pdf header + NUL", append([]byte("%PDF-1.7\n"), 0x00, 'x'), BasisIncomparable},
+		{"empty", nil, BasisBytes},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := BasisBytes
+			if binarySource(tc.raw) {
+				got = BasisIncomparable
+			}
+			if got != tc.want {
+				t.Errorf("basis = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A NUL beyond the 8 KiB sniff window is not detected — documented
+// conservatism, not an oversight. A missed binary verdict leaves the
+// figure as misleading as it was before; it never breaks a case.
+func TestBinarySourceSniffsHeadOnly(t *testing.T) {
+	raw := append(bytes.Repeat([]byte("a"), 9000), 0x00)
+	if binarySource(raw) {
+		t.Error("sniff window should be bounded to the first 8 KiB")
+	}
+	if !binarySource(append(bytes.Repeat([]byte("a"), 100), 0x00)) {
+		t.Error("a NUL inside the window must be detected")
+	}
+}
+
+// The summary must carry the caveat, since that's where a human reads the
+// number. meta.json carries the machine-readable basis.
+func TestSummaryLabelsIncomparableReduction(t *testing.T) {
+	dir := t.TempDir()
+	meta := Meta{
+		ID: "x", SourcePath: "a.pdf", SourceSize: 1000, CompressedSize: 150,
+		ReductionPercent: 85.0, ReductionBasis: BasisIncomparable,
+		CreatedAt: time.Unix(0, 0).UTC(),
+	}
+	if err := writeSummary(dir, meta); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "summary.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "not a token saving") {
+		t.Errorf("summary must caveat an incomparable reduction:\n%s", got)
+	}
+
+	meta.ReductionBasis = BasisBytes
+	if err := writeSummary(dir, meta); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(filepath.Join(dir, "summary.md"))
+	if strings.Contains(string(got), "not a token saving") {
+		t.Errorf("a text source must not be caveated:\n%s", got)
+	}
+	if !strings.Contains(string(got), "reduction: 85.00%") {
+		t.Errorf("summary lost the reduction line:\n%s", got)
 	}
 }

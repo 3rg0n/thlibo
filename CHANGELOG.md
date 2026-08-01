@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A wedged inferd no longer hangs the AI client.** `inferd.Client.Post`
+  imposed no deadline and every hot-path caller passed
+  `context.Background()`, so a daemon that accepted the connection and
+  then never answered — mid model-load, thrashing on a swap, wedged on a
+  bad GGUF — blocked the PreToolUse hook indefinitely. ADR 0006 promises
+  fail *open*; an unbounded wait is a hang, not a fallback. Script
+  processors were already bounded at 30s, so a hanging script was handled
+  and a hanging daemon was not. Now bounded at 15s, in `Post` itself so
+  no call site can omit it, overridable via `$THLIBO_INFERD_TIMEOUT`
+  (`0` disables). 15s sits under the tightest hook budget we ship
+  (Cursor's 20s Read hook) so thlibo passes the original bytes through
+  before the host kills the hook. The bound is per round-trip, not per
+  subcommand — `thlibo case` on a scanned PDF makes one vision call per
+  page and still works. See [ADR 0012](docs/adr/0012-bounded-inference-calls.md).
+- **Timeouts are no longer misreported as script errors in telemetry.**
+  Cancellation closes the connection (ADR 0007), so an expired call
+  surfaced as "closed pipe" rather than its real cause, and
+  `dispatchFailReason` classified it as `script_error`. A wedged daemon
+  was invisible in the metrics. `Post` now normalises an expired call to
+  the context error, and both `dispatchFailReason` and the router's error
+  path match on the sentinel rather than on message text.
+- **A router-selected processor can no longer corrupt output on a backend
+  that ignores `response_format`.** `parseRouteResult` validated model-
+  emitted names against the whole registry, so an unconstrained backend
+  could get `shorthand` — which rewrites prose documents in place —
+  selected for tool output. It now validates against the router-eligible
+  set, and rejected names are reported as `Unknown` so the caller logs
+  them (THREAT_MODEL.md finding #12).
+
+### Changed
+
+- **Routing prompt cut 95%: ~2,332 tokens → ~123.** thlibo exists to
+  save tokens, so the ones it spends itself have to earn their keep, and
+  the routing call was not: 8,747 characters of system prompt plus a
+  383-character schema to classify a 200-character sample, a ~44:1 ratio.
+  It listed all 16 processors with their full human `description` —
+  including `lint-filter`'s TSV column docs and `pdf-to-md`'s ADR 0009
+  handoff notes, 5,848 characters the router cannot act on — and 15 of
+  those 16 were unreachable by that path anyway (13 dispatch by fast-path
+  regex first, `cordon-filter` is hardwired, `shorthand` has its own
+  subcommand). Two new descriptor fields: `route_hint` (short
+  routing-relevant summary, falls back to `description`) and
+  `routable: false` (keeps a processor out of the candidate set without
+  making it unreachable — fast-path, explicit chain, and hardwired
+  dispatch all still work). A registry with no eligible candidate now
+  makes no inference call at all. See
+  [ADR 0013](docs/adr/0013-router-candidate-eligibility.md).
+- **Case reduction figures are labelled when the basis isn't comparable.**
+  `meta.json` gains `reduction_basis`. For a binary source (PDF, MHTML
+  with embedded blobs) `compressed.log` holds *text* extracted from a
+  *compressed binary container*, so the ratio measures container
+  overhead, not token savings — a deck whose extracted text inflated
+  could still score "85% reduction" purely because the PDF was
+  zip-compressed, which is how the v0.11.2 `pdf-to-md` inflation went
+  unnoticed. `summary.md` now says "(not a token saving)" in that case.
+- **The savings table reports estimated tokens alongside bytes.**
+  `TestTokenSavingsTable` measured bytes despite its name, and bytes are a
+  biased proxy: filters strip whitespace and box-drawing (cheap in tokens,
+  expensive in bytes) while keeping identifiers and paths (the reverse),
+  so byte reduction systematically flatters the result. The table now
+  carries both columns and fails a filter that shows no estimated token
+  win. On the current fixtures the two agree closely (97.7%/97.0%,
+  99.4%/99.5%, 89.4%/89.6%), which retroactively validates the old
+  numbers while catching the case where it would not hold.
+
+### Removed
+
+- `router.Ask`, a package-level function with zero callers that
+  duplicated `ClientAdapter.askDetailed`.
+
 ## [0.11.2] - 2026-07-28
 
 ### Fixed

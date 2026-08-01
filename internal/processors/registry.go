@@ -231,6 +231,23 @@ func (r *Registry) Names() []string {
 	return out
 }
 
+// RoutableNames returns the names the routing model should choose from,
+// in the same deterministic order as Names. Processors already covered by
+// a fast-path regex, and those explicitly marked `routable: false`, are
+// omitted — they remain reachable by fast-path match, explicit chain, or
+// hardwired dispatch, but advertising them to the model costs prompt
+// tokens for a decision it will never usefully make. See
+// Descriptor.RouterEligible.
+func (r *Registry) RoutableNames() []string {
+	out := make([]string, 0, len(r.order))
+	for _, n := range r.order {
+		if d := r.byName[n]; d != nil && d.RouterEligible() {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // MatchFastPath returns the best descriptor whose Match regex hits
 // input, or nil. "Best" means: script processors win over prompt
 // processors on equal match, because script processors are
