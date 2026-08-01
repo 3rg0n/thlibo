@@ -1,6 +1,10 @@
 name: cordon-filter
 type: script
 entry: run.py
+# Never model-selected: dispatched by name as ndjson-filter's
+# over-collapse fallback (middleware.cordonFallback), or by an explicit
+# chain. Advertising it to the router only costs prompt tokens.
+routable: false
 description: >
   Semantic anomaly surfacer for unstructured / weakly-structured logs.
   Windows the input into N-line chunks, embeds each window via inferd's

@@ -138,16 +138,73 @@ func TestParseRouteResult(t *testing.T) {
 	}
 }
 
+// A backend that ignores response_format can name anything. A processor
+// marked `routable: false` must be rejected there too, not just omitted
+// from the enum — shorthand rewrites prose in place, so letting the model
+// select it for tool output would corrupt the output, not merely waste a
+// call.
+func TestParseRejectsUnroutableName(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		p := filepath.Join(dir, rel)
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("shorthand/processor.md", "---\nname: shorthand\ntype: prompt\nroutable: false\n---\nbody\n")
+	write("compress/processor.md", "---\nname: compress\ntype: prompt\n---\nbody\n")
+	write("git-filter/processor.yaml", "name: git-filter\ntype: script\nentry: r.py\nmatch: \"^On branch\"\n")
+	write("git-filter/r.py", "")
+	reg, _, _ := processors.Build(nil, os.DirFS(dir))
+
+	for _, name := range []string{"shorthand", "git-filter"} {
+		got := parseRouteResult(routeText(`["`+name+`"]`), reg)
+		if !got.Decision.Passthrough() {
+			t.Errorf("%q is not router-eligible but was accepted: chain=%v", name, got.Decision.Chain)
+		}
+		if len(got.Unknown) == 0 {
+			t.Errorf("%q should be reported as Unknown so the caller can log it", name)
+		}
+	}
+	// The eligible one still works.
+	if got := parseRouteResult(routeText(`["compress"]`), reg); got.Decision.Passthrough() {
+		t.Error("eligible processor was rejected")
+	}
+}
+
 // Ask with no processors short-circuits to passthrough without a
 // daemon call. Confirms Ask is safe to call on a cold middleware.
+// The nil Client is the assertion: dereferencing it would panic, so
+// reaching this test's end proves no round-trip was attempted.
 func TestAskEmptyRegistry(t *testing.T) {
 	reg, _, _ := processors.Build(nil, nil)
-	d, err := Ask(context.Background(), nil, reg, "anything")
+	a := &ClientAdapter{Client: nil}
+	d, err := a.Ask(context.Background(), reg, "anything")
 	if err != nil {
 		t.Fatalf("Ask: %v", err)
 	}
 	if !d.Passthrough() {
 		t.Error("empty registry should produce passthrough")
+	}
+}
+
+// The tokenomics case: a registry whose every processor is already
+// covered by a fast-path regex has no candidate the model could usefully
+// name, so Ask must not spend a round-trip. Nil Client again does the
+// asserting — a call would panic.
+func TestAskSkipsCallWhenNothingRoutable(t *testing.T) {
+	reg := fastPathOnlyRegistry(t)
+	if got := reg.RoutableNames(); len(got) != 0 {
+		t.Fatalf("fixture should have no routable processors, got %v", got)
+	}
+	a := &ClientAdapter{Client: nil}
+	d, err := a.Ask(context.Background(), reg, "On branch main\nnothing to commit\n")
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if !d.Passthrough() {
+		t.Errorf("want passthrough, got chain %v", d.Chain)
 	}
 }
 
@@ -168,4 +225,72 @@ func emptyRegistry(t *testing.T) *processors.Registry {
 	t.Helper()
 	r, _, _ := processors.Build(nil, nil)
 	return r
+}
+
+// fastPathOnlyRegistry mirrors the shipped built-in set's dominant shape:
+// every processor carries a match regex, so MatchFastPath answers first
+// and the router has nothing left to decide.
+func fastPathOnlyRegistry(t *testing.T) *processors.Registry {
+	t.Helper()
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		p := filepath.Join(dir, rel)
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("git-filter/processor.yaml", "name: git-filter\ntype: script\nentry: run.py\nmatch: \"^On branch\"\ndescription: git\n")
+	write("git-filter/run.py", "")
+	write("npm-filter/processor.yaml", "name: npm-filter\ntype: script\nentry: run.py\nmatch: \"npm (WARN|ERR)\"\ndescription: npm\n")
+	write("npm-filter/run.py", "")
+	r, _, _ := processors.Build(nil, os.DirFS(dir))
+	return r
+}
+
+// The prompt must advertise only router-eligible processors, described by
+// route_hint rather than the long human description. Both halves are
+// tokenomics: a candidate the router can't usefully pick, and prose the
+// router can't act on, are the same waste.
+func TestRoutingPromptTrimsToEligibleAndUsesHints(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		p := filepath.Join(dir, rel)
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Fast-path covered -> excluded.
+	write("git-filter/processor.yaml", "name: git-filter\ntype: script\nentry: run.py\nmatch: \"^On branch\"\ndescription: \"long human prose about git\"\n")
+	write("git-filter/run.py", "")
+	// Explicitly opted out -> excluded despite no match regex.
+	write("shorthand/processor.md", "---\nname: shorthand\ntype: prompt\nroutable: false\ndescription: \"rewrites prose in place\"\n---\nbody\n")
+	// Eligible, and carries a hint that must win over the description.
+	write("compress/processor.md", "---\nname: compress\ntype: prompt\nroute_hint: \"HINTED\"\ndescription: \"DESCRIPTIVE human paragraph\"\n---\nbody\n")
+	reg, _, _ := processors.Build(nil, os.DirFS(dir))
+
+	sys := buildRoutingMessages(reg, "in")[0].Content
+	if !strings.Contains(sys, "compress: HINTED") {
+		t.Errorf("route_hint should describe the processor:\n%s", sys)
+	}
+	if strings.Contains(sys, "DESCRIPTIVE") {
+		t.Error("route_hint set, yet the human description still shipped")
+	}
+	for _, gone := range []string{"git-filter", "shorthand"} {
+		if strings.Contains(sys, gone) {
+			t.Errorf("%q is not router-eligible but appears in the prompt:\n%s", gone, sys)
+		}
+	}
+	// The schema enum must mirror the prompt, or the grammar permits a
+	// name the model was never offered.
+	schema := string(routeSchema(reg))
+	if !strings.Contains(schema, `"compress"`) {
+		t.Errorf("eligible processor missing from schema enum: %s", schema)
+	}
+	for _, gone := range []string{`"git-filter"`, `"shorthand"`} {
+		if strings.Contains(schema, gone) {
+			t.Errorf("ineligible %s present in schema enum: %s", gone, schema)
+		}
+	}
 }

@@ -71,6 +71,10 @@ E4B model served by a sidecar:
    must never break the AI client. Script non-zero exit, inferd
    unreachable, parse failure, timeout → pass through the original
    bytes. Every hook script exits 0 on error. (ADR 0006 — fail open.)
+   **Fail open means fail *fast*:** every inference round-trip is
+   bounded in `inferd.Client.Post` (15s, `$THLIBO_INFERD_TIMEOUT`), never
+   at the call sites, because an unbounded wait on a wedged daemon is a
+   hang, not a fallback (ADR 0012).
 3. **Short-circuit before doing any work.** Input under
    `middleware.MinBytesForRouting` (2000 bytes) passes through without
    scanning processors or calling inferd.
@@ -97,6 +101,15 @@ Live in `~/.thlibo/processors/<name>/`. Two kinds:
 - `processor.md` → **prompt processor**. YAML frontmatter is config
   (`temperature`, `max_tokens`, `match`, `thinking`, etc.); the
   markdown body is the system prompt, sent to inferd verbatim.
+- **Routing fields (ADR 0013).** `route_hint` is the short "when should
+  I be picked?" line sent to the routing model — `description` is for
+  humans and runs long, and shipping it cost ~2,200 tokens of prompt per
+  routing call. `routable: false` keeps a processor out of the model's
+  candidate set entirely (set on `shorthand`, which rewrites prose in
+  place, and `cordon-filter`, which is hardwired); it stays reachable by
+  fast-path match, explicit chain, and hardwired dispatch. A processor
+  with a `match` regex is excluded by default, since `MatchFastPath`
+  answers before the router is consulted.
 - Both present → yaml wins for type, md body is the system prompt.
 - Neither → folder ignored.
 
@@ -139,6 +152,15 @@ The middleware sends prompt-processor work to inferd as a
 fully-formed request and gets compressed text back. The router uses
 `response_format` (JSON-Schema) to constrain routing output. On any
 failure to reach or parse, it fails open (ADR 0006).
+
+`Registry.RoutableNames()` is the single source of the router's candidate
+set, and three places must agree on it: the prompt's processor list, the
+schema `enum`, and `parseRouteResult`'s validation. The third is
+security-relevant, not just tidiness — a backend that ignores
+`response_format` can emit any name, so validating against the full
+registry would let the model select `shorthand` for tool output (ADR
+0013). If you add a candidate-filtering rule, change it in
+`RouterEligible` and all three follow.
 
 ## Adapters
 

@@ -46,6 +46,30 @@ type Descriptor struct {
 	CommandPrefixes []string `yaml:"command_prefixes" json:"command_prefixes,omitempty"`
 	Description     string   `yaml:"description" json:"description,omitempty"`
 
+	// RouteHint is the one-line "when should I be picked?" summary sent
+	// to the routing model. Description is written for humans and runs
+	// long — it documents output schemas, env knobs, and ADR references
+	// that the router cannot act on. Shipping all of it cost ~2,200
+	// tokens of prompt to classify a 200-char sample; RouteHint is the
+	// routing-relevant subset. Empty falls back to Description so a user
+	// processor that predates this field still routes.
+	RouteHint string `yaml:"route_hint" json:"route_hint,omitempty"`
+
+	// Routable, when explicitly false, keeps this processor out of the
+	// routing model's candidate set. It does NOT make the processor
+	// unreachable — fast-path match, an explicit chain, and hardwired
+	// dispatch all still work. Use it for processors the model must never
+	// pick on its own:
+	//
+	//	shorthand      rewrites prose documents in place; picking it for
+	//	               tool output would be a correctness bug, not just
+	//	               a wasted call
+	//	cordon-filter  hardwired as ndjson-filter's over-collapse fallback
+	//	               (middleware.cordonFallback), never model-selected
+	//
+	// Nil means "default", which RouterEligible resolves per-descriptor.
+	Routable *bool `yaml:"routable" json:"routable,omitempty"`
+
 	// Prompt processor knobs (frontmatter fields). All optional;
 	// daemon defaults apply when zero.
 	Temperature *float64 `yaml:"temperature"    json:"temperature,omitempty"`
@@ -111,6 +135,37 @@ func (o OriginSource) String() string {
 		return "user"
 	}
 	return "builtin"
+}
+
+// RoutingBlurb is the text describing this processor to the routing
+// model: RouteHint when set, else the (longer, human-oriented)
+// Description. Callers single-line it before use.
+func (d *Descriptor) RoutingBlurb() string {
+	if h := strings.TrimSpace(d.RouteHint); h != "" {
+		return h
+	}
+	return strings.TrimSpace(d.Description)
+}
+
+// RouterEligible reports whether the routing model should be offered
+// this processor as a candidate.
+//
+// An explicit `routable:` in the descriptor always wins. Otherwise the
+// default is "eligible unless a fast-path regex already covers it": if
+// Match fires, MatchFastPath dispatches before the router is ever asked,
+// so naming the processor in the prompt buys nothing — and on input its
+// own regex declined, the filter either returns the bytes unchanged or
+// returns nothing (both land on a middleware fallback). Paying prompt
+// tokens to advertise it is pure overhead.
+//
+// Excluded processors stay fully reachable via fast-path match, an
+// explicit chain, and hardwired dispatch. This trims the prompt, not the
+// capability.
+func (d *Descriptor) RouterEligible() bool {
+	if d.Routable != nil {
+		return *d.Routable
+	}
+	return d.Match == ""
 }
 
 // Match reports whether d's fast-path regex matches input. False when

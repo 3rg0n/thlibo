@@ -183,11 +183,13 @@ func (p *Pipeline) decide(ctx context.Context, raw string) (string, telemetry.In
 	// B5/B6/B7: routing call.
 	decision, err := p.Router.Ask(ctx, p.Registry, raw)
 	if err != nil {
-		// B8a/B8b: daemon unreachable or timeout -> passthrough.
+		// B8a/B8b: daemon unreachable or timeout -> passthrough. Classify
+		// which, so a wedged daemon is distinguishable from a malformed
+		// routing reply in the metrics.
 		p.warn("router: " + err.Error())
 		return raw, telemetry.Invocation{
 			Path: telemetry.PathRouter, Outcome: telemetry.OutcomeFallback,
-			Fallback: telemetry.ReasonRouterError,
+			Fallback: routerFailReason(err),
 		}
 	}
 	if decision.Passthrough() {
@@ -244,12 +246,36 @@ func dispatchFailReason(err error) string {
 	if err == nil {
 		return ""
 	}
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, "timed out"):
+	// A blown inferd deadline arrives as context.DeadlineExceeded, which
+	// says "context deadline exceeded" — not "timed out" — so match on the
+	// sentinel rather than the string. Script-processor timeouts still
+	// arrive as the formatted "timed out after Xs" message from dispatch.
+	if errors.Is(err, context.DeadlineExceeded) {
 		return telemetry.ReasonTimeout
+	}
+	if errors.Is(err, inferd.ErrBackendNotReady) {
+		return telemetry.ReasonInferdUnreachable
+	}
+	if strings.Contains(err.Error(), "timed out") {
+		return telemetry.ReasonTimeout
+	}
+	return telemetry.ReasonScriptError
+}
+
+// routerFailReason classifies why the routing call failed. A blown
+// deadline and an unreachable socket are operationally different things
+// — one means the daemon is wedged, the other means it isn't there — and
+// only the first is actionable by restarting inferd.
+func routerFailReason(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.DeadlineExceeded):
+		return telemetry.ReasonTimeout
+	case errors.Is(err, inferd.ErrBackendNotReady):
+		return telemetry.ReasonInferdUnreachable
 	default:
-		return telemetry.ReasonScriptError
+		return telemetry.ReasonRouterError
 	}
 }
 

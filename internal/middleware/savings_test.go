@@ -62,8 +62,14 @@ func TestTokenSavingsTable(t *testing.T) {
 
 	var report strings.Builder
 	fmt.Fprintln(&report)
-	fmt.Fprintln(&report, "| processor | fixture | raw bytes | compressed bytes | reduction |")
-	fmt.Fprintln(&report, "|---|---|---:|---:|---:|")
+	// Both figures, because they disagree and the token column is the one
+	// that matches thlibo's value proposition. Byte reduction is
+	// systematically optimistic: filters strip whitespace and box-drawing
+	// (cheap in tokens, expensive in bytes) while keeping identifiers and
+	// paths (the reverse). See estimateTokens for the model and its
+	// limits — the token column is an estimate, not a tokenizer's count.
+	fmt.Fprintln(&report, "| processor | fixture | raw bytes | compressed bytes | byte reduction | est. raw tokens | est. compressed tokens | est. token reduction |")
+	fmt.Fprintln(&report, "|---|---|---:|---:|---:|---:|---:|---:|")
 
 	for _, c := range cases {
 		d := reg.Get(c.processor)
@@ -95,8 +101,22 @@ func TestTokenSavingsTable(t *testing.T) {
 				c.processor, c.fixture, raw, compressed)
 		}
 		pct := 100.0 - (float64(compressed)*100.0)/float64(raw)
-		fmt.Fprintf(&report, "| %s | %s | %d | %d | %.1f%% |\n",
-			c.processor, c.fixture, raw, compressed, pct)
+
+		rawTok := estimateTokens(c.input)
+		compTok := estimateTokens(out.String())
+		tokPct := 0.0
+		if rawTok > 0 {
+			tokPct = 100.0 - (float64(compTok)*100.0)/float64(rawTok)
+		}
+		// A filter must win on tokens, not just on stripped whitespace —
+		// tokens are what thlibo actually bills the frontier model for.
+		if compTok >= rawTok {
+			t.Errorf("%s/%s: no estimated token saving (raw=%d compressed=%d est. tokens); "+
+				"byte reduction of %.1f%% came from whitespace, not content",
+				c.processor, c.fixture, rawTok, compTok, pct)
+		}
+		fmt.Fprintf(&report, "| %s | %s | %d | %d | %.1f%% | %d | %d | %.1f%% |\n",
+			c.processor, c.fixture, raw, compressed, pct, rawTok, compTok, tokPct)
 	}
 
 	// Always log the report — the test is "passing" as long as

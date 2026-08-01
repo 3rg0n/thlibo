@@ -41,31 +41,6 @@ func (d Decision) Passthrough() bool { return len(d.Chain) == 0 }
 // the output's shape and keeps the routing call fast.
 const RouteInput = 200
 
-// Ask sends input + registry description to the daemon and returns a
-// Decision. Unknown processor names in the response are filtered out
-// (B8c: fallback to original input on unknown name).
-//
-// Any error from the daemon (B8a/B8b) or an empty chain produces a
-// Passthrough decision so callers can uniformly treat "route failed"
-// and "route said none" the same way.
-func Ask(ctx context.Context, client *inferd.Client, reg *processors.Registry, input string) (Decision, error) {
-	names := reg.Names()
-	if len(names) == 0 {
-		return Decision{}, nil
-	}
-
-	// Sanitize before truncating: the marker breaks lie at exact
-	// substring positions, so truncation after sanitize cannot split
-	// a ZWSP-separated pair. See THREAT_MODEL.md finding #3.
-	req := buildRouteRequest(reg, truncate(promptsan.Sanitize(input), RouteInput))
-
-	res, err := client.Post(ctx, req)
-	if err != nil {
-		return Decision{}, err
-	}
-	return parseRouteResult(res, reg).Decision, nil
-}
-
 // buildRouteRequest assembles the v0.5 routing request: the system+user
 // messages plus a response_format JSON-Schema constraint
 // (protocol-v2.md §3.2a). On a backend that supports structured output
@@ -100,16 +75,20 @@ func buildRoutingMessages(reg *processors.Registry, input string) []inferd.Messa
 	sysb.WriteString("object {\"processors\": [...]} naming the ordered processor chain.\n")
 	sysb.WriteString("Use an empty array to leave the input unchanged.\n\n")
 	sysb.WriteString("Available processors:\n")
-	for _, n := range reg.Names() {
+	// Router-eligible names only, described by RouteHint rather than the
+	// long human Description. The registry's other processors are reached
+	// by fast-path regex or hardwired dispatch, so listing them here only
+	// inflates the prompt.
+	for _, n := range reg.RoutableNames() {
 		d := reg.Get(n)
-		desc := strings.TrimSpace(d.Description)
-		if desc == "" {
-			desc = "(no description)"
+		blurb := d.RoutingBlurb()
+		if blurb == "" {
+			blurb = "(no description)"
 		}
 		sysb.WriteString("  - ")
 		sysb.WriteString(n)
 		sysb.WriteString(": ")
-		sysb.WriteString(singleLine(desc))
+		sysb.WriteString(singleLine(blurb))
 		sysb.WriteString("\n")
 	}
 
@@ -121,14 +100,15 @@ func buildRoutingMessages(reg *processors.Registry, input string) []inferd.Messa
 
 // routeSchema builds the JSON Schema the router constrains output to
 // (protocol-v2.md §3.2a): an object with a single `processors` array of
-// strings, enumerated to the registered names. On llamacpp this becomes
-// a GBNF grammar, so the model's text output is guaranteed valid JSON
-// matching this shape. parseRouteResult still validates names against
-// the registry and falls open on any mismatch (defence in depth, and
-// it covers backends that ignore response_format).
+// strings, enumerated to the router-eligible names. On llamacpp this
+// becomes a GBNF grammar, so the model's text output is guaranteed valid
+// JSON matching this shape. parseRouteResult still validates names
+// against the same eligible set and falls open on any mismatch (defence
+// in depth, and it covers backends that ignore response_format).
 func routeSchema(reg *processors.Registry) json.RawMessage {
-	names := reg.Names()
-	enum, _ := json.Marshal(names)
+	// Enum must mirror the candidate set in the system prompt, or the
+	// grammar would permit a name the prompt never offered.
+	enum, _ := json.Marshal(reg.RoutableNames())
 	schema := `{"type":"object","properties":{"processors":{"type":"array","items":{"type":"string","enum":` +
 		string(enum) +
 		`}}},"required":["processors"],"additionalProperties":false}`
@@ -171,11 +151,25 @@ func parseRouteResult(res inferd.Result, reg *processors.Registry) ParseResult {
 		return ParseResult{} // explicit empty chain -> passthrough
 	}
 
+	// Validate against the *routable* set, not the whole registry. On a
+	// backend that honours response_format the enum makes this redundant,
+	// but on one that ignores it the model can name anything — and
+	// `routable: false` exists for processors that must never be
+	// model-selected (shorthand rewrites prose in place; running it on
+	// tool output is a correctness bug). Checking the full registry here
+	// would let exactly that through. Unroutable names are reported as
+	// Unknown, so the caller logs them as the security-relevant signal
+	// they are (THREAT_MODEL.md finding #12).
+	eligible := make(map[string]struct{}, len(args.Processors))
+	for _, n := range reg.RoutableNames() {
+		eligible[n] = struct{}{}
+	}
+
 	valid := make([]string, 0, len(args.Processors))
 	var unknown []string
 	for _, name := range args.Processors {
 		name = strings.TrimSpace(name)
-		if name == "" || reg.Get(name) == nil {
+		if _, ok := eligible[name]; !ok {
 			unknown = append(unknown, name)
 			continue
 		}
@@ -226,10 +220,16 @@ func (a *ClientAdapter) Ask(ctx context.Context, reg *processors.Registry, input
 }
 
 func (a *ClientAdapter) askDetailed(ctx context.Context, reg *processors.Registry, input string) (Decision, error) {
-	names := reg.Names()
-	if len(names) == 0 {
+	// No candidate the model could name → don't spend a round-trip asking.
+	// This is the common case once fast-path-covered processors are
+	// excluded, and it's the whole point of the eligibility filter: the
+	// routing call only happens when its answer can change the outcome.
+	if len(reg.RoutableNames()) == 0 {
 		return Decision{}, nil
 	}
+	// Sanitize before truncating: the marker breaks lie at exact substring
+	// positions, so truncation after sanitize cannot split a ZWSP-separated
+	// pair. See THREAT_MODEL.md finding #3.
 	req := buildRouteRequest(reg, truncate(promptsan.Sanitize(input), RouteInput))
 
 	res, err := a.Client.Post(ctx, req)

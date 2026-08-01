@@ -16,6 +16,8 @@ implementation choices aren't.
 | [0009](0009-pdf-image-ocr-via-gemma-vision.md) | Scanned-PDF OCR via Gemma vision, dispatched Go-side | Accepted |
 | [0010](0010-native-go-processors.md) | Reimplement the 9 deterministic built-in processors as native Go (`pdf-to-md` / `cordon-filter` stay Python) | Accepted |
 | [0011](0011-optional-otel-emission.md) | Optional OpenTelemetry emission (metrics + events), opt-in and content-free | Accepted |
+| [0012](0012-bounded-inference-calls.md) | Every inference call carries a deadline (fail open means fail *fast*) | Accepted |
+| [0013](0013-router-candidate-eligibility.md) | The router only sees processors it can usefully pick (`route_hint` / `routable`) | Accepted |
 
 ## Writing a new ADR
 

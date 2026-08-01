@@ -54,8 +54,19 @@ type Meta struct {
 	// CompressedSize is the size of compressed.log in bytes.
 	CompressedSize int64 `json:"compressed_size"`
 	// ReductionPercent is 100 * (1 - compressed/source). Rounded
-	// to two decimals.
+	// to two decimals. Meaningful only when ReductionBasis is
+	// BasisBytes; see that field.
 	ReductionPercent float64 `json:"reduction_percent"`
+	// ReductionBasis says whether ReductionPercent is a like-for-like
+	// comparison. For a text source it is BasisBytes and the percentage
+	// means what it says. For a binary source (PDF, MHTML with embedded
+	// blobs) it is BasisIncomparable: compressed.log holds *text*
+	// extracted from a *compressed binary container*, so the ratio
+	// measures container overhead, not token savings. A scanned PDF whose
+	// transcription inflated the extractable text could still score "85%
+	// reduction" purely because the PDF was zip-compressed — which is how
+	// pdf-to-md's slide-deck inflation went unnoticed until v0.11.2.
+	ReductionBasis string `json:"reduction_basis,omitempty"`
 	// CreatedAt is when the case was written.
 	CreatedAt time.Time `json:"created_at"`
 	// Fallback is true iff the compression pipeline errored out
@@ -238,12 +249,17 @@ func Create(ctx context.Context, sourcePath string, opts Options) (*Result, erro
 		return nil, fmt.Errorf("casefile: write compressed.log: %w", err)
 	}
 
+	basis := BasisBytes
+	if binarySource(raw) {
+		basis = BasisIncomparable
+	}
 	meta := Meta{
 		ID:               id,
 		SourcePath:       abs,
 		SourceSize:       info.Size(),
 		CompressedSize:   int64(len(compressed)),
 		ReductionPercent: reductionPct(info.Size(), int64(len(compressed))),
+		ReductionBasis:   basis,
 		CreatedAt:        now,
 		Fallback:         fallback,
 		LowValue:         lowValue,
@@ -299,16 +315,24 @@ func writeSummary(dir string, meta Meta) error {
 	if meta.LowValue {
 		lvNote = "- **Note:** compressed.log contains placeholder content only (e.g. a scanned PDF whose vision OCR was unavailable). The Read hook should have let the original read pass through.\n"
 	}
+	// A binary source's byte count isn't comparable to extracted text, so
+	// label the figure rather than letting it read as a token saving.
+	reductionLine := fmt.Sprintf("- reduction: %.2f%%\n", meta.ReductionPercent)
+	if meta.ReductionBasis == BasisIncomparable {
+		reductionLine = fmt.Sprintf(
+			"- reduction: %.2f%% **(not a token saving)** — the source is a binary\n"+
+				"  container, so its byte count is not comparable to extracted text.\n",
+			meta.ReductionPercent)
+	}
 	body := fmt.Sprintf(`# thlibo case %s
 
 - source: %s
 - captured: %s
 - source size: %d bytes
 - compressed size: %d bytes
-- reduction: %.2f%%
-%s%s%s`,
+%s%s%s%s`,
 		meta.ID, meta.SourcePath, meta.CreatedAt.Format(time.RFC3339),
-		meta.SourceSize, meta.CompressedSize, meta.ReductionPercent,
+		meta.SourceSize, meta.CompressedSize, reductionLine,
 		verLine, fbNote, lvNote)
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(body), 0o600)
 }
@@ -331,6 +355,31 @@ func stripSentinelLine(buf []byte) []byte {
 		out = append(out, line)
 	}
 	return bytes.Join(out, []byte("\n"))
+}
+
+// Reduction basis values for Meta.ReductionBasis.
+const (
+	// BasisBytes: source and compressed are both text, so the byte ratio
+	// is a fair (if approximate) stand-in for token savings.
+	BasisBytes = "bytes"
+	// BasisIncomparable: the source is a binary container and its byte
+	// count is not comparable to extracted text. ReductionPercent is
+	// retained for continuity but must not be read as a saving.
+	BasisIncomparable = "incomparable-binary-source"
+)
+
+// binarySource reports whether raw looks like a binary container rather
+// than text. A NUL byte in the first 8 KiB is the classic test and is
+// what every binary format thlibo handles (PDF, zip-based MHTML/OOXML)
+// trips immediately; UTF-8 text never contains one. Deliberately cheap
+// and conservative: a false "text" verdict only makes the reduction
+// figure as misleading as it was before, never breaks a case.
+func binarySource(raw []byte) bool {
+	head := raw
+	if len(head) > 8192 {
+		head = head[:8192]
+	}
+	return bytes.IndexByte(head, 0x00) >= 0
 }
 
 func reductionPct(source, compressed int64) float64 {
