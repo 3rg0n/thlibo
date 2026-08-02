@@ -180,6 +180,17 @@ func (p *Pipeline) decide(ctx context.Context, raw string) (string, telemetry.In
 		}
 	}
 
+	// No fast-path match on a binary container -> passthrough without a
+	// routing call. MatchFastPath refuses line-shape filters on binary
+	// input (ADR 0014), and a signature would already have won above, so
+	// reaching here means no processor claims these bytes. Asking the
+	// router would sample the container into a prompt and spend a
+	// round-trip to be told "none" — the bytes leave the process for a
+	// decision we can make locally.
+	if processors.BinaryLooking(raw) {
+		return raw, telemetry.Invocation{Path: telemetry.PathPassthrough, Outcome: telemetry.OutcomePassthrough}
+	}
+
 	// B5/B6/B7: routing call.
 	decision, err := p.Router.Ask(ctx, p.Registry, raw)
 	if err != nil {

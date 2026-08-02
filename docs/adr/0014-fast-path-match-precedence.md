@@ -102,10 +102,22 @@ and 3) when the input's first 8 KiB contains a NUL byte — the same test
 `internal/casefile.binarySource` already uses, for the same reason. Valid
 UTF-8 never contains a NUL; every binary format thlibo handles trips it
 immediately. Signatures are deliberately **exempt**: a format signature on
-a binary container is precisely the right match.
+a binary container is precisely the right match. Skipped candidates are
+skipped *before* their regex runs, since matching 15 patterns against a
+multi-megabyte container is the expensive part.
 
 Both halves are needed. Tier 1 fixes PDF-vs-go-test; only the guard covers
 the archives, which have no signature processor to win on their behalf.
+
+**Binary input with no signature passes through without a routing call.**
+The guard leaves such input with no fast-path match, and the middleware's
+next step is the router — so on its own the guard would trade a local
+corruption for an inference round-trip that samples the container's bytes
+into a prompt and comes back "none". That is worse than the no-op it
+replaced, because those bytes leave the process to answer a question we
+can answer locally. `decide()` therefore checks
+`processors.BinaryLooking` after the fast path and passes through. A
+signature match already returned above, so `pdf-to-md` is unaffected.
 
 ## Consequences
 
@@ -120,10 +132,15 @@ the archives, which have no signature processor to win on their behalf.
 - Both fallback directions are safe. A false "text" verdict only restores
   the previous behaviour, and a false "binary" verdict costs a fast-path
   dispatch that would have been operating on non-text anyway.
-- New cost: `MatchFastPath` now scans all candidates instead of returning
-  on the first script/native hit, plus one 8 KiB NUL scan. Both are
-  negligible next to the dispatch they gate, and the short-circuit at
-  `middleware.MinBytesForRouting` (invariant #3) still runs first.
+- Binary containers get **cheaper**, not just safer: skipping the line-
+  shape regexes instead of running them took a 6.5 MB `.tar.gz` from
+  2.28s to 0.52s end-to-end, the balance being the eliminated routing
+  call and 15 unnecessary multi-megabyte regex scans.
+- New cost on the text path: `MatchFastPath` now scans all candidates
+  instead of returning on the first script/native hit, plus one 8 KiB NUL
+  scan. Both are negligible next to the dispatch they gate, and the
+  short-circuit at `middleware.MinBytesForRouting` (invariant #3) still
+  runs first.
 - A user processor wanting signature precedence anchors its regex with `^`
   or `\A` and omits `(?m)`. Nothing to configure.
 - Regression coverage in `internal/processors/signature_test.go` pins the

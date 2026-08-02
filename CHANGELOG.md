@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   were being silently line-filtered out of their compressed streams; they
   now pass through byte-exact. Signatures are exempt from that guard, a
   format signature on a binary container being exactly the right match.
+  Binary input that no signature claims now also **passes through without
+  a routing call** — otherwise the guard would just trade local corruption
+  for an inference round-trip that samples the container into a prompt and
+  returns "none", sending those bytes off-process to answer a question
+  answerable locally. Skipping the line-shape regexes rather than running
+  and discarding them also makes this path markedly faster: a 6.5 MB
+  `.tar.gz` went 2.28s → 0.52s end-to-end.
   Fixes #97. See [ADR 0014](docs/adr/0014-fast-path-match-precedence.md).
 - **A wedged inferd no longer hangs the AI client.** `inferd.Client.Post`
   imposed no deadline and every hot-path caller passed

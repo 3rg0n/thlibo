@@ -281,6 +281,13 @@ func (r *Registry) MatchFastPath(input string) *Descriptor {
 	var lineScript, linePrompt *Descriptor
 	for _, n := range r.order {
 		d := r.byName[n]
+		// Tiers 2-3 are line shapes. On binary input they are all
+		// coincidence — a text filter has no business rewriting a
+		// container — so skip them without even running the regex, which
+		// on a multi-megabyte container is the expensive part.
+		if binary && !d.MatchIsSignature() {
+			continue
+		}
 		if !d.MatchesFastPath(input) {
 			continue
 		}
@@ -288,13 +295,6 @@ func (r *Registry) MatchFastPath(input string) *Descriptor {
 		// the first signature hit is a deterministic winner.
 		if d.MatchIsSignature() {
 			return d
-		}
-		// Tiers 2-3 are line shapes. On binary input they are all
-		// coincidence — a text filter has no business rewriting a
-		// container — so record nothing and let the caller fall through
-		// to the router/passthrough.
-		if binary {
-			continue
 		}
 		if d.Type == KindScript || d.Type == KindNative {
 			if lineScript == nil {
@@ -311,6 +311,17 @@ func (r *Registry) MatchFastPath(input string) *Descriptor {
 	}
 	return linePrompt
 }
+
+// BinaryLooking reports whether input should be treated as a binary
+// container rather than text. Exported so the middleware can skip the
+// routing call for input no text processor should touch: dropping the
+// line-shape filters (see MatchFastPath) leaves such input with no
+// fast-path match, and falling through to the router would sample the
+// container's bytes and spend an inference round-trip to be told
+// "none" — worse than the local no-op it replaced, since those bytes
+// then leave the process. A signature match still wins first, so
+// pdf-to-md is unaffected.
+func BinaryLooking(input string) bool { return binaryLooking(input) }
 
 // binaryBySniffLen is how far into the input binaryLooking looks for a NUL
 // byte. 8 KiB matches internal/casefile's sniffer, which uses the same
