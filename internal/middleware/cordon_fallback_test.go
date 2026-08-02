@@ -7,7 +7,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/3rg0n/thlibo/internal/inferd"
 	"github.com/3rg0n/thlibo/internal/processors"
 )
 
@@ -51,6 +53,14 @@ func TestOverCollapsed(t *testing.T) {
 // filters (incl. the native ndjson-filter) plus a user-dir cordon-filter
 // script that shadows the real one with deterministic behaviour: it
 // prints the fixed `stubOut` and exits 0 (no inferd needed).
+//
+// A script shadow, even though cordon-filter is itself native now (ADR
+// 0010): these tests are about the middleware's wiring — the
+// over-collapse heuristic, dispatch by name, and the prefer-only-if-better
+// rule — not about cordon's own behaviour, which internal/processors
+// covers against a deterministic embedder. Shadowing with a script keeps
+// the assertions readable and exercises the user-override path at the same
+// time. Nothing here depends on cordon being a script.
 func registryWithCordonStub(t *testing.T, stubOut string) *processors.Registry {
 	t.Helper()
 	userDir := t.TempDir()
@@ -167,7 +177,76 @@ func TestCordonFallbackSkippedForHealthyLog(t *testing.T) {
 	}
 }
 
+// TestCordonBuiltinIsNative pins the ADR 0016 port at the descriptor
+// level. The tests above deliberately shadow cordon with a script, so
+// none of them would notice if the embedded descriptor regressed to
+// `type: script` — and a regression there is silent on any machine with
+// python3 installed, which includes every developer's.
+func TestCordonBuiltinIsNative(t *testing.T) {
+	reg, _, err := BuildRegistry(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := reg.Get("cordon-filter")
+	if d == nil {
+		t.Fatal("cordon-filter is not in the registry")
+	}
+	if d.Type != processors.KindNative {
+		t.Errorf("cordon-filter is %q, want native (ADR 0016)", d.Type)
+	}
+	if d.Entry != "" {
+		t.Errorf("a native processor must not declare an entry file, got %q", d.Entry)
+	}
+	if d.RouterEligible() {
+		t.Error("cordon-filter must stay out of the router's candidate set (ADR 0013)")
+	}
+}
+
+// TestCordonFallbackFailsOpenWithoutInferd is the real filter, not a
+// stub, with no inferd running: the fallback must fire, cordon must fail
+// open to verbatim, and the pipeline must therefore keep ndjson's output.
+// This is the path a user hits when the daemon is down (ADR 0006), and it
+// is the one the numpy soft-import used to cover.
+func TestCordonFallbackFailsOpenWithoutInferd(t *testing.T) {
+	// The assertion is only meaningful with no embedding backend: a live
+	// daemon would make cordon succeed, and then preferring its richer
+	// output over ndjson's collapse would be correct behaviour failing this
+	// test. Skip rather than assert something that isn't being tested.
+	if embedSocketAnswers(t) {
+		t.Skip("an inferd embed socket is listening; this test covers the daemon-down path")
+	}
+	t.Setenv("CORDON_TIMEOUT", "2")
+	reg, _, err := BuildRegistry(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Pipeline{Registry: reg, Dispatcher: &processors.Dispatcher{}}
+
+	raw := accessLog(300)
+	out, _ := p.decide(context.Background(), raw)
+
+	if out == raw {
+		t.Error("output is the raw input: ndjson's collapse was discarded on cordon's fail-open")
+	}
+	if countNonEmptyLines(out) >= countNonEmptyLines(raw) {
+		t.Errorf("expected ndjson's collapsed output, got %d lines", countNonEmptyLines(out))
+	}
+}
+
 // --- helpers ---
+
+// embedSocketAnswers reports whether something is listening on inferd's
+// embed socket. A successful Embed of one trivial input is the only
+// reliable probe: on Windows the endpoint is a named pipe, so a filesystem
+// stat says nothing.
+func embedSocketAnswers(t *testing.T) bool {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	c := &inferd.EmbedClient{Timeout: 2 * time.Second}
+	_, err := c.Embed(ctx, []string{"probe"})
+	return err == nil
+}
 
 func requireShellForScripts(t *testing.T) {
 	t.Helper()

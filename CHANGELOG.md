@@ -238,6 +238,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`cordon-filter` is native Go; numpy is no longer a dependency of
+  anything.** ADR 0010 held cordon back as Python because ADR 0008 had
+  measured a ~100× gap between vectorised numpy and nested Python loops.
+  That comparison was about Python, not about the math: the Go equivalent
+  is a compiled nested loop, so both halves of the trade-off — 5 lines vs
+  40, 100ms vs 10s — disappear along with the interpreter. The reason to
+  care is not the port itself but *who was paying for it*: cordon fires
+  automatically as `ndjson-filter`'s over-collapse fallback, so a user who
+  never opted into anything could hit a missing numpy and get passthrough
+  where they expected compression — the exact silent-failure footgun ADR
+  0010 set out to remove. Python is now needed nowhere on the compression
+  path; the one remaining use is `pdf-to-md`'s page rasterization for
+  scanned PDFs, which only PDF users reach.
+  Three supporting changes, each deliberately narrow. `NativeCtxFilter`
+  sits *alongside* `NativeFilter` rather than replacing it — the ctx-free
+  signature is what states at the type level that a filter does no I/O,
+  which is true of all 12 others, and `RegisterNative` adapts into one
+  shared registry so a duplicate name stays a build-time panic instead of
+  becoming a silent shadow. `inferd.EmbedClient` adds the embedding wire
+  (line-delimited JSON, its own socket, per inferd ADR 0017), sharing only
+  the dialers with the length-prefixed generation protocol. And
+  `CORDON_TIMEOUT` (30s) is a *replacement*, not an addition: as a script
+  processor cordon was bounded by the dispatcher's 30s `ScriptTimeout` and
+  its own 60s embed timeout was never reachable, so dropping the
+  subprocess without restoring that ceiling would have turned a wedged
+  daemon from a bounded fallback into a hung PreToolUse hook (ADR 0012).
+  Parity is pinned by 43 signature/level cases captured from the running
+  `run.py` before retirement — cordon's *output* can't be golden-tested
+  the way the ADR 0010 ports were, because the ranking is a function of a
+  live model's embeddings, so the deterministic layer is asserted against
+  Python and the scoring layer against an injected deterministic embedder.
+  Those fixtures cannot be regenerated; a change to them is a behaviour
+  change, not a test fix. `run.py` stays on disk as the reference, as with
+  every other ported filter.
+  See [ADR 0016](docs/adr/0016-native-go-cordon-filter.md), which
+  supersedes [ADR 0008](docs/adr/0008-numpy-as-processor-dep.md).
 - **Routing prompt cut 95%: ~2,332 tokens → ~123.** thlibo exists to
   save tokens, so the ones it spends itself have to earn their keep, and
   the routing call was not: 8,747 characters of system prompt plus a

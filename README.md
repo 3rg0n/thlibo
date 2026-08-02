@@ -113,7 +113,7 @@ mangling, using the document's own structure tree when it has one.
 rasterized and handed to inferd's Gemma vision model for OCR (see below).
 Prompt processors (`compress`, `casefolder`, `shorthand`) dispatch
 through inferd for LLM-driven summarisation of unfamiliar output.
-`cordon-filter` (semantic anomaly surfacer, Python + numpy) embeds
+`cordon-filter` (semantic anomaly surfacer, native Go) embeds
 windows via inferd and surfaces the rare ones — it runs automatically as
 a fallback when `ndjson-filter` over-collapses a log (e.g. an access log
 where every line shares the same level+msg), restoring the outliers a
@@ -181,12 +181,12 @@ $env:THLIBO_CODEX=1; $env:THLIBO_CURSOR=1; $env:THLIBO_COPILOT=1; irm https://ra
 
 ### Prerequisites for running
 
-- **Python 3.8+ — optional.** The common built-in filters (git, npm,
-  cargo, go test, pytest, lint, trivy, ndjson, stacktrace, **pdf**) are
-  native Go and need no Python. Python is only required for **scanned**
-  PDFs (`pdf-to-md` rasterizes their pages for OCR; born-digital PDFs
-  don't touch it) and the **`cordon-filter`** anomaly surfacer (uses
-  numpy), plus any of your own `.py` processors.
+- **Python 3.8+ — optional.** Every built-in filter (git, npm, cargo,
+  go test, pytest, lint, trivy, ndjson, stacktrace, **pdf**, **cordon**)
+  is native Go and needs no Python. Python is only required for
+  **scanned** PDFs (`pdf-to-md` rasterizes their pages for OCR;
+  born-digital PDFs don't touch it), plus any of your own `.py`
+  processors.
 - `jq` — the Claude Code hook shell script needs it. Install via
   your package manager or `winget install jqlang.jq` on Windows.
 - `git` — for git-related compression you probably have it already.

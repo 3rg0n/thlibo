@@ -12,14 +12,15 @@ implementation choices aren't.
 | [0005](0005-extract-inference-to-inferd.md) | Extract inference to a separate `inferd` service | Accepted |
 | [0006](0006-fail-open-during-inferd-bootstrap.md) | Fail open during the inferd bootstrap window | Accepted |
 | [0007](0007-pdf-to-markdown.md) | PDF → Markdown converter (pypdf + pdfplumber, Python script processor) | Superseded by [0015](0015-native-go-pdf-extraction.md) (library + architecture); scanned-PDF deferral superseded by [0009](0009-pdf-image-ocr-via-gemma-vision.md) |
-| [0008](0008-numpy-as-processor-dep.md) | numpy as a processor dep, soft-imported with passthrough fallback | Accepted |
+| [0008](0008-numpy-as-processor-dep.md) | numpy as a processor dep, soft-imported with passthrough fallback | Superseded by [0016](0016-native-go-cordon-filter.md) (the numpy dep itself; the soft-import pattern still stands for `pdf-to-md` per [0007](0007-pdf-to-markdown.md)) |
 | [0009](0009-pdf-image-ocr-via-gemma-vision.md) | Scanned-PDF OCR via Gemma vision, dispatched Go-side | Accepted |
-| [0010](0010-native-go-processors.md) | Reimplement the 9 deterministic built-in processors as native Go (`pdf-to-md` / `cordon-filter` stay Python) | Accepted (its `pdf-to-md` carve-out narrowed by [0015](0015-native-go-pdf-extraction.md) to the scanned/OCR path) |
+| [0010](0010-native-go-processors.md) | Reimplement the 9 deterministic built-in processors as native Go (`pdf-to-md` / `cordon-filter` stay Python) | Accepted (both carve-outs since closed: `pdf-to-md` narrowed by [0015](0015-native-go-pdf-extraction.md) to the scanned/OCR path, `cordon-filter` ported by [0016](0016-native-go-cordon-filter.md)) |
 | [0011](0011-optional-otel-emission.md) | Optional OpenTelemetry emission (metrics + events), opt-in and content-free | Accepted |
 | [0012](0012-bounded-inference-calls.md) | Every inference call carries a deadline (fail open means fail *fast*) | Accepted |
 | [0013](0013-router-candidate-eligibility.md) | The router only sees processors it can usefully pick (`route_hint` / `routable`) | Accepted |
 | [0014](0014-fast-path-match-precedence.md) | Fast-path match precedence: format signatures beat line shapes | Accepted |
 | [0015](0015-native-go-pdf-extraction.md) | Native Go PDF extraction (vendored gopdf), replacing the Python primary path | Accepted |
+| [0016](0016-native-go-cordon-filter.md) | Native Go `cordon-filter` — retires the numpy dep and the last compression-path Python | Accepted |
 
 ## Writing a new ADR
 

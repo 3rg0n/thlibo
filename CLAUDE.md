@@ -133,10 +133,25 @@ Built-ins are embedded via `go:embed` under `processors/` (see
 processors) plus the deterministic native-Go filters `git-filter`,
 `npm-filter`, `cargo-filter`, `pytest-filter`, `ndjson-filter`,
 `stacktrace-filter`, `lint-filter`, `trivy-filter`, `go-test-filter`,
-`har-filter`, `mhtml-filter` (ADR 0010), `pdf-filter` (ADR 0015) and the
-Python script filters `cordon-filter` and `pdf-to-md`. A user processor of
-the same name overrides a built-in; the registry emits a `ShadowWarning` at
-load time so it's visible.
+`har-filter`, `mhtml-filter` (ADR 0010), `pdf-filter` (ADR 0015),
+`cordon-filter` (ADR 0016) and the one remaining Python script filter,
+`pdf-to-md`. A user processor of the same name overrides a built-in; the
+registry emits a `ShadowWarning` at load time so it's visible.
+
+**`cordon-filter` is the one native filter that reaches the network.** It
+scores log windows by k-NN distance over inferd embeddings, so it is
+registered via `RegisterNativeCtx` (`NativeCtxFilter`, taking a context)
+rather than `RegisterNative`. Every other filter must stay ctx-free — that
+signature is what states at the type level that a filter does not do I/O.
+Its round-trip goes through `inferd.EmbedClient`, a *second* protocol in
+`internal/inferd`: line-delimited JSON on its own socket, sharing only the
+dialers with the length-prefixed generation wire. Two bounds apply, and
+both matter: `EmbedClient` caps each batch, and `CORDON_TIMEOUT` (30s)
+caps the whole filter — `RunNativeCtx` cannot interrupt a running filter,
+so without the outer bound a wedged daemon would hang the hook rather
+than fall back (ADR 0012). Parity with the retired Python lives in
+`cordon_parity_test.go`, captured from live `run.py` and **not
+regenerable** — a change there is a behaviour change, not a test fix.
 
 **Two processors claim `^%PDF-`, on purpose.** `pdf-filter` is the primary
 path — native Go over the vendored parser in `internal/pdf/`, four tiers
