@@ -14,9 +14,9 @@
 //
 // The package installs two things:
 //
-//	1. The hook script (thlibo-rewrite-cursor.sh) to the user's hook dir.
-//	2. A hooks.json entry: preToolUse/matcher "Shell"/command→<hook>,
-//	   merged into ~/.cursor/hooks.json without clobbering other events.
+//  1. The hook script (thlibo-rewrite-cursor.sh) to the user's hook dir.
+//  2. A hooks.json entry: preToolUse/matcher "Shell"/command→<hook>,
+//     merged into ~/.cursor/hooks.json without clobbering other events.
 //
 // Cursor has no separate feature-flag file — a hooks.json in a loaded
 // config layer (user ~/.cursor, or a trusted project .cursor) is

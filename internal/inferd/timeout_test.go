@@ -132,8 +132,8 @@ func TestResolveTimeout(t *testing.T) {
 		{"", DefaultTimeout},
 		{"30s", 30 * time.Second},
 		{"2m", 2 * time.Minute},
-		{"45", 45 * time.Second},   // bare integer = seconds
-		{"0", 0},                   // explicit disable
+		{"45", 45 * time.Second},    // bare integer = seconds
+		{"0", 0},                    // explicit disable
 		{"garbage", DefaultTimeout}, // malformed must not break the middleware
 		{"-5s", DefaultTimeout},     // negative duration rejected
 	}

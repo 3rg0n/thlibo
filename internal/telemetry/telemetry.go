@@ -135,8 +135,8 @@ func Enabled() bool {
 // fails to construct (fail open).
 type noop struct{}
 
-func (noop) RecordInvocation(Invocation)      {}
-func (noop) Shutdown(context.Context) error   { return nil }
+func (noop) RecordInvocation(Invocation)    {}
+func (noop) Shutdown(context.Context) error { return nil }
 
 // NoopRecorder returns the shared disabled Recorder. Exposed for tests
 // and for callers that want an explicit no-op.

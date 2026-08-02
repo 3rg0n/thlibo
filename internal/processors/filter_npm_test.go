@@ -6,8 +6,8 @@ import (
 
 var npmFixtures = map[string]string{
 	"install_success": "added 125 packages\n",
-	"list_tree": "project@1.0.0\n",
-	"empty": "",
+	"list_tree":       "project@1.0.0\n",
+	"empty":           "",
 }
 
 func TestNpmFilterParity(t *testing.T) {

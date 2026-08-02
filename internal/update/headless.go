@@ -43,14 +43,12 @@ var headlessAutoSignals = []string{
 // IsHeadless reports whether the current process is running in a
 // non-interactive / headless environment. Resolution order:
 //
-//  1. THLIBO_HEADLESS=1   → headless (explicit override)
-//  2. THLIBO_HEADLESS=0   → interactive (explicit override; beats
-//                           every auto-signal below)
-//  3. Any of headlessAutoSignals set to a non-empty value → headless
-//  4. CI=true             → headless (already covered by #3, kept
-//                           in the doc for clarity)
-//  5. stderr not a TTY    → headless (piped / redirected)
-//  6. Otherwise           → interactive
+//  1. THLIBO_HEADLESS=1 → headless (explicit override)
+//  2. THLIBO_HEADLESS=0 → interactive (override; beats every auto-signal)
+//  3. Any headlessAutoSignals var set non-empty → headless
+//  4. CI=true → headless (already covered by #3; kept for clarity)
+//  5. stderr not a TTY → headless (piped / redirected)
+//  6. Otherwise → interactive
 func IsHeadless() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("THLIBO_HEADLESS"))) {
 	case "1", "true", "on", "yes":

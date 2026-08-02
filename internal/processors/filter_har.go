@@ -196,8 +196,8 @@ type harNV struct {
 }
 
 type harPostDt struct {
-	MimeType string `json:"mimeType"`
-	Text     string `json:"text"`
+	MimeType string  `json:"mimeType"`
+	Text     string  `json:"text"`
 	Params   []harNV `json:"params"`
 }
 

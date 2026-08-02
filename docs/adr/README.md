@@ -18,6 +18,7 @@ implementation choices aren't.
 | [0011](0011-optional-otel-emission.md) | Optional OpenTelemetry emission (metrics + events), opt-in and content-free | Accepted |
 | [0012](0012-bounded-inference-calls.md) | Every inference call carries a deadline (fail open means fail *fast*) | Accepted |
 | [0013](0013-router-candidate-eligibility.md) | The router only sees processors it can usefully pick (`route_hint` / `routable`) | Accepted |
+| [0014](0014-fast-path-match-precedence.md) | Fast-path match precedence: format signatures beat line shapes | Accepted |
 
 ## Writing a new ADR
 

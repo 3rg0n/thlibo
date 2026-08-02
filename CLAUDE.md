@@ -80,7 +80,13 @@ E4B model served by a sidecar:
    scanning processors or calling inferd.
 4. **Fast-path before routing.** Each processor's `match` regex is
    checked before inferd is asked to route — a regex hit dispatches
-   immediately, no routing call.
+   immediately, no routing call. Because `match` is then the *only*
+   evidence used, precedence among hits is load-bearing (ADR 0014):
+   rooted format signatures (`^%PDF-`) beat line shapes found anywhere,
+   script/native beats prompt within a tier, tiebreak is stable
+   alphabetical, and line-shape filters are refused entirely on input
+   that sniffs binary. Rootedness is derived from the pattern in
+   `validate()`, never declared — don't add a priority field.
 5. **Thinking mode is owned by the processor prompt, not inferd.**
    Gemma 4's `<|channel>thought` block is stripped by the
    `internal/processors` thinking filter (`thinking.go`) before output

@@ -142,9 +142,9 @@ func TestRegistryQuarantinesBrokenDescriptor(t *testing.T) {
 // router's prompt to the daemon is stable across runs.
 func TestRegistryNamesAreDeterministic(t *testing.T) {
 	dir := writeTree(t, map[string]string{
-		"zebra/processor.md":    "---\nname: zebra\n---\nbody\n",
-		"apple/processor.md":    "---\nname: apple\n---\nbody\n",
-		"mango/processor.md":    "---\nname: mango\n---\nbody\n",
+		"zebra/processor.md": "---\nname: zebra\n---\nbody\n",
+		"apple/processor.md": "---\nname: apple\n---\nbody\n",
+		"mango/processor.md": "---\nname: mango\n---\nbody\n",
 	})
 	r, _, _ := Build(nil, os.DirFS(dir))
 	got := r.Names()

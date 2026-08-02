@@ -12,7 +12,8 @@ import (
 // into testdata/<name>/<fixture>.golden (+ .input). The permanent
 // golden tests then assert Go == this captured Python output, so parity
 // is locked even after the run.py files are removed. Regenerate with:
-//   GEN_GOLDEN=1 go test ./internal/processors/ -run TestGenGoldens
+//
+//	GEN_GOLDEN=1 go test ./internal/processors/ -run TestGenGoldens
 func TestGenGoldens(t *testing.T) {
 	if os.Getenv("GEN_GOLDEN") != "1" {
 		t.Skip("set GEN_GOLDEN=1 to regenerate goldens from Python")

@@ -9,19 +9,19 @@ import (
 func init() { RegisterNative("go-test-filter", goTestFilter) }
 
 var (
-	goTestANSIRE           = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-	goTestRunRE            = regexp.MustCompile(`^\s*=== (?:RUN|PAUSE|CONT|NAME)\s`)
-	goTestPassRE           = regexp.MustCompile(`^\s*--- PASS:\s`)
-	goTestFailRE           = regexp.MustCompile(`^\s*--- FAIL:\s+(?P<name>\S+)`)
-	goTestSkipRE           = regexp.MustCompile(`^\s*--- SKIP:\s`)
-	goTestPkgOkRE          = regexp.MustCompile(`^ok\s+\S+`)
-	goTestPkgFailRE        = regexp.MustCompile(`^FAIL\s+\S+`)
-	goTestPkgNotestRE      = regexp.MustCompile(`^\?\s+\S+\s+\[no test files\]`)
-	goTestBareResultRE     = regexp.MustCompile(`^(?:PASS|FAIL)\s*$`)
-	goTestBuildHdrRE       = regexp.MustCompile(`^# \S`)
-	goTestBuildFailRE      = regexp.MustCompile(`^FAIL\s+\S+\s+\[build failed\]`)
-	goTestPanicRE          = regexp.MustCompile(`^(panic:|fatal error:)\s`)
-	goTestBlockBoundaryRE  = regexp.MustCompile(`^\s*(?:=== |--- (?:PASS|FAIL|SKIP):)`)
+	goTestANSIRE          = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+	goTestRunRE           = regexp.MustCompile(`^\s*=== (?:RUN|PAUSE|CONT|NAME)\s`)
+	goTestPassRE          = regexp.MustCompile(`^\s*--- PASS:\s`)
+	goTestFailRE          = regexp.MustCompile(`^\s*--- FAIL:\s+(?P<name>\S+)`)
+	goTestSkipRE          = regexp.MustCompile(`^\s*--- SKIP:\s`)
+	goTestPkgOkRE         = regexp.MustCompile(`^ok\s+\S+`)
+	goTestPkgFailRE       = regexp.MustCompile(`^FAIL\s+\S+`)
+	goTestPkgNotestRE     = regexp.MustCompile(`^\?\s+\S+\s+\[no test files\]`)
+	goTestBareResultRE    = regexp.MustCompile(`^(?:PASS|FAIL)\s*$`)
+	goTestBuildHdrRE      = regexp.MustCompile(`^# \S`)
+	goTestBuildFailRE     = regexp.MustCompile(`^FAIL\s+\S+\s+\[build failed\]`)
+	goTestPanicRE         = regexp.MustCompile(`^(panic:|fatal error:)\s`)
+	goTestBlockBoundaryRE = regexp.MustCompile(`^\s*(?:=== |--- (?:PASS|FAIL|SKIP):)`)
 )
 
 type goTestEvent struct {

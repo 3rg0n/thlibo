@@ -4,10 +4,10 @@ import "testing"
 
 func TestArgv0(t *testing.T) {
 	cases := []struct {
-		name  string
-		in    string
-		want  string
-		ok    bool
+		name string
+		in   string
+		want string
+		ok   bool
 	}{
 		{"simple git", "git status", "git", true},
 		{"extra whitespace", "  git   status --short ", "git", true},

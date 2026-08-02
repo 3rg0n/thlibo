@@ -41,12 +41,12 @@ import (
 
 // Exit codes — stable so scripts can key on them.
 const (
-	ExitOK              = 0
-	ExitUsage           = 2
-	ExitReadFailed      = 3
-	ExitWriteFailed     = 4
-	ExitBackendDown     = 5
-	ExitValidateFailed  = 6
+	ExitOK             = 0
+	ExitUsage          = 2
+	ExitReadFailed     = 3
+	ExitWriteFailed    = 4
+	ExitBackendDown    = 5
+	ExitValidateFailed = 6
 )
 
 // Run is the subcommand entry. argv is everything after "thlibo shorthand".

@@ -249,33 +249,94 @@ func (r *Registry) RoutableNames() []string {
 }
 
 // MatchFastPath returns the best descriptor whose Match regex hits
-// input, or nil. "Best" means: script processors win over prompt
-// processors on equal match, because script processors are
-// deterministic and their match regexes are typically anchored
-// (e.g. "^On branch"), while prompt processors match broader
-// substrings (e.g. "(?i)traceback|fatal"). Dispatching to the
-// deterministic one avoids false positives where a prompt
-// processor's match accidentally fires on an unrelated input.
+// input, or nil.
 //
-// Tiebreak within the same type is stable alphabetical.
+// Precedence, strongest evidence first (ADR 0014, #97):
+//
+//  1. **Format signatures** — a rooted Match that can only fire at the
+//     start of the input (pdf-to-md's `^%PDF-`). This says what the input
+//     *is*, so it outranks everything.
+//  2. **Line shapes**, script/native — an unrooted Match found anywhere.
+//     Deterministic and fast, so still preferred over prompt processors
+//     (ADR 0010: native behaves like script for routing).
+//  3. **Line shapes**, prompt — broad substrings (`(?i)traceback|fatal`)
+//     that most easily fire by accident.
+//
+// Tiebreak within a tier is stable alphabetical (r.order).
+//
+// Why tier 1 exists: before it, precedence was "first alphabetical
+// script/native hit wins", so `go-test-filter` — whose
+// `^(?:ok|FAIL|\?)\s+\S+\s` matches by coincidence inside a compressed
+// PDF stream — beat `pdf-to-md` on every PDF containing such a line,
+// purely because "g" sorts before "p". A 6.9 MB paper came out as 6.9 MB
+// of go-test-filtered PDF instead of 88 KB of markdown (#97).
+//
+// Binary input is guarded separately: see binaryLooking, which drops
+// line-shape filters entirely for inputs that aren't text. Signatures are
+// exempt from that guard, since a format signature on a binary container
+// is exactly the right match.
 func (r *Registry) MatchFastPath(input string) *Descriptor {
-	var firstPrompt *Descriptor
+	binary := binaryLooking(input)
+
+	var lineScript, linePrompt *Descriptor
 	for _, n := range r.order {
 		d := r.byName[n]
 		if !d.MatchesFastPath(input) {
 			continue
 		}
-		// Script and native filters are deterministic + fast; prefer
-		// them over prompt processors on a fast-path hit (ADR 0010:
-		// native behaves like script for routing).
-		if d.Type == KindScript || d.Type == KindNative {
+		// Tier 1: a rooted signature is decisive. r.order is stable, so
+		// the first signature hit is a deterministic winner.
+		if d.MatchIsSignature() {
 			return d
 		}
-		if firstPrompt == nil {
-			firstPrompt = d
+		// Tiers 2-3 are line shapes. On binary input they are all
+		// coincidence — a text filter has no business rewriting a
+		// container — so record nothing and let the caller fall through
+		// to the router/passthrough.
+		if binary {
+			continue
+		}
+		if d.Type == KindScript || d.Type == KindNative {
+			if lineScript == nil {
+				lineScript = d
+			}
+			continue
+		}
+		if linePrompt == nil {
+			linePrompt = d
 		}
 	}
-	return firstPrompt
+	if lineScript != nil {
+		return lineScript
+	}
+	return linePrompt
+}
+
+// binaryBySniffLen is how far into the input binaryLooking looks for a NUL
+// byte. 8 KiB matches internal/casefile's sniffer, which uses the same
+// test for the same reason.
+const binaryBySniffLen = 8192
+
+// binaryLooking reports whether input is a binary container rather than
+// text. A NUL byte in the first 8 KiB is the classic test: every binary
+// format thlibo handles (PDF, zip-based archives, MHTML/OOXML) trips it
+// immediately, and valid UTF-8 text never contains one.
+//
+// This exists because rooted signatures alone don't cover the whole
+// problem (#97). A PDF at least *has* a signature processor to claim it;
+// a .zip or .tar.gz has none, yet both false-match go-test-filter's line
+// shape the same way a PDF does — verified against this repo's own release
+// artifacts. Without this guard those inputs get silently line-filtered.
+//
+// Cheap and conservative in the safe direction: a false "text" verdict
+// only restores the previous behaviour, and a false "binary" verdict costs
+// a fast-path dispatch that would have been operating on non-text anyway.
+func binaryLooking(input string) bool {
+	head := input
+	if len(head) > binaryBySniffLen {
+		head = head[:binaryBySniffLen]
+	}
+	return strings.IndexByte(head, 0x00) >= 0
 }
 
 // MatchCommand returns the first descriptor whose Commands list

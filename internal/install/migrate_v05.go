@@ -29,14 +29,14 @@ import (
 // caller should print the actions taken so the user knows what
 // changed.
 type MigrateResult struct {
-	StoppedAutostart   bool   // a v0.5 daemon autostart entry was stopped + removed
-	RemovedDaemonBin   bool   // thlibod binary was deleted
-	RemovedEngineBin   bool   // thlibo-engine (llamafile) was deleted
-	ModelMovedFrom     string // old GGUF path; empty if no move happened
-	ModelMovedTo       string // new GGUF path
-	RemovedModelsDir   bool   // ~/.thlibo/models/ was empty after move and deleted
-	RemovedLogsDir     bool   // ~/.thlibo/logs/ was deleted
-	Notes              []string
+	StoppedAutostart bool   // a v0.5 daemon autostart entry was stopped + removed
+	RemovedDaemonBin bool   // thlibod binary was deleted
+	RemovedEngineBin bool   // thlibo-engine (llamafile) was deleted
+	ModelMovedFrom   string // old GGUF path; empty if no move happened
+	ModelMovedTo     string // new GGUF path
+	RemovedModelsDir bool   // ~/.thlibo/models/ was empty after move and deleted
+	RemovedLogsDir   bool   // ~/.thlibo/logs/ was deleted
+	Notes            []string
 }
 
 // HasWork reports whether any v0.5.x artefacts were found and
