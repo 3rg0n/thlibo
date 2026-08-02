@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"regexp"
+	"regexp/syntax"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -32,11 +33,11 @@ const (
 // descriptor. Fields map 1:1 to the spec; anything not in the spec is
 // rejected at parse time so typos don't silently go unused.
 type Descriptor struct {
-	Name        string   `yaml:"name"        json:"name"`
-	Type        Kind     `yaml:"type"        json:"type"`
-	Entry       string   `yaml:"entry"       json:"entry,omitempty"` // script only
-	Match       string   `yaml:"match"       json:"match,omitempty"`
-	Commands    []string `yaml:"commands"    json:"commands,omitempty"` // argv[0] values this processor wraps (rewrite-time)
+	Name     string   `yaml:"name"        json:"name"`
+	Type     Kind     `yaml:"type"        json:"type"`
+	Entry    string   `yaml:"entry"       json:"entry,omitempty"` // script only
+	Match    string   `yaml:"match"       json:"match,omitempty"`
+	Commands []string `yaml:"commands"    json:"commands,omitempty"` // argv[0] values this processor wraps (rewrite-time)
 	// CommandPrefixes are multi-token command prefixes this processor
 	// wraps, for cases where argv[0] alone is too coarse — e.g.
 	// "go test" should wrap but "go build" must not. Each entry is a
@@ -72,12 +73,12 @@ type Descriptor struct {
 
 	// Prompt processor knobs (frontmatter fields). All optional;
 	// daemon defaults apply when zero.
-	Temperature *float64 `yaml:"temperature"    json:"temperature,omitempty"`
-	TopP        *float64 `yaml:"top_p"          json:"top_p,omitempty"`
-	TopK        *int     `yaml:"top_k"          json:"top_k,omitempty"`
-	MaxTokens   *int     `yaml:"max_tokens"     json:"max_tokens,omitempty"`
-	Thinking    *bool    `yaml:"thinking"       json:"thinking,omitempty"`
-	ThinkBriefly *bool   `yaml:"think_briefly"  json:"think_briefly,omitempty"`
+	Temperature  *float64 `yaml:"temperature"    json:"temperature,omitempty"`
+	TopP         *float64 `yaml:"top_p"          json:"top_p,omitempty"`
+	TopK         *int     `yaml:"top_k"          json:"top_k,omitempty"`
+	MaxTokens    *int     `yaml:"max_tokens"     json:"max_tokens,omitempty"`
+	Thinking     *bool    `yaml:"thinking"       json:"thinking,omitempty"`
+	ThinkBriefly *bool    `yaml:"think_briefly"  json:"think_briefly,omitempty"`
 
 	// SystemPrompt is the markdown body of a processor.md descriptor.
 	// Empty for script processors.
@@ -100,6 +101,12 @@ type Descriptor struct {
 	// compiledMatch is the regex compiled from Match, ready for
 	// fast-path dispatch. nil when Match is empty.
 	compiledMatch *regexp.Regexp
+
+	// matchRooted records whether every possible match of compiledMatch
+	// must begin at the start of the input (`^` without `(?m)`, or `\A`).
+	// Derived from the pattern at compile time, never declared. See
+	// MatchIsSignature.
+	matchRooted bool
 }
 
 // EntryFingerprint is the small summary of a script entry file we
@@ -175,6 +182,80 @@ func (d *Descriptor) MatchesFastPath(input string) bool {
 		return false
 	}
 	return d.compiledMatch.MatchString(input)
+}
+
+// MatchIsSignature reports whether this processor's Match regex is a
+// *format signature* — a pattern that can only match at the very start of
+// the input, like pdf-to-md's `^%PDF-`.
+//
+// This is the load-bearing distinction for fast-path precedence (#97).
+// A rooted pattern is strong evidence about what the input *is*: only a
+// PDF begins with `%PDF-`. An unrooted pattern is a *line shape* found
+// anywhere, which is weak evidence — `go-test-filter`'s
+// `^(?:ok|FAIL|\?)\s+\S+\s` matches by coincidence 200 KB into a
+// compressed PDF stream, and `(?m)^` means it matches at any line start,
+// not the input's start. Ranking signatures first stops the coincidence
+// from beating the certainty.
+//
+// Derived from the pattern rather than declared, so it can't drift out of
+// sync with the regex and user processors get it for free: a user filter
+// with an anchored signature outranks a builtin line-shape filter without
+// touching the descriptor schema.
+func (d *Descriptor) MatchIsSignature() bool { return d.matchRooted }
+
+// rootedPattern reports whether every match of pat must begin at the
+// start of the input. True for `^x` and `\Ax`; false for `(?m)^x`, where
+// `^` means start-of-line, and false for `a|^b`, where one branch floats.
+//
+// Note the flag sensitivity is the whole point: `(?m)` turns OpBeginText
+// into OpBeginLine at parse time, so this correctly declines the multiline
+// line-shape patterns every other builtin uses.
+func rootedPattern(pat string) bool {
+	re, err := syntax.Parse(pat, syntax.Perl)
+	if err != nil {
+		// Unreachable in practice: validate() compiles the same pattern
+		// with regexp.Compile (same parser, same flags) before calling
+		// this, so a parse failure here means the pattern already failed
+		// validation. Treat it as "not a signature" rather than panicking.
+		return false
+	}
+	return rootedRegexp(re.Simplify())
+}
+
+// rootedRegexp walks the parsed form looking for a guaranteed
+// start-of-input anchor. Only the node shapes that can *lead* a match are
+// traversed; anything else (literals, char classes, stars) means the match
+// can begin mid-input, so the answer is false.
+func rootedRegexp(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpBeginText:
+		return true
+	case syntax.OpCapture:
+		return len(re.Sub) > 0 && rootedRegexp(re.Sub[0])
+	case syntax.OpConcat:
+		// Only the first node that can consume input decides. Leading
+		// empty-width nodes (other than the anchor itself) are skipped.
+		for _, sub := range re.Sub {
+			if sub.Op == syntax.OpEmptyMatch {
+				continue
+			}
+			return rootedRegexp(sub)
+		}
+		return false
+	case syntax.OpAlternate:
+		// EVERY branch must be rooted. `^%PDF-|garbage` can match
+		// "garbage" anywhere, so it is not a signature.
+		if len(re.Sub) == 0 {
+			return false
+		}
+		for _, sub := range re.Sub {
+			if !rootedRegexp(sub) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // ParseYAML parses a processor.yaml body.
@@ -311,6 +392,7 @@ func validate(d *Descriptor) error {
 			return fmt.Errorf("processor %s: match regex: %w", d.Name, err)
 		}
 		d.compiledMatch = re
+		d.matchRooted = rootedPattern(d.Match)
 	}
 	return nil
 }

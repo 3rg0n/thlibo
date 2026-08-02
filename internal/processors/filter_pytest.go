@@ -15,17 +15,17 @@ import (
 func init() { RegisterNative("pytest-filter", pytestFilter) }
 
 var (
-	pytestAnsiRE        = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-	sectionRE           = regexp.MustCompile(`^=+ (.+?) =+\s*$`)
-	collectedRE         = regexp.MustCompile(`^collected (\d+) items?`)
-	progressLineRE      = regexp.MustCompile(`^[\w./_-]+\.py [.FEsxXp]+\s+\[\s*\d+%\s*\]\s*$`)
-	shortSummaryRE      = regexp.MustCompile(`^=+ (\d+ (?:passed|failed|error|skipped|warning|deselected)[^=]*) =+\s*$`)
-	passedFailedLineRE  = regexp.MustCompile(`^(\d+ (?:passed|failed|error|errors|skipped|warning)s?[^=]*) in [\d.]+s`)
+	pytestAnsiRE       = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+	sectionRE          = regexp.MustCompile(`^=+ (.+?) =+\s*$`)
+	collectedRE        = regexp.MustCompile(`^collected (\d+) items?`)
+	progressLineRE     = regexp.MustCompile(`^[\w./_-]+\.py [.FEsxXp]+\s+\[\s*\d+%\s*\]\s*$`)
+	shortSummaryRE     = regexp.MustCompile(`^=+ (\d+ (?:passed|failed|error|skipped|warning|deselected)[^=]*) =+\s*$`)
+	passedFailedLineRE = regexp.MustCompile(`^(\d+ (?:passed|failed|error|errors|skipped|warning)s?[^=]*) in [\d.]+s`)
 )
 
 var keepSections = map[string]bool{
-	"FAILURES":              true,
-	"ERRORS":                true,
+	"FAILURES":                true,
+	"ERRORS":                  true,
 	"short test summary info": true,
 }
 
@@ -37,9 +37,9 @@ func stripANSI(s string) string {
 
 // sectionMap maps section start-line indices to section names.
 type sectionMap struct {
-	lookup map[int]string   // line index -> section name
-	starts []int            // sorted start indices
-	total  int              // total line count
+	lookup map[int]string // line index -> section name
+	starts []int          // sorted start indices
+	total  int            // total line count
 }
 
 func (sm *sectionMap) contains(idx int) bool {

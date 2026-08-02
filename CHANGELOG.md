@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **PDFs and archives are no longer stolen by a text filter that matched
+  by coincidence.** `Registry.MatchFastPath` broke ties by alphabetical
+  order with no notion of match strength, so `go-test-filter` — whose
+  `^(?:ok|FAIL|\?)\s+\S+\s` matched at offset 199970 inside a compressed
+  PDF stream — beat `pdf-to-md`'s anchored `^%PDF-` purely because "g"
+  sorts before "p". A 6.89 MB paper came back as 6.89 MB of line-filtered
+  PDF instead of 88 KB of markdown (98.7% → 0.02%). Content-dependent, so
+  intermittent in the field, and **pre-existing** — reproduced identically
+  on v0.11.2. Fast-path candidates are now ranked by strength of evidence:
+  rooted format signatures (`^%PDF-`) outrank line shapes found anywhere,
+  script/native still outranks prompt within a tier, and the tiebreak
+  stays stable alphabetical. Rootedness is *derived* from the pattern via
+  `regexp/syntax`, not declared, so it cannot drift out of sync and user
+  processors get it without a schema change. Separately, line-shape
+  filters no longer claim input whose first 8 KiB contains a NUL byte —
+  this repo's own `.zip` and `.tar.gz` release artifacts also false-match
+  `go-test-filter` and have no signature processor to outrank it, so they
+  were being silently line-filtered out of their compressed streams; they
+  now pass through byte-exact. Signatures are exempt from that guard, a
+  format signature on a binary container being exactly the right match.
+  Binary input that no signature claims now also **passes through without
+  a routing call** — otherwise the guard would just trade local corruption
+  for an inference round-trip that samples the container into a prompt and
+  returns "none", sending those bytes off-process to answer a question
+  answerable locally. Skipping the line-shape regexes rather than running
+  and discarding them also makes this path markedly faster: a 6.5 MB
+  `.tar.gz` went 2.28s → 0.52s end-to-end.
+  Fixes #97. See [ADR 0014](docs/adr/0014-fast-path-match-precedence.md).
 - **A wedged inferd no longer hangs the AI client.** `inferd.Client.Post`
   imposed no deadline and every hot-path caller passed
   `context.Background()`, so a daemon that accepted the connection and
@@ -78,6 +106,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `router.Ask`, a package-level function with zero callers that
   duplicated `ClientAdapter.askDetailed`.
+- `.backup2`, an untracked stray at the repo root. It was an older, richer
+  copy of `internal/processors/filter_cargo_test.go` saved under a
+  non-Go filename, so `go test` never compiled it. Its three extra parity
+  fixtures (`test_output`, `warning`, and a fuller `build_error` carrying
+  the `Compiling`/`--> src/...` lines) were verified against the Python
+  reference and folded back into the real test before deletion, since the
+  tracked file had been truncated to two.
+
+### Security
+
+- **`google.golang.org/grpc` 1.81.1 → 1.82.1**, clearing GO-2026-6061.
+  Indirect, reached via the optional OTel exporter (ADR 0011);
+  `govulncheck ./...` now reports no vulnerabilities.
 
 ## [0.11.2] - 2026-07-28
 
@@ -1696,6 +1737,16 @@ Claude Code + Codex CLI.
 
 ### Changed
 
+- **`gofmt` applied repo-wide (28 files) and now gated in CI.** Nothing
+  enforced formatting, so drift had accumulated across most packages.
+  Whitespace-only except three spots where the drift was hiding something:
+  two `emitOriginal` calls in `shorthandcmd` used inline `/*inPlace*/`
+  argument labels that `gofmt` relocates onto the *wrong* arguments, so
+  they were replaced with a single call-site comment; and one aligned doc
+  list in `update/headless.go` was reworded to a form `gofmt` leaves
+  alone. Note `core.autocrlf=true` inflates a local `gofmt -l` count on
+  Windows — 63 files reported, 35 of them CRLF-only and normalised away by
+  git; the CI check runs on an LF checkout.
 - Spec: request/response frames now carry a client-generated `id`
   field, echoed on every response. Admin status frames use
   `id: "admin"`.

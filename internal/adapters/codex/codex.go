@@ -5,8 +5,8 @@
 // PostToolUse supports `decision: "block"` with a `reason` field
 // that *replaces* the tool result the model sees:
 //
-//   "Codex records the feedback, replaces the tool result with that
-//    feedback, and continues the model from the hook-provided message."
+//	"Codex records the feedback, replaces the tool result with that
+//	 feedback, and continues the model from the hook-provided message."
 //
 // That is the real compression path on Codex — different mechanism
 // from Claude Code's PreToolUse-updatedInput approach but same
@@ -14,15 +14,15 @@
 //
 // The package installs three things:
 //
-//	1. The hook script (thlibo-rewrite-codex.sh) to the user's hook dir.
-//	2. An inline [[hooks.PostToolUse]] (matcher "^Bash$") block appended
-//	   to ~/.codex/config.toml pointing at the hook (#170). Written
-//	   inline — not to a separate hooks.json — because Codex warns and
-//	   degrades when one config layer mixes hooks.json + inline tables,
-//	   and other tools (git-ai/taco) already write inline, so the hook
-//	   would not reliably surface in `/hooks`.
-//	3. The [features] hooks = true flag in ~/.codex/config.toml, without
-//	   which Codex ignores all hooks.
+//  1. The hook script (thlibo-rewrite-codex.sh) to the user's hook dir.
+//  2. An inline [[hooks.PostToolUse]] (matcher "^Bash$") block appended
+//     to ~/.codex/config.toml pointing at the hook (#170). Written
+//     inline — not to a separate hooks.json — because Codex warns and
+//     degrades when one config layer mixes hooks.json + inline tables,
+//     and other tools (git-ai/taco) already write inline, so the hook
+//     would not reliably surface in `/hooks`.
+//  3. The [features] hooks = true flag in ~/.codex/config.toml, without
+//     which Codex ignores all hooks.
 package codex
 
 import (

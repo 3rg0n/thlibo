@@ -27,8 +27,8 @@ func TestNewerThan(t *testing.T) {
 		{"v1.0.0", "v0.9.9", true},
 		{"v0.2.1", "v0.2.0", true},
 		{"v0.2.0", "v0.2.1", false},
-		{"0.2.0", "v0.1.0", true},  // no-v form accepted
-		{"v0.2", "v0.1.0", true},   // two-segment accepted
+		{"0.2.0", "v0.1.0", true},        // no-v form accepted
+		{"v0.2", "v0.1.0", true},         // two-segment accepted
 		{"v0.2.0-rc.1", "v0.2.0", false}, // pre-release < release
 		{"v0.3.0", "v0.2.0-rc.1", true},
 		{"garbage", "v0.1.0", false}, // malformed fails-closed

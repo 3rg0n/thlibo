@@ -16,8 +16,8 @@ import (
 func isolateEnv(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)         // Unix
-	t.Setenv("USERPROFILE", home)  // Windows
+	t.Setenv("HOME", home)        // Unix
+	t.Setenv("USERPROFILE", home) // Windows
 	t.Setenv(envNoUpdate, "")
 	t.Setenv(envInterval, "")
 	t.Setenv(envAPI, "")

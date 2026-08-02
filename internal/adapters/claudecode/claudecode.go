@@ -317,10 +317,10 @@ func MergeSettingsFull(settingsPath, bashHookPath, ps1HookPath string) error {
 // New callers should use MergeSettingsAll directly.
 func MergeSettingsWithRead(settingsPath, bashHookPath, ps1HookPath, readHookPath, readPS1HookPath string) error {
 	return MergeSettingsAll(settingsPath, MergeHooks{
-		BashExecHook:    bashHookPath,
-		PS1ExecHook:     ps1HookPath,
-		BashReadHook:    readHookPath,
-		PS1ReadHook:     readPS1HookPath,
+		BashExecHook: bashHookPath,
+		PS1ExecHook:  ps1HookPath,
+		BashReadHook: readHookPath,
+		PS1ReadHook:  readPS1HookPath,
 	})
 }
 
@@ -417,7 +417,6 @@ func pickPlatformHook(bashPath, ps1Path, bashMarker, ps1Marker string) (path, ma
 	}
 	return "", ""
 }
-
 
 // RemoveHooks loads settingsPath and removes every thlibo-authored
 // PreToolUse hook entry (recognised by the hookMarker / hookMarkerPS1

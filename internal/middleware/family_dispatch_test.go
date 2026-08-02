@@ -18,11 +18,11 @@ import (
 // tokens (Python normalize → family detect → compress → assemble)
 // is implemented by the existing thlibo case + middleware pipeline:
 //
-//   thlibo case <file>
-//     → casefile.Create
-//       → middleware.Pipeline.Process
-//         → registry.MatchFastPath  ← family detect via match regex
-//           → dispatcher runs the matched script processor
+//	thlibo case <file>
+//	  → casefile.Create
+//	    → middleware.Pipeline.Process
+//	      → registry.MatchFastPath  ← family detect via match regex
+//	        → dispatcher runs the matched script processor
 //
 // The "orchestration" is the registry's MatchFastPath choosing
 // the right family filter by content shape — no router round-trip,
@@ -44,9 +44,9 @@ func TestFamilyDispatchByFastPath(t *testing.T) {
 	}
 
 	cases := []struct {
-		name        string
-		fixture     string
-		wantFilter  string
+		name       string
+		fixture    string
+		wantFilter string
 	}{
 		{"python traceback → stacktrace-filter", pythonRecursionFixture, "stacktrace-filter"},
 		{"pytest session → pytest-filter", pytestSessionFixture, "pytest-filter"},

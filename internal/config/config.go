@@ -148,9 +148,9 @@ func matchGlob(pattern, path string) bool {
 
 // globMatch implements the subset of glob we need:
 //
-//	*     matches any run of non-/ characters
-//	**    matches any run of characters including /
-//	?     matches a single non-/ character
+//   - matches any run of non-/ characters
+//     **    matches any run of characters including /
+//     ?     matches a single non-/ character
 //
 // Anchored at both ends.
 func globMatch(pattern, path string) bool {

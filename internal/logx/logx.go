@@ -49,12 +49,12 @@ const (
 // Logger writes NDJSON records. Zero value is nil; nil is safe to
 // call — every method is a no-op. Use New to produce a working one.
 type Logger struct {
-	component   string
-	dir         string
-	path        string
-	retainDays  int
-	verbosity   verbosity
-	now         func() time.Time // injectable for tests; defaults to time.Now
+	component  string
+	dir        string
+	path       string
+	retainDays int
+	verbosity  verbosity
+	now        func() time.Time // injectable for tests; defaults to time.Now
 
 	mu     sync.Mutex
 	f      *os.File // lazily opened so tests that never emit don't leave tmp files behind

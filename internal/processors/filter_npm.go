@@ -8,7 +8,7 @@ import (
 func init() { RegisterNative("npm-filter", npmFilter) }
 
 var (
-	npmTreeGlyphRE = regexp.MustCompile(`^\s*[+\-`+"`"+`]+\s*(?:UNMET DEPENDENCY\s+)?(.+?)\s*$`)
+	npmTreeGlyphRE = regexp.MustCompile(`^\s*[+\-` + "`" + `]+\s*(?:UNMET DEPENDENCY\s+)?(.+?)\s*$`)
 	npmHeaderRE    = regexp.MustCompile(`^npm (error|ERR!|warn|WARN|notice)`)
 	npmAuditSevRE  = regexp.MustCompile(`(?i)^\s*(low|moderate|high|critical)\s+severity`)
 	npmCountsRE    = regexp.MustCompile(`^(added|removed|changed|audited|up to date)\s+\d`)

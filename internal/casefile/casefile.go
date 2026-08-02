@@ -1,10 +1,10 @@
 // Package casefile writes "case" directories for large log files
 // that Claude Code is about to read. Each case captures:
 //
-//   ~/.thlibo/cases/<timestamp>-<hash>/
-//     compressed.log    — output of middleware.Pipeline over the source
-//     summary.md        — human-readable header (origin, sizes, time)
-//     meta.json         — structured record for tooling
+//	~/.thlibo/cases/<timestamp>-<hash>/
+//	  compressed.log    — output of middleware.Pipeline over the source
+//	  summary.md        — human-readable header (origin, sizes, time)
+//	  meta.json         — structured record for tooling
 //
 // The primary consumer is the Read-tool PreToolUse hook, which builds
 // a case and rewrites tool_input.file_path to compressed.log so Claude

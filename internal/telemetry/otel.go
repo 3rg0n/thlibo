@@ -10,12 +10,12 @@ import (
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/metric"
 
-	mexphttp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	mexpgrpc "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	mexphttp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	stdoutmetric "go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 
-	lexphttp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	lexpgrpc "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
+	lexphttp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	stdoutlog "go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 
 	sdklog "go.opentelemetry.io/otel/sdk/log"

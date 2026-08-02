@@ -23,7 +23,8 @@ func TestEmitOriginalStdoutWritesRawBytes(t *testing.T) {
 	os.Stdout = w
 	t.Cleanup(func() { os.Stdout = old })
 
-	rc := emitOriginal("foo.md", raw, /*inPlace*/ false, /*noBackup*/ false, /*quiet*/ true)
+	// args: target, raw, inPlace=false, noBackup=false, quiet=true
+	rc := emitOriginal("foo.md", raw, false, false, true)
 	w.Close()
 	if rc != ExitOK {
 		t.Errorf("exit code = %d, want ExitOK", rc)
@@ -51,7 +52,8 @@ func TestEmitOriginalInPlaceIsNoop(t *testing.T) {
 	}
 	beforeStat, _ := os.Stat(target)
 
-	rc := emitOriginal(target, string(original), /*inPlace*/ true, /*noBackup*/ false, /*quiet*/ true)
+	// args: target, raw, inPlace=true, noBackup=false, quiet=true
+	rc := emitOriginal(target, string(original), true, false, true)
 	if rc != ExitOK {
 		t.Errorf("exit code = %d, want ExitOK", rc)
 	}

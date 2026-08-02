@@ -293,11 +293,11 @@ func frontmatterKeys(s string) (map[string]bool, bool) {
 // becoming "GH" once and then dropped is acceptable for
 // non-essential phrasing).
 var (
-	urlRE     = regexp.MustCompile(`(?i)\b(?:https?|file)://[^\s)]+`)
-	versionRE = regexp.MustCompile(`\bv?\d+\.\d+(?:\.\d+(?:[-+][\w.]+)?)?\b`)
-	numUnitRE = regexp.MustCompile(`\b\d+(?:\.\d+)?\s*(?:%|KiB|MiB|GiB|TiB|KB|MB|GB|TB|ms|s|min|hour|hr|day|week|month|year|tokens?|chars?|bytes?|lines?)\b`)
+	urlRE      = regexp.MustCompile(`(?i)\b(?:https?|file)://[^\s)]+`)
+	versionRE  = regexp.MustCompile(`\bv?\d+\.\d+(?:\.\d+(?:[-+][\w.]+)?)?\b`)
+	numUnitRE  = regexp.MustCompile(`\b\d+(?:\.\d+)?\s*(?:%|KiB|MiB|GiB|TiB|KB|MB|GB|TB|ms|s|min|hour|hr|day|week|month|year|tokens?|chars?|bytes?|lines?)\b`)
 	exitCodeRE = regexp.MustCompile(`\b(?:exit\s+code\s+|exit\s+|error\s+|status\s+)\d+\b`)
-	pathRE    = regexp.MustCompile(`\b(?:[A-Za-z]:[\\/]|/|~/|\./|\.\./)?[\w./\\-]+\.(?:md|yaml|yml|json|toml|sh|ps1|py|go|rs|ts|js|html|css|sql|env|log|txt|gguf|gz|zip|sig|pem|cdx|cdx\.json)\b`)
+	pathRE     = regexp.MustCompile(`\b(?:[A-Za-z]:[\\/]|/|~/|\./|\.\./)?[\w./\\-]+\.(?:md|yaml|yml|json|toml|sh|ps1|py|go|rs|ts|js|html|css|sql|env|log|txt|gguf|gz|zip|sig|pem|cdx|cdx\.json)\b`)
 )
 
 func mustPreserveTokens(s string) []string {
