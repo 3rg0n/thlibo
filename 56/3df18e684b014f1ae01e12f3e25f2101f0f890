@@ -1,0 +1,183 @@
+internal/processors/registry.go
+  s_5811b7f24eccc0::t_72ebf2b1f070f8 265-273
+  s_5811b7f24eccc0::t_1fb30c4f836cbe 330-335
+  s_5811b7f24eccc0::t_c08dbc495c4920 289
+  s_5811b7f24eccc0::t_91a0b511ae8142 302-307,309-318
+internal/pdf/meta.go
+  s_5811b7f24eccc0::t_bd689557afc55d 1-211
+internal/pdf/parser.go
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-125
+internal/pdf/filters.go
+  s_5811b7f24eccc0::t_f1de6eec742b67 1-143
+internal/pdf/table.go
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-1419
+internal/pdf/document.go
+  s_5811b7f24eccc0::t_6b78be6218495d 9-12
+  s_5811b7f24eccc0::t_7597d138e8f19b 82-92
+  s_5811b7f24eccc0::t_53f03603a31065 57-81
+  s_5811b7f24eccc0::t_ac4ff220e1493f 131-137
+  s_5811b7f24eccc0::t_5569b6548c1fef 1-8,13-56,93-130,138-169
+CLAUDE.md
+  s_5811b7f24eccc0::t_b2e4c3174e8970 136-158
+internal/middleware/builtins_test.go
+  s_5811b7f24eccc0::t_e54ec5105cb238 30,44-45,69-70
+  s_5811b7f24eccc0::t_98a6e744462654 31-32
+internal/pdf/testdata/fuzz/FuzzParseInlineDict/e0458510f244ee24
+  s_5811b7f24eccc0::t_6f239df9f810f7 1-2
+internal/processors/filter_golden_test.go
+  s_5811b7f24eccc0::t_c63d3e2f029ebc 12-20
+docs/adr/0015-native-go-pdf-extraction.md
+  s_5811b7f24eccc0::t_e49335630eec7b 1-190
+CHANGELOG.md
+  s_5811b7f24eccc0::t_016088fea0560d 10-48,51-93
+internal/pdf/stdfonts.go
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-145
+internal/pdf/helper_test.go
+  s_5811b7f24eccc0::t_57511236e7b99f 1-124
+internal/pdf/structure_test.go
+  s_5811b7f24eccc0::t_ad2fca8c943607 427-453
+  s_5811b7f24eccc0::t_90db62de120c06 53-59
+  s_5811b7f24eccc0::t_9ab8cbcf8b4db8 1-52,60-110,112-230,233-249,454-463
+  s_5811b7f24eccc0::t_2da45f662d1919 111,231-232
+  s_5811b7f24eccc0::t_1524c41452d2a0 356-358,360
+  s_5811b7f24eccc0::t_5e81b915f0f8be 250-355,359,361-426
+internal/pdf/header_offset_test.go
+  s_5811b7f24eccc0::t_91fc37cc09a6a5 1-64
+internal/pdf/decompress_test.go
+  s_5811b7f24eccc0::t_91fc37cc09a6a5 1-52
+internal/pdf/text.go
+  s_5811b7f24eccc0::t_69639c4ef1a47b 608,612,621-625
+  s_5811b7f24eccc0::t_774bc30556be99 371
+  s_5811b7f24eccc0::t_a05a7831e8863a 711-774
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-15,26-138,140-141,155-370,372-401,406-607,609-611,613-620,626-644,649-710,775-980
+  s_5811b7f24eccc0::t_01a6df6718374a 16-25
+  s_5811b7f24eccc0::t_6c7bd4b0687e53 645-648
+  s_5811b7f24eccc0::t_568a1e37d1fca6 139,142-154
+  s_5811b7f24eccc0::t_d4f645c1b89ba4 402-405
+internal/pdf/lexer_test.go
+  s_5811b7f24eccc0::t_9bfcdd80fac4be 1-75
+internal/pdf/testdata/fuzz/FuzzOpenBytes/ff73d23fc4faa1f8
+  s_5811b7f24eccc0::t_50d9d29bbe1213 1-2
+go.mod
+  s_5811b7f24eccc0::t_0c580ac14508c3 15
+internal/pdf/structure.go
+  s_5811b7f24eccc0::t_d4b20914b9cacf 108-112
+  s_5811b7f24eccc0::t_9c2297d04195dd 204-213,216-223,225-226,229-230,232-242,254,256-267,269
+  s_5811b7f24eccc0::t_066714d10a0cb8 214-215,224,227,231,244,255
+  s_5811b7f24eccc0::t_e1fc25df4ad546 274,291,296,324,328,331,333-334
+  s_5811b7f24eccc0::t_a95f9026aeb18a 25-28,33-40
+  s_5811b7f24eccc0::t_bbcf4e81f104a4 307
+  s_5811b7f24eccc0::t_5c782258551322 338,341-344,347,349,352,369,379
+  s_5811b7f24eccc0::t_cd79381fb1a8d1 466,473
+  s_5811b7f24eccc0::t_b572b052836393 88-89,93-107,113-116
+  s_5811b7f24eccc0::t_f27f9da02de193 172
+  s_5811b7f24eccc0::t_281f66b16e3c42 481,501,504,506,512,518,526
+  s_5811b7f24eccc0::t_9506dad4dddc0d 437-458
+  s_5811b7f24eccc0::t_309afe556f6119 300-306,310,313-319,321-323,325,335-337,339-340,345-346,348,350-351,353-368,370-377
+  s_5811b7f24eccc0::t_5a0686ee949c60 134,148-149,157,162-169,171,173-175
+  s_5811b7f24eccc0::t_9ea328c2f9bccf 77-84
+  s_5811b7f24eccc0::t_e42e084565ec0d 539
+  s_5811b7f24eccc0::t_2c64278f0768d1 139-147,154,158
+  s_5811b7f24eccc0::t_d1424b10e1f168 320
+  s_5811b7f24eccc0::t_69f54511098d14 540
+  s_5811b7f24eccc0::t_58afdf4b0083ec 181,184
+  s_5811b7f24eccc0::t_98a3d2338f792d 400,402,407-412
+  s_5811b7f24eccc0::t_be701f5f7f0d56 1-24,29-32,41-76,85-87,90-92,117-133,135-138,150-153,155-156,159-161,170,176-180,182-183,185-203,228,243,245-253,268,270-273,275-290,292-295,297-299,308-309,311-312,326-327,329-330,332,378,380-399,401,403-406,413-421,423,425-436,459-465,467-472,474-480,482-500,502-503,505,507-511,513-517,519-525,527-536,543
+  s_5811b7f24eccc0::t_9feb9690c5f87c 422,424
+  s_5811b7f24eccc0::t_20dd6c24629d0c 537-538,541-542
+internal/processors/filter_pdf_test.go
+  s_5811b7f24eccc0::t_1995b64e5d3c91 522
+  s_5811b7f24eccc0::t_9b3864ad1cf912 1-521,523-533
+internal/pdf/reader.go
+  s_5811b7f24eccc0::t_050861ea0c9fc3 902-904
+  s_5811b7f24eccc0::t_a195d220e20436 452
+  s_5811b7f24eccc0::t_f9ba779fb6e359 262-263,266-267
+  s_5811b7f24eccc0::t_12e06148e0df3e 620
+  s_5811b7f24eccc0::t_f8e6654c9c05b9 962-968
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-27,39-47,49-119,132-193,202,206-216,220-261,264-265,268-451,453-619,621-783,788-849,851,879-883,922-949,951-961,969-1140,1143-1154,1156-1254,1260-1262,1264,1266,1270,1272-1343
+  s_5811b7f24eccc0::t_3bebfdc6439cc3 784-787
+  s_5811b7f24eccc0::t_ad922fa8bcd756 194-201,203-205,217-219
+  s_5811b7f24eccc0::t_5cae9fd88c5f34 120-125,129-131
+  s_5811b7f24eccc0::t_df9a2ccbaa9bc3 884-901,905-921
+  s_5811b7f24eccc0::t_d030fa5b8d110d 1155
+  s_5811b7f24eccc0::t_2d372b96909bb7 1255-1258
+  s_5811b7f24eccc0::t_a59e8b9cb76e53 48
+  s_5811b7f24eccc0::t_17319494a36b20 126-128
+  s_5811b7f24eccc0::t_9acbd8e51fa604 850,852-878
+  s_5811b7f24eccc0::t_c04d340f84ba2c 950
+  s_5811b7f24eccc0::t_f9570335d41b41 1259,1263,1265,1267-1269,1271
+  s_5811b7f24eccc0::t_31590ad9c7b2e3 28-38
+  s_5811b7f24eccc0::t_8c20e883298b9d 1141-1142
+internal/pdf/security.go
+  s_5811b7f24eccc0::t_cb35e8f6e40c73 1-39
+internal/pdf/bounds_test.go
+  s_5811b7f24eccc0::t_92b1c81f7dfd97 141-143,150-152,154-157,159-160,170,174-177
+  s_5811b7f24eccc0::t_4a0d03a81d89ae 4-5,11-13,16-18,21,26-30,34,39-53,55-75,78-81,88-90,92-94,97-100,107,113,116,118,120-121,123-128,130,132-135
+  s_5811b7f24eccc0::t_e62e94f38ff96e 1-3,6-10,14-15,19-20,22-25,31-33,35-38,54,76-77,82-87,91,95-96,101-106,108-112,114-115,117,119,122,129,131,136-137
+  s_5811b7f24eccc0::t_822518f009ccda 138-140,144-149,153,158,161-169,171-173,178-179
+internal/casefile/casefile.go
+  s_5811b7f24eccc0::t_0f9094dfb7bd76 92-93,95-102
+internal/processors/filter_pdf.go
+  s_5811b7f24eccc0::t_bab0990abb39cb 279
+  s_5811b7f24eccc0::t_7112365c29946b 274-278,280-285,289-295,328-333,335,339,351-356,360-362
+  s_5811b7f24eccc0::t_98ebafb2d8fedc 1-27,34-126,130-273,286-288,325-327,334,336-338,340-350,357-359,363-364,378,452-662
+  s_5811b7f24eccc0::t_9f4278725bc0fc 296-301
+  s_5811b7f24eccc0::t_cc1522869fa097 376-377,379-380,383,397,405-406,410-411,417,420,432,436,438-439
+  s_5811b7f24eccc0::t_e6e1498685435b 365-373
+  s_5811b7f24eccc0::t_078981eeeada2f 127-129
+  s_5811b7f24eccc0::t_fe9784138f8548 374-375,381-382,384-396,398-404,407-409,412-416,418-419,421-431,433-435,437,440-451
+  s_5811b7f24eccc0::t_2f94142a192ef0 28-33
+  s_5811b7f24eccc0::t_b5b6a36fd2174a 302-324
+processors/embed.go
+  s_5811b7f24eccc0::t_d23660c866615c 20
+internal/pdf/VENDOR.md
+  s_5811b7f24eccc0::t_a00c9a3899389e 1-25,32-40,44-45,47-49,109-115
+  s_5811b7f24eccc0::t_d3ed7f8ee6541f 26-31,41-43,46,50-108
+internal/pdf/glyphlist.go
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-4208
+internal/processors/signature_test.go
+  s_5811b7f24eccc0::t_6059698fd33ac3 168-204
+README.md
+  s_5811b7f24eccc0::t_c2fa7f05b481cf 185-189
+  s_5811b7f24eccc0::t_a8caa1faa48f2e 106-113
+  s_5811b7f24eccc0::t_51bbcbe9f378cb 414-415
+internal/pdf/LICENSE.gopdf
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-21
+internal/pdf/objects.go
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-144
+processors/pdf-filter/processor.yaml
+  s_5811b7f24eccc0::t_57a3acd193e3eb 1-30
+internal/pdf/lexer.go
+  s_5811b7f24eccc0::t_3e047c12bd3e57 1-301,316-323,333-345
+  s_5811b7f24eccc0::t_2991e6e6c66e6f 302-315,324-332
+docs/adr/README.md
+  s_5811b7f24eccc0::t_00d76ce671533c 14
+  s_5811b7f24eccc0::t_b10c3d01606220 22
+  s_5811b7f24eccc0::t_7f82af40d1df12 17
+internal/pdf/fuzz_test.go
+  s_5811b7f24eccc0::t_deb5fc56a6aab9 32-33
+  s_5811b7f24eccc0::t_c54fb940433cfb 1-31,34-128
+internal/pdf/table_test.go
+  s_5811b7f24eccc0::t_91fc37cc09a6a5 1-618,620-623,628-1108
+  s_5811b7f24eccc0::t_209acac2f92832 619,624-627
+internal/pdf/testdata/fuzz/FuzzOpenBytes/aa411b54aa9774ca
+  s_5811b7f24eccc0::t_6e0cf8bdb23e82 1-2
+go.sum
+  s_5811b7f24eccc0::t_177ae3e62205b6 64-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "563df18e684b014f1ae01e12f3e25f2101f0f890",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
