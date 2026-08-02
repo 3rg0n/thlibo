@@ -325,6 +325,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`google.golang.org/grpc` 1.81.1 → 1.82.1**, clearing GO-2026-6061.
   Indirect, reached via the optional OTel exporter (ADR 0011);
   `govulncheck ./...` now reports no vulnerabilities.
+- **Tag names no longer reach a `run:` shell as code (`release.yml`).**
+  Three steps interpolated `${{ github.ref_name }}` directly into script
+  bodies. GitHub substitutes that textually *before* the shell parses the
+  line, and a tag name is chosen by whoever pushes the tag — so a tag
+  like `v1.0.0";<command>;"` executed in a job holding `contents: write`
+  and `id-token: write`, i.e. with the ability to rewrite release assets
+  and to request a Sigstore signing identity. Reproduced against the old
+  form: the injected command ran, *and* the build silently stamped
+  `v1.0.0` rather than the real tag. All three now read the value from
+  `env:` (`REF_NAME`, or the `THLIBO_VERSION` the two `verify-install`
+  steps already declared and weren't using), where the shell expands it
+  after parsing and the quoting holds. Matrix values keep using `${{ }}`
+  — those come from the workflow file, not from user input. Build paths
+  are byte-identical (verified per matrix entry, plus a real
+  `GOOS=linux` build confirming the ldflags tag still lands in the
+  binary).
+- **Dependabot `cooldown`: 7 days for Actions and Go major/minor, 0 for
+  Go patches.** SHA-pinning (THREAT_MODEL finding #2) defeats a mutable
+  tag being re-pointed; it does nothing about a *newly published*
+  version that is malicious, where bumping the pin is a faithful update
+  to a compromised artefact. A holding window is the defence — the
+  March 2026 Trivy compromise was public well inside a week. Patches are
+  exempted deliberately: `govulncheck` gates CI, so delaying the release
+  that closes an advisory would trade a supply-chain window for a
+  known-CVE window.
+- **semgrep now scans the whole repo, not just `./cmd ./internal
+  ./processors`.** The narrower path excluded `.github/` — the two
+  highest-privilege files we ship — which is why the injection above went
+  unreported through every release. A scanner that cannot see the release
+  pipeline is not gating it. Zero findings repo-wide after this change;
+  the one deliberate false positive (SRI on an inline `data:` URI, where
+  there is no fetch to hash) carries a `nosemgrep` with its reason, per
+  existing convention.
 
 ## [0.11.2] - 2026-07-28
 

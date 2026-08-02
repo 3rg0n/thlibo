@@ -51,16 +51,25 @@ jobs:
           go-version: "1.26.5"
           cache: true
 
+      # REF_NAME goes through `env:`, not `${{ }}` interpolation in the
+      # script body. A tag name is user-controlled — anyone who can push
+      # a `v*` tag picks the string — and direct interpolation splices it
+      # into the shell before bash ever parses it, so a crafted tag runs
+      # as code in a job holding `contents: write` + `id-token: write`.
+      # As an env var it is data: the shell expands it after parsing, and
+      # the quotes hold. Same reason the matrix values are quoted below.
       - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
+          REF_NAME: ${{ github.ref_name }}
+          BIN_EXT: ${{ matrix.ext }}
         run: |
-          mkdir -p dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin
-          LDFLAGS="-s -w -X github.com/3rg0n/thlibo/internal/version.Tag=${{ github.ref_name }}"
+          mkdir -p "dist/thlibo-$GOOS-$GOARCH/bin"
+          LDFLAGS="-s -w -X github.com/3rg0n/thlibo/internal/version.Tag=$REF_NAME"
           go build -trimpath -ldflags="$LDFLAGS" \
-            -o dist/thlibo-${{ matrix.goos }}-${{ matrix.goarch }}/bin/thlibo${{ matrix.ext }} \
+            -o "dist/thlibo-$GOOS-$GOARCH/bin/thlibo$BIN_EXT" \
             ./cmd/thlibo
 
       - name: Copy docs into bundle
@@ -134,10 +143,12 @@ jobs:
         run: |
           set -euxo pipefail
           bash scripts/install.sh
-          # Post-conditions
+          # Post-conditions. THLIBO_VERSION above already carries the tag
+          # as an env var; read that instead of re-interpolating
+          # `github.ref_name` into the script body (see the build job).
           test -x "$HOME/.local/bin/thlibo"
           actual=$("$HOME/.local/bin/thlibo" version)
-          expected="${{ github.ref_name }}"
+          expected="$THLIBO_VERSION"
           if [ "$actual" != "$expected" ]; then
             echo "version mismatch: got '$actual', want '$expected'" >&2
             exit 1
@@ -156,7 +167,10 @@ jobs:
           $bin = Join-Path $env:LOCALAPPDATA 'thlibo\bin\thlibo.exe'
           if (-not (Test-Path $bin)) { throw "binary missing at $bin" }
           $actual = & $bin version
-          $expected = "${{ github.ref_name }}"
+          # Read the tag from $env:THLIBO_VERSION rather than
+          # interpolating the ref name into this script body — same
+          # reasoning as the linux step above.
+          $expected = $env:THLIBO_VERSION
           if ($actual -ne $expected) { throw "version mismatch: got '$actual', want '$expected'" }
           Write-Host "OK: install.ps1 against local archive produced thlibo $actual"
 

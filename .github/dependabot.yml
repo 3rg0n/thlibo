@@ -5,11 +5,29 @@ version: 2
 # tracks the pinned SHAs against the upstream tag (preserved as a
 # comment next to each `uses:`) and opens a PR when the tag moves —
 # controlled update instead of silent drift.
+#
+# `cooldown` holds newly-published versions back before Dependabot will
+# propose them. SHA-pinning defeats a *mutable tag* being re-pointed; it
+# does nothing about a *freshly published* version that is itself
+# malicious, and Dependabot bumping the pin to that version's SHA is a
+# faithful update to a compromised artefact. The window is the defence:
+# a hijacked release is typically caught and yanked within days (the
+# March 2026 Trivy compromise — images 0.69.4/0.69.5/0.69.6 carrying the
+# TeamPCP infostealer, plus 75 hijacked `trivy-action` tags — was public
+# well inside a week). Waiting costs nothing here because both
+# ecosystems are on a weekly schedule already.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    # Actions get a flat 7 days: a hijacked action runs with this
+    # workflow's `contents: write` + `id-token: write`, so it is the
+    # highest-value target in the repo. Only `default-days` applies —
+    # the github-actions ecosystem does not support the semver-specific
+    # keys used for gomod below.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci(actions)"
     groups:
@@ -21,5 +39,16 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Graduated by semver, because the risk is not uniform. A major or
+    # minor bump ships new code and gets the full week; a patch is
+    # usually the security fix we actually want promptly, and delaying
+    # it would trade a supply-chain window for a known-CVE window. Set
+    # `semver-patch-days: 0` deliberately: `govulncheck` gates CI, so a
+    # patch that closes an advisory should not sit in a queue.
+    cooldown:
+      default-days: 7
+      semver-major-days: 7
+      semver-minor-days: 7
+      semver-patch-days: 0
     commit-message:
       prefix: "deps(go)"
