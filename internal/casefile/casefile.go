@@ -89,10 +89,17 @@ type Meta struct {
 	ThliboVersion string `json:"thlibo_version,omitempty"`
 }
 
-// lowValueSentinel is the line pdf-to-md emits when every page is
-// scanned/blank/chart with no extractable text. Format is loud
+// lowValueSentinel is the line the PDF processors emit when every page
+// is scanned/blank/chart with no extractable text. Format is loud
 // enough that nothing else produces it accidentally; matched
-// substring-wise so we don't have to care about trailing whitespace.
+// substring-wise so we don't have to care about trailing whitespace or
+// the reason text that follows.
+//
+// Deliberately the *prefix* of processors.LowValueSentinel rather than
+// the whole line: the native pdf-filter uses that constant verbatim, and
+// the Python pdf-to-md script — which is still installed and still the
+// one that runs when a user's on-disk processor shadows the built-in —
+// writes its own reason string. Both must be detected here.
 const lowValueSentinel = "<!-- thlibo-pdf-low-value:"
 
 // Result bundles the directory and meta back to the caller.

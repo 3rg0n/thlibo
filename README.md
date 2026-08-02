@@ -103,15 +103,17 @@ Claude Code: about to run `git status`
 
 The deterministic filters (`git-filter`, `npm-filter`, `cargo-filter`,
 `pytest-filter`, `go-test-filter`, `ndjson-filter`, `stacktrace-filter`,
-`lint-filter`, `trivy-filter`, `har-filter`, `mhtml-filter`) are **native
-Go** — compiled into the binary, run in-process, no inferd and no Python
-(ADR 0010). `pdf-to-md`
-stays a Python script processor (pypdf + pdfplumber; one exception: a
-*scanned*, image-only PDF has no extractable text, so `thlibo case`
-hands its pages to inferd's Gemma vision model for OCR — see below).
+`lint-filter`, `trivy-filter`, `har-filter`, `mhtml-filter`, `pdf-filter`)
+are **native Go** — compiled into the binary, run in-process, no inferd and
+no Python (ADR 0010, ADR 0015). PDFs included: `pdf-filter` reads them
+in-process, roughly 99× faster than the Python path and with less text
+mangling, using the document's own structure tree when it has one.
+`pdf-to-md` remains installed for the one thing native Go can't do — a
+*scanned*, image-only PDF has no extractable text, so its pages get
+rasterized and handed to inferd's Gemma vision model for OCR (see below).
 Prompt processors (`compress`, `casefolder`, `shorthand`) dispatch
 through inferd for LLM-driven summarisation of unfamiliar output.
-`cordon-filter` (semantic anomaly surfacer, Python + numpy) embeds
+`cordon-filter` (semantic anomaly surfacer, native Go) embeds
 windows via inferd and surfaces the rare ones — it runs automatically as
 a fallback when `ndjson-filter` over-collapses a log (e.g. an access log
 where every line shares the same level+msg), restoring the outliers a
@@ -179,11 +181,12 @@ $env:THLIBO_CODEX=1; $env:THLIBO_CURSOR=1; $env:THLIBO_COPILOT=1; irm https://ra
 
 ### Prerequisites for running
 
-- **Python 3.8+ — optional.** The common built-in filters (git, npm,
-  cargo, go test, pytest, lint, trivy, ndjson, stacktrace) are native
-  Go and need no Python. Python is only required for **`pdf-to-md`**
-  (PDF → Markdown, uses pypdf + pdfplumber) and the **`cordon-filter`**
-  anomaly surfacer (uses numpy), plus any of your own `.py` processors.
+- **Python 3.8+ — optional.** Every built-in filter (git, npm, cargo,
+  go test, pytest, lint, trivy, ndjson, stacktrace, **pdf**, **cordon**)
+  is native Go and needs no Python. Python is only required for
+  **scanned** PDFs (`pdf-to-md` rasterizes their pages for OCR;
+  born-digital PDFs don't touch it), plus any of your own `.py`
+  processors.
 - `jq` — the Claude Code hook shell script needs it. Install via
   your package manager or `winget install jqlang.jq` on Windows.
 - `git` — for git-related compression you probably have it already.
@@ -408,7 +411,8 @@ same name as a built-in override the built-in.
 | `go-test-filter` | script | `go test -v` / `go test -json` — keeps failures + package tally, drops passing-test noise. Auto-wraps `go test` (only that subcommand) |
 | `har-filter` | native | `.har` (HTTP Archive) captures — **content-matched**, not command-wrapped. One redacted line per request (`METHOD status url (mime size ms)`); drops static assets + non-text bodies + timing plumbing; redacts query-string secrets, auth headers, POST-body creds, JWTs + long tokens (typically ~99% smaller) |
 | `mhtml-filter` | native | `.mhtml`/`.mht` saved-web-page archives — **content-matched**. Extracts the article HTML from the MIME bundle → Markdown (headings, lists, links, code/pre, tables, images as `![alt](src)` refs); drops the base64-embedded images/CSS/scripts that are ~90% of the file (typically ~98% smaller) |
-| `pdf-to-md` | script | PDF → GitHub-flavored markdown (text + tables; scanned/image-only pages OCR'd via inferd Gemma vision) |
+| `pdf-filter` | native | PDF → GitHub-flavored markdown, in-process, no Python — **content-matched** on `%PDF-`. Four tiers, best evidence first: a Tagged PDF's own `/StructTreeRoot` (headings, tables and reading order stated by the producer), native text extraction, geometry table detection, and a `[scanned page N]` placeholder handing image-only pages to the OCR path. Also emits document metadata + bookmark outline; drops running headers/footers, promotes numbered headings, rejects invisible layout grids so a slide deck's positioning frames aren't reported as tables. Encrypted documents pass through untouched (typically ~97% smaller) |
+| `pdf-to-md` | script | The OCR path for **scanned** PDFs — rasterizes pages for inferd's Gemma vision model (ADR 0009). Born-digital PDFs go to `pdf-filter` instead |
 | `shorthand` | prompt | LLM-facing prose compression (SKILL.md, CLAUDE.md, system prompts) |
 | `compress` | prompt | Generic verbose output, fallback |
 | `casefolder` | prompt | Stack traces, error logs, crash output |

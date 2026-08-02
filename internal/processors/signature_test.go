@@ -165,6 +165,43 @@ func TestScriptStillBeatsPromptWithinLineShapes(t *testing.T) {
 	}
 }
 
+// TestNativeSignatureBeatsScriptSignature pins the tier-1 tiebreak. Two
+// processors legitimately claim `^%PDF-`: the native pdf-filter and the
+// Python pdf-to-md script. Which one runs must come from the declared
+// type, not from how the folder names happen to sort — otherwise renaming
+// either processor silently swaps the engine.
+//
+// Native wins because it needs no interpreter and no installed
+// dependencies, so it can't fail for environmental reasons the caller
+// can't see.
+func TestNativeSignatureBeatsScriptSignature(t *testing.T) {
+	script := descriptorWithMatch(t, "pdf-to-md", `^%PDF-`)
+	native := descriptorWithMatch(t, "pdf-filter", `^%PDF-`)
+	native.Type = KindNative
+	native.Entry = ""
+
+	input := "%PDF-1.7\n\x00stream bytes\x00\n"
+
+	// Both orderings, because the bug this prevents is order-dependence:
+	// "pdf-filter" sorts before "pdf-to-md", so a loop that returned on the
+	// first signature hit would pass by luck. Swap the names and the luck
+	// runs out.
+	got := registryOf(t, script, native).MatchFastPath(input)
+	if got == nil || got.Name != "pdf-filter" {
+		t.Fatalf("MatchFastPath = %v, want pdf-filter", got)
+	}
+
+	lateNative := descriptorWithMatch(t, "zzz-native", `^%PDF-`)
+	lateNative.Type = KindNative
+	lateNative.Entry = ""
+	earlyScript := descriptorWithMatch(t, "aaa-script", `^%PDF-`)
+
+	got = registryOf(t, earlyScript, lateNative).MatchFastPath(input)
+	if got == nil || got.Name != "zzz-native" {
+		t.Fatalf("MatchFastPath = %v, want zzz-native — a native signature must beat a script one that sorts earlier", got)
+	}
+}
+
 // --- helpers ---
 
 // descriptorWithMatch builds a script descriptor through validate() so the

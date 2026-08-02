@@ -145,9 +145,19 @@ jobs:
       - name: Install semgrep
         run: pip install semgrep
       - name: semgrep
-        # --error makes medium+ findings fail the job; auto config
-        # pulls in the semgrep-registry rules for Go.
-        run: semgrep --config=auto --error --quiet ./cmd ./internal ./processors
+        # --error makes medium+ findings fail the job; auto config pulls
+        # in the semgrep-registry rules for every language it detects.
+        #
+        # Scans the WHOLE repo, not just ./cmd ./internal ./processors.
+        # The narrower path silently excluded the two highest-value
+        # supply-chain surfaces we have — `.github/workflows/*` (which
+        # run with `contents: write` + `id-token: write`) and
+        # `.github/dependabot.yml` — so six real findings, including
+        # tag-name shell injection in release.yml, sat unreported. A
+        # scanner that can't see the release pipeline isn't gating it.
+        # Deliberate false positives carry `// nosemgrep` with a reason,
+        # per the repo convention.
+        run: semgrep --config=auto --error --quiet .
 
   secrets:
     name: secret-scanning

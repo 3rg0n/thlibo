@@ -13,11 +13,17 @@
 // surface; owning the wire decouples thlibo's release from inferd's
 // client cadence.
 //
-// Scope: the **generation** surface only (length-prefixed, type-tagged
-// framing). thlibo does not use embeddings, so the NDJSON embed socket
-// is not implemented here. Text-only requests today; image/audio
-// attachments (the BLOB-frame path) are reserved for the PDF-OCR work
-// and intentionally absent.
+// Two surfaces, two protocols, one package:
+//
+//   - **Generation** (this file, client.go) — length-prefixed,
+//     type-tagged framing on the unified generation socket.
+//   - **Embedding** (embed.go) — line-delimited JSON on its own socket,
+//     added for cordon-filter's k-NN anomaly scoring (ADR 0016, inferd
+//     ADR 0017). They share the dialers and the timeout knob and
+//     nothing else.
+//
+// Text-only requests today; image/audio attachments (the BLOB-frame
+// path) are reserved for the PDF-OCR work and intentionally absent.
 //
 // Two contracts this package preserves from the prior internal/inferdcli:
 //

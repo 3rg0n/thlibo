@@ -9,6 +9,15 @@ import (
 
 // goldenFilters maps each native filter's processor name to its raw
 // transform func, for the golden parity test.
+//
+// This list is exactly the 9 filters ported from a `run.py` (ADR 0010), so
+// byte-for-byte equality with the Python reference is the correct assertion.
+// Natives with no Python predecessor are deliberately absent: `har-filter`,
+// `mhtml-filter`, and `pdf-filter`. `pdf-filter` in particular must NOT be
+// added — it is not a port of `pdf-to-md` but a different four-tier design
+// that intentionally makes different table and structure decisions (ADR
+// 0015), so a parity assertion against `run.py` would be asserting the
+// wrong thing. It is covered by `filter_pdf_test.go` and a corpus sweep.
 var goldenFilters = map[string]func([]byte) []byte{
 	"git-filter":        gitFilter,
 	"npm-filter":        npmFilter,

@@ -1,6 +1,8 @@
 name: cordon-filter
-type: script
-entry: run.py
+# Native Go since v0.11.3 (ADR 0010) — internal/processors/cordon.go.
+# run.py is retained as the reference implementation, matching every other
+# ported filter; it is no longer executed.
+type: native
 # Never model-selected: dispatched by name as ndjson-filter's
 # over-collapse fallback (middleware.cordonFallback), or by an explicit
 # chain. Advertising it to the router only costs prompt tokens.
@@ -19,5 +21,5 @@ description: >
   declines, or as an opt-in augmentation alongside it.
 
   Falls back to the input verbatim if inferd's embed socket is
-  unreachable, returns an error frame, or numpy is unavailable —
-  matching the rest of thlibo's processor contract.
+  unreachable, returns an error frame, or does not answer within the
+  budget — matching the rest of thlibo's processor contract.

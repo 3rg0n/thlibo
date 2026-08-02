@@ -49,9 +49,11 @@ func (x *Dispatcher) Run(ctx context.Context, d *Descriptor, input string) (stri
 		return x.runScript(ctx, d, input)
 	case KindNative:
 		// In-process Go filter (ADR 0010). No subprocess, no entry-file
-		// fingerprint (the code is the compiled binary). RunNative wraps
-		// the filter with panic-safety + the monotonic byte-win guard.
-		out, ok := RunNative(d.Name, []byte(input))
+		// fingerprint (the code is the compiled binary). RunNativeCtx wraps
+		// the filter with panic-safety + the monotonic byte-win guard, and
+		// hands it the caller's context — cordon-filter makes a bounded
+		// embedding call and must abandon it when the caller gives up.
+		out, ok := RunNativeCtx(ctx, d.Name, []byte(input))
 		if !ok {
 			return "", fmt.Errorf("dispatch: %s: no native filter registered", d.Name)
 		}

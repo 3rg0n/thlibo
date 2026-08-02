@@ -7,8 +7,158 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`pdf-filter`: PDF → markdown in pure Go, no Python, ~99× faster.** ADR
+  0007 chose pdfplumber on the premise that "matching pdfplumber's table
+  quality with raw content-stream parsing is research-grade work." We
+  measured it, and the premise doesn't hold: on the same corpus a vendored
+  gopdf mangled *less* text than pdfplumber (0.11% vs 6.39%) at two orders
+  of magnitude less cost. Head-to-head on five corpus documents,
+  **51.3s → 0.52s aggregate** (per-file 31×–130×), with output sizes within
+  ±15% either way — the speed is not bought with content. The
+  38-second-per-document case matters most: a hook that slow is one the user
+  experiences as a hang. Across a 41-document corpus, 75.6 MB → 1.90 MB
+  (**97.48%**), no crashes. Four tiers, best evidence first: a Tagged PDF's
+  own `/StructTreeRoot` (the producer stating its headings, tables and
+  reading order, rather than us inferring them), native text extraction,
+  geometry table detection, and a `[scanned page N]` placeholder handing
+  image-only pages to the existing Gemma-vision OCR path.
+  **`pdf-to-md` is retained, not replaced** — ADR 0009's OCR flow needs page
+  *rasterization*, which no pure-Go library in our license posture provides.
+  Both claim `^%PDF-`; ADR 0014's tier-1 tiebreak (native beats script
+  within rooted signatures) settles it, pinned by a test that also checks
+  the reversed alphabetical case so it can't pass by luck. Rolling back is
+  deleting one `init()` registration.
+  See [ADR 0015](docs/adr/0015-native-go-pdf-extraction.md) and
+  `internal/pdf/VENDOR.md`.
+- **Invisible layout grids are rejected by measuring gutters, not text.**
+  Slide decks and multi-column prose position text with grids a geometry
+  detector reads as tables. Text-adjacency heuristics can't distinguish a
+  real column boundary from a mid-word cut — both are just two adjacent
+  strings. But **a column boundary is space**: adjacent cells in a real
+  table are separated by a visible gap, because that gap is how a human
+  reader sees the columns at all. So we measure it — left cell's rightmost
+  glyph to right cell's leftmost, against the font size. Over the corpus,
+  every genuine table scored 0.00 tight junctions and the paragraph/TOC
+  false positives scored 0.47–1.00, with **nothing in between**, so the 0.25
+  threshold sits in the middle of an empty gap rather than on a judgement
+  call. False-positive tables on a 384-page manual: 13 → 0. Every surviving
+  table in the corpus was inspected and is real.
+
+- **`Page.Images()`: image placement and raw-sample decoding in native Go**
+  (`internal/pdf/images.go`, `samples.go`). Groundwork for OCR without the
+  Python rasterizer, and useful on its own: `Page.ScanImage()` answers "is
+  this page a scan?" from evidence rather than inference. What existed before
+  was `HasImages()`, a yes/no read of `/Resources/XObject` — which lists what
+  a page *may* paint, not what it does or at what size. A corner logo and a
+  full-page scan are indistinguishable there, and only one of them should
+  reach OCR, so the new walker reads the content stream and reports each
+  image with the CTM in force when it was painted. Form XObjects are followed
+  with `/Matrix` composed in (producers routinely wrap a scan in one), inline
+  BI/ID/EI images are read rather than skipped, and the sample decoder handles
+  DeviceGray/RGB/CMYK, Indexed, CalGray, CalRGB, Lab, ICCBased and stencil
+  masks at 1/2/4/8/16 bpc. Separation and DeviceN are refused — they need a
+  PostScript tint-transform evaluator and are not what a scanner emits —
+  as is JPXDecode, which even the commercial Go PDF libraries stub out.
+  Text extraction is untouched: corpus output is byte-identical across all
+  30 documents on hand.
+
 ### Fixed
 
+- **Three hangs in the vendored PDF parser, all found by our own fuzzing.**
+  A hang is strictly worse than a panic under architectural invariant #2:
+  `RunNative` recovers a panic and passes the original bytes through, so a
+  crash degrades to "no compression" and the fail-open contract holds —
+  but nothing recovers a hang. The hook blocks and the AI client waits on
+  it. All three were in that class, on input a merely *corrupt* PDF
+  reaches: (1) `NextToken` dispatches `)`, `{`, `}` to `readKeyword`, whose
+  scan loop stopped on a delimiter **without advancing `pos`** — and every
+  caller loops until EOF, so one stray `)` in a content stream meant text
+  extraction never returned (found on the one-byte input `")"`); (2) an
+  xref subsection's declared entry count was trusted, and `NextToken`
+  returns `(TEOF, nil)` rather than an error at end of input, so a header of
+  `0 60000000000` spun sixty billion no-op iterations; (3) `/Prev` is a
+  file-controlled offset followed by recursion with no visited set, and
+  `collectPages` walked `/Kids` with neither a depth bound nor a cycle
+  guard, so a `/Pages` node naming itself recursed until the stack gave out.
+  Upstream ships 102 tests and zero fuzz targets — defensible for a library
+  that reads files its own caller wrote; thlibo reads whatever an AI client
+  was pointed at. Three fuzz targets now run past 50M execs each, crashers
+  are committed under `internal/pdf/testdata/fuzz/`, and each walk has a
+  named regression test because a replayed hang otherwise surfaces as a
+  package timeout that says nothing about which walk looped.
+- **`/Differences` no longer corrupts decoded text via byte truncation.**
+  The encoding-override code is a file-controlled number narrowed with
+  `byte(v)`, so `/Differences [300 /alpha]` aliased onto `0x85` and
+  overwrote whichever glyph legitimately sat there. Silent text corruption
+  rather than a crash, which is why it survived 102 upstream tests.
+  Out-of-range codes are now dropped. Verified against the 41-document
+  corpus: no real PDF reaches this branch, so output is byte-identical and
+  only malformed input behaves differently.
+- **Structure-tree text no longer duplicates 13.8× across pages.** Marked-
+  content IDs are unique only *per page*, and keying the tag→text binding on
+  MCID alone collided across them — measured at 13.8× content inflation,
+  i.e. the same prose repeated into the model's context. Now keyed on
+  `(page, MCID)`. Separately, BDC handling discarded the inline properties
+  dictionary, so every span carried `MCID: -1` and nothing bound at all.
+  Tags become model-facing input, so this tier is verified against the
+  corpus rather than trusted: a confidently wrong structure tree is worse
+  output than no structure tree.
+- **Encrypted PDFs are refused instead of extracted as ciphertext.**
+  Upstream has no `/Encrypt` handling whatsoever, so an encrypted document
+  parsed to garbage that looked like successfully extracted text. Now
+  detected and passed through unchanged.
+- **Four unchecked file-declared sizes in the PDF reader, all reaching a
+  slice.** Same shape in every case: a number the document asserts about
+  itself, used to index or allocate. (1) A stream's `/Length` was sliced
+  directly, so `/Length 999999` in a 768-byte file panicked with `slice
+  bounds out of range` — found by fuzzing, and a bad length is now treated
+  as a *missing* one (scan for `endstream`) rather than clamped to EOF,
+  which would feed the decoders every trailing byte in the file. (2) `/N` on
+  a compressed object stream sized `make([]objEntry, n)`, so `/N 1000000000`
+  is a ~16 GB ask (`makeslice: len out of range`); now capped, and bounded
+  additionally by the stream's own length, since two tokens per entry means
+  a stream cannot hold more entries than it has bytes. (3) `/First` plus a
+  per-entry offset indexed the object-stream data unchecked in two places,
+  the more reachable being the cache-all loop that touches every entry
+  rather than just the requested one. (4) `/Columns`, `/Colors` and
+  `/BitsPerComponent` multiply into the predictor row-size allocation, and
+  are now range-checked *individually* — the product overflows int64 at large
+  values and comes back small and innocent-looking, so checking only the
+  product is not a check. Unlike the three hangs above these are panics, so
+  the fail-open contract already held; fixing them at the source still buys
+  the user real output instead of a recovered crash that costs all
+  compression on that document. Each has a named regression test, verified
+  by reverting the fix and confirming the test fails.
+- **Two unchecked file-declared *positions* reaching the lexer**, the same
+  shape as the sizes above one step earlier, and both crashes on `data[-1]`.
+  (1) An xref entry's offset went straight into `Lexer.SetPos`, so a
+  subsection line of `-1 0 n` panicked with `index out of range [-1]`; the
+  compressed-object path already range-checked its own offset, the
+  uncompressed one did not. (2) `readXRefAt` takes its position from
+  `startxref` and from every `/Prev` in the update chain, neither
+  range-checked at the call site — and `/Prev -1` is a perfectly parseable
+  PDF integer that panicked identically. `SetPos` now clamps, which covers
+  the second path; the first is fixed at `parseObjectAt`. Two independent
+  paths, so each has its own regression test, verified by reverting each half
+  of the fix separately. Found by `FuzzOpenBytes` after `Page.Images()`
+  widened it to walk content-stream structure — the same target had
+  previously run past 135M execs clean, which is the argument for extending a
+  fuzz target when you extend the code it covers rather than trusting the old
+  exec count. It now runs clean past 206M.
+- **CCITTFax scans failed to decode at all, and would have decoded as a
+  negative.** Two bugs in `DecodeImageStream`, which had no callers and no
+  tests yet — so neither could show up in the corpus sweep. It filled an
+  `image.Gray`'s byte-per-pixel `Pix` from `ccitt.NewReader`, which yields
+  *packed 1-bpp* rows: it demanded exactly 8× the bytes available and every
+  fax scan died with `unexpected EOF` (measured on a real 2480×3507 scan:
+  1,087,170 bytes delivered against 8,697,360 wanted). And `Invert` was set
+  to `!blackIs1`, but `x/image/ccitt` already emits CCITT's default polarity
+  (0 bit = white) as white pixels — so the negation would have handed an OCR
+  model a 94.8%-black photographic negative of a text page. Now uses
+  `ccitt.DecodeIntoGray` with `Invert` tracking `/BlackIs1` directly: the
+  same scan decodes to 5.21% ink, which is right for a page of text.
 - **An unparseable PDF now falls back to the original bytes instead of
   replacing the document with an error message.** Every `pdf-to-md`
   failure path wrote a two-line HTML comment to *stdout* and exited 0 —
@@ -88,6 +238,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`cordon-filter` is native Go; numpy is no longer a dependency of
+  anything.** ADR 0010 held cordon back as Python because ADR 0008 had
+  measured a ~100× gap between vectorised numpy and nested Python loops.
+  That comparison was about Python, not about the math: the Go equivalent
+  is a compiled nested loop, so both halves of the trade-off — 5 lines vs
+  40, 100ms vs 10s — disappear along with the interpreter. The reason to
+  care is not the port itself but *who was paying for it*: cordon fires
+  automatically as `ndjson-filter`'s over-collapse fallback, so a user who
+  never opted into anything could hit a missing numpy and get passthrough
+  where they expected compression — the exact silent-failure footgun ADR
+  0010 set out to remove. Python is now needed nowhere on the compression
+  path; the one remaining use is `pdf-to-md`'s page rasterization for
+  scanned PDFs, which only PDF users reach.
+  Three supporting changes, each deliberately narrow. `NativeCtxFilter`
+  sits *alongside* `NativeFilter` rather than replacing it — the ctx-free
+  signature is what states at the type level that a filter does no I/O,
+  which is true of all 12 others, and `RegisterNative` adapts into one
+  shared registry so a duplicate name stays a build-time panic instead of
+  becoming a silent shadow. `inferd.EmbedClient` adds the embedding wire
+  (line-delimited JSON, its own socket, per inferd ADR 0017), sharing only
+  the dialers with the length-prefixed generation protocol. And
+  `CORDON_TIMEOUT` (30s) is a *replacement*, not an addition: as a script
+  processor cordon was bounded by the dispatcher's 30s `ScriptTimeout` and
+  its own 60s embed timeout was never reachable, so dropping the
+  subprocess without restoring that ceiling would have turned a wedged
+  daemon from a bounded fallback into a hung PreToolUse hook (ADR 0012).
+  Parity is pinned by 43 signature/level cases captured from the running
+  `run.py` before retirement — cordon's *output* can't be golden-tested
+  the way the ADR 0010 ports were, because the ranking is a function of a
+  live model's embeddings, so the deterministic layer is asserted against
+  Python and the scoring layer against an injected deterministic embedder.
+  Those fixtures cannot be regenerated; a change to them is a behaviour
+  change, not a test fix. `run.py` stays on disk as the reference, as with
+  every other ported filter.
+  See [ADR 0016](docs/adr/0016-native-go-cordon-filter.md), which
+  supersedes [ADR 0008](docs/adr/0008-numpy-as-processor-dep.md).
 - **Routing prompt cut 95%: ~2,332 tokens → ~123.** thlibo exists to
   save tokens, so the ones it spends itself have to earn their keep, and
   the routing call was not: 8,747 characters of system prompt plus a
@@ -139,6 +325,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`google.golang.org/grpc` 1.81.1 → 1.82.1**, clearing GO-2026-6061.
   Indirect, reached via the optional OTel exporter (ADR 0011);
   `govulncheck ./...` now reports no vulnerabilities.
+- **Tag names no longer reach a `run:` shell as code (`release.yml`).**
+  Three steps interpolated `${{ github.ref_name }}` directly into script
+  bodies. GitHub substitutes that textually *before* the shell parses the
+  line, and a tag name is chosen by whoever pushes the tag — so a tag
+  like `v1.0.0";<command>;"` executed in a job holding `contents: write`
+  and `id-token: write`, i.e. with the ability to rewrite release assets
+  and to request a Sigstore signing identity. Reproduced against the old
+  form: the injected command ran, *and* the build silently stamped
+  `v1.0.0` rather than the real tag. All three now read the value from
+  `env:` (`REF_NAME`, or the `THLIBO_VERSION` the two `verify-install`
+  steps already declared and weren't using), where the shell expands it
+  after parsing and the quoting holds. Matrix values keep using `${{ }}`
+  — those come from the workflow file, not from user input. Build paths
+  are byte-identical (verified per matrix entry, plus a real
+  `GOOS=linux` build confirming the ldflags tag still lands in the
+  binary).
+- **Dependabot `cooldown`: 7 days for Actions and Go major/minor, 0 for
+  Go patches.** SHA-pinning (THREAT_MODEL finding #2) defeats a mutable
+  tag being re-pointed; it does nothing about a *newly published*
+  version that is malicious, where bumping the pin is a faithful update
+  to a compromised artefact. A holding window is the defence — the
+  March 2026 Trivy compromise was public well inside a week. Patches are
+  exempted deliberately: `govulncheck` gates CI, so delaying the release
+  that closes an advisory would trade a supply-chain window for a
+  known-CVE window.
+- **semgrep now scans the whole repo, not just `./cmd ./internal
+  ./processors`.** The narrower path excluded `.github/` — the two
+  highest-privilege files we ship — which is why the injection above went
+  unreported through every release. A scanner that cannot see the release
+  pipeline is not gating it. Zero findings repo-wide after this change;
+  the one deliberate false positive (SRI on an inline `data:` URI, where
+  there is no fetch to hash) carries a `nosemgrep` with its reason, per
+  existing convention.
 
 ## [0.11.2] - 2026-07-28
 
