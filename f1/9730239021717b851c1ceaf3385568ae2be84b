@@ -1,0 +1,98 @@
+internal/install/migrate_v05.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 32-39
+internal/processors/filter_gotest.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 12-24
+internal/processors/filter_cargo_test.go
+  s_5811b7f24eccc0::t_6c9919564138b4 7,9-13,16-17,21,29,33
+go.mod
+  s_5811b7f24eccc0::t_aa6bd755b54dbb 19
+internal/update/check_test.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 30-31
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_1af603f11ce321 90-103
+internal/telemetry/telemetry.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 138-139
+internal/adapters/cursor/cursor.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 17-19
+cmd/thlibo/shorthandcmd/shorthand_test.go
+  s_5811b7f24eccc0::t_01ad31f81946e2 26-27
+  s_5811b7f24eccc0::t_2a1d41d64765ee 55-56
+internal/processors/signature_test.go
+  s_5811b7f24eccc0::t_217ddc23e148f9 1-207
+docs/adr/0014-fast-path-match-precedence.md
+  s_5811b7f24eccc0::t_8f41c0025ba627 1-131
+internal/logx/logx.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 52-57
+CHANGELOG.md
+  s_5811b7f24eccc0::t_dd79b616169916 102-114
+  s_5811b7f24eccc0::t_e966f62d1c4b06 1733-1742
+  s_5811b7f24eccc0::t_049bcd76ba6dd5 12-32
+internal/adapters/codex/codex.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 8-9,17-25
+internal/processors/registry.go
+  s_5811b7f24eccc0::t_3ed0f4e49d9d5a 252,254-277,279-281,287-289,292-297,299-337,339
+internal/processors/filter_npm.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 11,75
+internal/processors/filter_pytest.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 18-23,27-28,40-42
+internal/processors/filter_har.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 199-200
+internal/processors/registry_test.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 145-147
+internal/shellcmd/shellcmd_test.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 7-10
+internal/inferd/timeout_test.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 135-136
+internal/middleware/family_dispatch_test.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 21-25,47-49
+internal/shorthand/shorthand.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 296-298,300
+internal/update/headless.go
+  s_5811b7f24eccc0::t_aa3d6c1e5ce465 46-51
+internal/processors/filter_cargo.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 72
+docs/adr/README.md
+  s_5811b7f24eccc0::t_cad615d1469abf 21
+internal/processors/descriptor.go
+  s_5811b7f24eccc0::t_726fe4259f9d25 187-260
+  s_5811b7f24eccc0::t_f214a13359a7f7 10
+  s_5811b7f24eccc0::t_21e9602eecf8a7 36-40,76-81
+  s_5811b7f24eccc0::t_907a28f649dff4 104-109
+  s_5811b7f24eccc0::t_440a77f7b4feff 395
+CLAUDE.md
+  s_5811b7f24eccc0::t_c10f2d74bd5b49 83-89
+cmd/thlibo/shorthandcmd/shorthand.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 44-49
+internal/processors/zz_gen_golden_test.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 15-16
+internal/telemetry/otel.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 14,18
+internal/update/runner_test.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 19-20
+internal/config/config.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 151-153
+internal/adapters/claudecode/claudecode.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 320-323
+internal/casefile/casefile.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 4-7
+internal/processors/filter_npm_test.go
+  s_5811b7f24eccc0::t_ecbf5edd7a74b3 9-10,28
+go.sum
+  s_5811b7f24eccc0::t_baf5e6157249f5 78-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f19730239021717b851c1ceaf3385568ae2be84b",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
