@@ -75,16 +75,25 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def emit_error(msg: str, raw: bytes) -> None:
-    """Best-effort fallback when the PDF can't be parsed.
+    """Report an unparseable PDF on stderr and leave stdout empty.
 
-    Prints a short error block plus a hex preview of the first 32
-    bytes so the AI assistant can see what kind of file this
-    actually was. Exit code stays 0.
+    Writes the reason plus a hex preview of the first 32 bytes so the
+    operator can see what kind of file this actually was. Callers pair
+    this with a NON-ZERO exit, which is the processor contract's signal
+    for "fall back to the original bytes" (ADR 0006): the middleware
+    hands the AI assistant the untouched input instead of a substituted
+    error payload.
+
+    Diagnostics go to stderr, not stdout, for the same reason. Anything
+    on stdout IS the compressed tool output — a two-line error comment
+    written there replaces the document rather than describing it, which
+    is how a 6.9 MB PDF used to reach the model as 202 bytes of
+    "pypdf failed to open document".
     """
-    sys.stdout.write(f"<!-- pdf-to-md: {msg} -->\n")
+    sys.stderr.write(f"pdf-to-md: {msg}\n")
     preview = raw[:32]
     hexdump = " ".join(f"{b:02x}" for b in preview)
-    sys.stdout.write(f"<!-- first 32 bytes: {hexdump} -->\n")
+    sys.stderr.write(f"pdf-to-md: first 32 bytes: {hexdump}\n")
 
 
 def promote_headings(text: str) -> str:
@@ -396,7 +405,7 @@ def main() -> int:
     raw = sys.stdin.buffer.read()
     if not raw.startswith(b"%PDF-"):
         emit_error("input does not look like a PDF (no %PDF- magic)", raw)
-        return 0
+        return 1
 
     # Imports inside main so a missing dep produces a clean error
     # message rather than a stack trace at module-load time.
@@ -408,7 +417,10 @@ def main() -> int:
             f"dependency missing: {e.name}; install with `pip install -r ~/.thlibo/processors/pdf-to-md/requirements.txt`",
             raw,
         )
-        return 0
+        # Python deps are optional (ADR 0008), so this is the likeliest
+        # error path on a fresh box — and the one where substituting an
+        # error payload for the document did the most damage.
+        return 1
 
     # Document-level pass (metadata + outline).
     md_parts: list[str] = []
@@ -416,7 +428,7 @@ def main() -> int:
         reader = pypdf.PdfReader(io.BytesIO(raw))
     except Exception as e:  # noqa: BLE001  pypdf raises various exception types
         emit_error(f"pypdf failed to open document: {e}", raw)
-        return 0
+        return 1
 
     metadata = getattr(reader, "metadata", None) or {}
     # pypdf returns metadata as a dict-like or sometimes a custom
@@ -463,6 +475,12 @@ def main() -> int:
         pdf = pdfplumber.open(io.BytesIO(raw))
     except Exception as e:  # noqa: BLE001
         emit_error(f"pdfplumber failed to open document: {e}", raw)
+        # Unlike the other error paths this one exits 0 on purpose: the
+        # document-level pass above already produced real markdown (title,
+        # page count, outline). That partial extraction beats the raw PDF
+        # container, so it is worth keeping — only the per-page text is
+        # lost. emit_error's diagnostics went to stderr, so stdout holds
+        # markdown and nothing else.
         sys.stdout.write("\n\n".join(md_parts))
         sys.stdout.write("\n")
         return 0

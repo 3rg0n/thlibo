@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An unparseable PDF now falls back to the original bytes instead of
+  replacing the document with an error message.** Every `pdf-to-md`
+  failure path wrote a two-line HTML comment to *stdout* and exited 0 —
+  but stdout **is** the compressed tool output, so that comment did not
+  describe the failure, it *became* the document: a PDF reached the model
+  as ~200 bytes of `<!-- pdf-to-md: pypdf failed to open document ... -->`
+  and the original bytes were unrecoverable. Architectural invariant #2
+  (ADR 0006) names parse failure as a pass-through-the-original-bytes
+  condition, and the dispatcher already implements exactly that for a
+  non-zero exit; the script simply wasn't using the signal. Diagnostics
+  now go to stderr and the three total-failure paths (no `%PDF-` magic,
+  missing Python dependency, pypdf open failure) exit non-zero, so the
+  middleware serves the untouched input. The widest of those is the
+  missing-dependency path: Python deps are optional (ADR 0008), so on a
+  box without pypdf/pdfplumber *every* PDF was being replaced by a
+  150-byte comment rather than passed through. A pdfplumber open failure
+  still exits 0 on purpose — the document-level pass has already produced
+  real markdown (title, page count, outline) that beats the raw container,
+  and only per-page text is lost. Found by macOS arm64 validation of
+  v0.11.3-rc.2. Pinned by `processors/pdf-to-md/testdata/test_failopen.py`.
 - **PDFs and archives are no longer stolen by a text filter that matched
   by coincidence.** `Registry.MatchFastPath` broke ties by alphabetical
   order with no notion of match strength, so `go-test-filter` — whose

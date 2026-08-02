@@ -71,6 +71,15 @@ E4B model served by a sidecar:
    must never break the AI client. Script non-zero exit, inferd
    unreachable, parse failure, timeout → pass through the original
    bytes. Every hook script exits 0 on error. (ADR 0006 — fail open.)
+   **A processor's stdout IS the tool output, so an error message
+   written there doesn't report the failure — it replaces the
+   document.** A processor that cannot do its job exits **non-zero**
+   with diagnostics on **stderr**; that is the only way to reach the
+   fallback, since exit 0 with a short body looks like success to the
+   dispatcher and the original bytes are then lost. Exit 0 with partial
+   output is legitimate only when that output is genuinely more useful
+   than the input (see `pdf-to-md`'s pdfplumber path, which keeps the
+   metadata/outline markdown it already extracted).
    **Fail open means fail *fast*:** every inference round-trip is
    bounded in `inferd.Client.Post` (15s, `$THLIBO_INFERD_TIMEOUT`), never
    at the call sites, because an unbounded wait on a wedged daemon is a
