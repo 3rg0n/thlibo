@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	"io"
 
 	"golang.org/x/image/ccitt"
 )
@@ -133,10 +132,21 @@ func decodeCCITT(st *Stream, w, h int) (image.Image, error) {
 		}
 	}
 
-	opts := &ccitt.Options{Invert: !blackIs1}
-	r := ccitt.NewReader(bytes.NewReader(st.Data), order, sub, w, h, opts)
+	// thlibo: DecodeIntoGray, not NewReader. NewReader yields *packed 1-bpp*
+	// rows (one bit per pixel), so filling an image.Gray's 1-byte-per-pixel
+	// Pix with io.ReadFull demanded exactly 8x the bytes the reader produces
+	// and every CCITT image failed with "unexpected EOF" — measured on a real
+	// 2480x3507 fax scan: 1,087,170 bytes delivered against 8,697,360 wanted.
+	// DecodeIntoGray does the bit-to-byte expansion itself.
+	//
+	// Invert tracks blackIs1 rather than negating it. x/image/ccitt already
+	// emits CCITT's default polarity (0 bits = white) as white pixels, so
+	// inverting on the default turns a text page into a 94.8%-black one;
+	// /BlackIs1 true is the case that needs the flip. Measured on the same
+	// scan: 5.21% dark with this mapping, 94.79% with the negation.
+	opts := &ccitt.Options{Invert: blackIs1}
 	gray := image.NewGray(image.Rect(0, 0, w, h))
-	if _, err := io.ReadFull(r, gray.Pix); err != nil {
+	if err := ccitt.DecodeIntoGray(gray, bytes.NewReader(st.Data), order, sub, opts); err != nil {
 		return nil, fmt.Errorf("pdf: ccitt: %w", err)
 	}
 	return gray, nil

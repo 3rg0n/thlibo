@@ -53,9 +53,9 @@ New files:
 - `meta.go` — `/Info` and `/Outline` accessors, with the same bounded-walk
   treatment as the rest.
 - `fuzz_test.go` — upstream ships 102 tests and zero fuzz targets.
-- `lexer_test.go`, `bounds_test.go`, `helper_test.go` — regression tests
-  for the defects below, and hand-built fixtures replacing upstream's
-  `NewCreator()`-based ones (we dropped the generation API).
+- `lexer_test.go`, `bounds_test.go`, `filters_test.go`, `helper_test.go` —
+  regression tests for the defects below, and hand-built fixtures replacing
+  upstream's `NewCreator()`-based ones (we dropped the generation API).
 
 Correctness fixes:
 
@@ -66,6 +66,17 @@ Correctness fixes:
   `byte(v)`, so `[300 /alpha]` aliased onto `0x85` and overwrote whichever
   glyph legitimately sat there. Silent text corruption, not a crash. Now
   out-of-range codes are dropped.
+- `filters.go` — two bugs in our *own* `decodeCCITT`, both found by review
+  rather than by the corpus, because nothing called `DecodeImageStream` yet.
+  It used `ccitt.NewReader` to fill an `image.Gray`'s `Pix`, but that reader
+  yields *packed 1-bpp* rows — so it demanded exactly 8× the bytes available
+  and every CCITT scan failed with `unexpected EOF` (measured on a real
+  2480×3507 fax: 1,087,170 bytes delivered against 8,697,360 wanted). Now
+  uses `ccitt.DecodeIntoGray`, which expands bits to bytes itself. Second,
+  `Invert` was set to `!blackIs1`; `x/image/ccitt` already emits CCITT's
+  default polarity (0 bit = white) as white pixels, so the negation turned a
+  text page into a 94.8%-black negative. `Invert` now tracks `/BlackIs1`
+  directly — same scan, 5.21% ink.
 
 Termination fixes — all three found by our own fuzz targets, all three
 **hangs rather than crashes**, which is the one failure mode thlibo's
@@ -83,6 +94,32 @@ bytes pass through; nothing recovers a blocked hook):
   with no visited set; and `collectPages` walked `/Kids` with neither a
   depth bound nor a cycle guard, so a `/Pages` node naming itself recursed
   until the stack gave out.
+
+File-declared sizes that reach a slice — all in `reader.go`, all found by
+review of PR #103 rather than by the fuzzer, and all the same shape: a number
+the document asserts about itself, used to index or allocate:
+
+- `/Length` on a stream was sliced directly, so `/Length 999999` in a
+  768-byte file panicked with `slice bounds out of range`. A bad length is
+  now treated as a missing one — scan for `endstream` — rather than clamped
+  to EOF, which would feed the decoders every trailing byte in the file.
+- `/N` on a compressed object stream sized `make([]objEntry, n)`, so
+  `/N 1000000000` is a ~16 GB ask (`makeslice: len out of range`). Capped at
+  `maxObjStmEntries`, and additionally by the stream's own length: two tokens
+  per entry means a stream cannot honestly hold more entries than it has
+  bytes.
+- `/First` plus a per-entry offset indexed the object-stream data unchecked,
+  in two places. The second is the cache-all loop, which touches *every*
+  entry rather than just the requested one, so it is the more reachable.
+- `/Columns`, `/Colors` and `/BitsPerComponent` multiply into the predictor
+  row-size allocation. Each is now range-checked *individually*, because the
+  product overflows int64 at large values and comes back small and
+  innocent-looking — checking only the product is not a check.
+
+These four are panics rather than hangs, so `RunNative`'s recover does keep
+the fail-open contract intact. They are still worth fixing at the source: a
+recovered panic costs the user all compression on that document, and for a
+bogus `/Length` the right answer (find `endstream`) recovers real text.
 
 Upstream's lack of guards here is defensible for a library that reads files
 its own caller wrote. thlibo reads whatever an AI client was pointed at, so

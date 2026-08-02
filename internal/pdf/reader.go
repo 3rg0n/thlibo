@@ -387,8 +387,20 @@ func (r *Reader) readStreamData(lex *Lexer, d Dict) ([]byte, []byte, error) {
 			length, ok = int(v), true
 		}
 	}
+	// thlibo: /Length is file-controlled, so a value that overruns the buffer
+	// must not reach the slice below — upstream sliced on it directly and
+	// panicked on `/Length 999999` in a 768-byte file (fuzz seed
+	// 348258312e3b1b8f). A bad length is treated exactly like a missing one:
+	// scan for `endstream` instead. Clamping to EOF would be worse than
+	// scanning, since it feeds the decoders every trailing byte in the file.
+	if ok && (length < 0 || dataStart+length > len(r.data)) {
+		ok = false
+	}
 	if !ok {
 		// Try to find endstream.
+		if dataStart > len(r.data) {
+			return nil, nil, fmt.Errorf("stream starts past end of file")
+		}
 		endIdx := bytes.Index(r.data[dataStart:], []byte("endstream"))
 		if endIdx < 0 {
 			return nil, nil, fmt.Errorf("cannot determine stream length")
@@ -522,8 +534,22 @@ func applyPredictorWithParms(data []byte, dp Dict) ([]byte, error) {
 		bpc = 8
 	}
 
+	// thlibo: all three parameters are file-controlled and multiply into an
+	// allocation in pngUnpredict, so each is range-checked before the multiply
+	// rather than after — `/Columns 1e9 /Colors 1e9` overflows int64 and turns
+	// the row-size sanity check into a no-op. The ceilings are far above any
+	// real image (PDF images are page-sized, not gigapixel).
+	if columns < 0 || columns > maxPredictorColumns ||
+		colors < 0 || colors > maxPredictorColors ||
+		bpc < 0 || bpc > maxPredictorBPC {
+		return nil, fmt.Errorf("predictor parameters out of range: columns=%d colors=%d bpc=%d", columns, colors, bpc)
+	}
+
 	// Row width in bytes: Columns * Colors * (BitsPerComponent / 8).
 	bytesPerRow := columns * colors * bpc / 8
+	if bytesPerRow <= 0 {
+		return nil, fmt.Errorf("predictor: non-positive row width %d", bytesPerRow)
+	}
 
 	if predictor >= 10 {
 		bytesPerPixel := colors * bpc / 8
@@ -711,6 +737,15 @@ func (r *Reader) resolveFromObjStm(cref compressedRef) any {
 	if n == 0 || first == 0 {
 		return nil
 	}
+	// thlibo: /N is file-controlled and sizes the allocation below, so a
+	// declared count is capped before it is trusted. Each entry needs two
+	// tokens in the header, so a stream cannot honestly hold more entries
+	// than it has bytes — that bounds `n` by the real data rather than by a
+	// number the file asserts. maxObjStmEntries is the belt to that braces:
+	// upstream's `make([]objEntry, n)` on `/N 1000000000` is a 16 GB ask.
+	if n < 0 || n > maxObjStmEntries || n > len(stream.Data) {
+		return nil
+	}
 
 	// Parse the header: N pairs of (objNum byteOffset).
 	parser := NewParser(stream.Data)
@@ -737,7 +772,13 @@ func (r *Reader) resolveFromObjStm(cref compressedRef) any {
 		return nil
 	}
 
+	// thlibo: both /First and the per-entry offset come from the file, so the
+	// sum is not a safe slice index — an out-of-range value panicked here the
+	// same way /Length did in readStreamData.
 	objOffset := first + entries[cref.Index].Offset
+	if objOffset < 0 || objOffset > len(stream.Data) {
+		return nil
+	}
 	p := NewParser(stream.Data[objOffset:])
 	obj, err := p.ParseObject()
 	if err != nil {
@@ -745,18 +786,23 @@ func (r *Reader) resolveFromObjStm(cref compressedRef) any {
 	}
 
 	// Cache all objects from this ObjStm while we're at it.
-	for i, entry := range entries {
+	for _, entry := range entries {
 		if _, exists := r.cache[entry.Num]; exists {
 			continue
 		}
+		// thlibo: same file-controlled offset as above, and this loop reaches
+		// every entry rather than just the requested one — so it is the more
+		// likely of the two to be handed a bad offset. Skip, don't panic.
 		off := first + entry.Offset
+		if off < 0 || off > len(stream.Data) {
+			continue
+		}
 		pp := NewParser(stream.Data[off:])
 		o, err := pp.ParseObject()
 		if err != nil {
 			continue
 		}
 		r.cache[entry.Num] = o
-		_ = i
 	}
 
 	return obj
@@ -897,6 +943,25 @@ const (
 	// maxPagesCollected bounds total pages, so a tree that fans out without
 	// ever cycling still terminates.
 	maxPagesCollected = 50000
+)
+
+// Bounds on file-declared sizes that reach an allocation.
+//
+// thlibo: local addition. Each of these is a number the file asserts about
+// itself, used to size a slice — so it is capped before it is trusted. Found
+// by review of PR #103 (issue #102); the object-stream case is upstream's
+// `make([]objEntry, n)` on a file-supplied /N, which is a 16 GB ask at /N 1e9.
+const (
+	// maxObjStmEntries bounds objects per compressed object stream. Real
+	// producers emit hundreds; a few thousand is already unusual.
+	maxObjStmEntries = 100000
+	// Predictor parameter ceilings. These multiply into a row-size allocation,
+	// so they are checked individually — the product overflows int64 long
+	// before either factor looks suspicious on its own. A real PDF image is
+	// page-sized: 300 dpi on a 200-inch canvas is 60000 columns.
+	maxPredictorColumns = 1 << 20
+	maxPredictorColors  = 32
+	maxPredictorBPC     = 32
 )
 
 // collectPages walks the page tree. refs, when non-nil, receives each

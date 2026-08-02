@@ -91,6 +91,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Upstream has no `/Encrypt` handling whatsoever, so an encrypted document
   parsed to garbage that looked like successfully extracted text. Now
   detected and passed through unchanged.
+- **Four unchecked file-declared sizes in the PDF reader, all reaching a
+  slice.** Same shape in every case: a number the document asserts about
+  itself, used to index or allocate. (1) A stream's `/Length` was sliced
+  directly, so `/Length 999999` in a 768-byte file panicked with `slice
+  bounds out of range` — found by fuzzing, and a bad length is now treated
+  as a *missing* one (scan for `endstream`) rather than clamped to EOF,
+  which would feed the decoders every trailing byte in the file. (2) `/N` on
+  a compressed object stream sized `make([]objEntry, n)`, so `/N 1000000000`
+  is a ~16 GB ask (`makeslice: len out of range`); now capped, and bounded
+  additionally by the stream's own length, since two tokens per entry means
+  a stream cannot hold more entries than it has bytes. (3) `/First` plus a
+  per-entry offset indexed the object-stream data unchecked in two places,
+  the more reachable being the cache-all loop that touches every entry
+  rather than just the requested one. (4) `/Columns`, `/Colors` and
+  `/BitsPerComponent` multiply into the predictor row-size allocation, and
+  are now range-checked *individually* — the product overflows int64 at large
+  values and comes back small and innocent-looking, so checking only the
+  product is not a check. Unlike the three hangs above these are panics, so
+  the fail-open contract already held; fixing them at the source still buys
+  the user real output instead of a recovered crash that costs all
+  compression on that document. Each has a named regression test, verified
+  by reverting the fix and confirming the test fails.
+- **CCITTFax scans failed to decode at all, and would have decoded as a
+  negative.** Two bugs in `DecodeImageStream`, which had no callers and no
+  tests yet — so neither could show up in the corpus sweep. It filled an
+  `image.Gray`'s byte-per-pixel `Pix` from `ccitt.NewReader`, which yields
+  *packed 1-bpp* rows: it demanded exactly 8× the bytes available and every
+  fax scan died with `unexpected EOF` (measured on a real 2480×3507 scan:
+  1,087,170 bytes delivered against 8,697,360 wanted). And `Invert` was set
+  to `!blackIs1`, but `x/image/ccitt` already emits CCITT's default polarity
+  (0 bit = white) as white pixels — so the negation would have handed an OCR
+  model a 94.8%-black photographic negative of a text page. Now uses
+  `ccitt.DecodeIntoGray` with `Invert` tracking `/BlackIs1` directly: the
+  same scan decodes to 5.21% ink, which is right for a page of text.
 - **An unparseable PDF now falls back to the original bytes instead of
   replacing the document with an error message.** Every `pdf-to-md`
   failure path wrote a two-line HTML comment to *stdout* and exited 0 —

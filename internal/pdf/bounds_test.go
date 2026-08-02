@@ -136,6 +136,135 @@ func TestPageTreeCycleTerminates(t *testing.T) {
 	}
 }
 
+// rawPDF assembles objects into a file with a correct xref table, so a test
+// can vary one file-controlled field and leave everything else valid.
+func rawPDF(objs []string, trailerExtra string) []byte {
+	var b strings.Builder
+	b.WriteString("%PDF-1.7\n")
+	offsets := make([]int, len(objs))
+	for i, o := range objs {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R %s>>\nstartxref\n%d\n%%%%EOF\n",
+		len(objs)+1, trailerExtra, xref)
+	return []byte(b.String())
+}
+
+// TestStreamLengthIsNotTrusted is the regression test for the panic
+// FuzzOpenBytes found on seed 348258312e3b1b8f: `/Length` is a number the
+// file asserts about its own stream, and upstream sliced the buffer on it
+// directly — "slice bounds out of range [:964] with capacity 768".
+//
+// This one is a panic rather than a hang, so RunNative's recover does keep
+// the fail-open contract intact. It is still worth fixing at the source: a
+// recovered panic costs the user all compression on that document, and the
+// correct read of an overlong /Length is "the length is wrong, go find
+// endstream" — which recovers real text instead of discarding the file.
+func TestStreamLengthIsNotTrusted(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		length string
+	}{
+		{"far past EOF", "999999"},
+		{"just past EOF", "4000"},
+		{"negative", "-1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := rawPDF([]string{
+				"<< /Type /Catalog /Pages 2 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>",
+				"<< /Length " + tc.length + " >>\nstream\nBT /F1 12 Tf (hello) Tj ET\nendstream",
+			}, "")
+
+			// Must not panic: the read path is reached via TextLines.
+			mustTerminate(t, "stream read with a bad /Length", func() {
+				readEverything(data)
+			})
+		})
+	}
+}
+
+// TestObjStmEntryCountIsNotTrusted covers the third file-declared size that
+// reaches an allocation: /N on a compressed object stream. Upstream did
+// `make([]objEntry, n)` straight from the dict, so /N 1000000000 asks for
+// ~16 GB before a single entry is validated.
+//
+// This drives resolveFromObjStm directly rather than through a whole file.
+// Reaching it via OpenBytes needs a compressed xref entry pointing at the
+// stream, and getting that wrong yields a test that passes because it never
+// arrives — which is exactly what the first draft of this test did.
+func TestObjStmEntryCountIsNotTrusted(t *testing.T) {
+	for _, n := range []int{1000000000, -1, 1 << 40} {
+		t.Run(fmt.Sprint(n), func(t *testing.T) {
+			r := &Reader{
+				xref:       make(map[int]int64),
+				compressed: make(map[int]compressedRef),
+				cache: map[int]any{
+					// A stream far too small to hold the entries it declares.
+					9: &Stream{
+						Dict: Dict{"Type": Name("ObjStm"), "N": n, "First": 4},
+						Data: []byte("1 0 2 8 "),
+					},
+				},
+			}
+
+			var got any
+			mustTerminate(t, "object stream with a bogus /N", func() {
+				got = r.resolveFromObjStm(compressedRef{StreamObj: 9, Index: 0})
+			})
+			// A stream that cannot hold its declared entries resolves to
+			// nothing. The bug was the allocation on the way to that answer.
+			if got != nil {
+				t.Errorf("resolved %#v from an ObjStm declaring /N %d, want nil", got, n)
+			}
+		})
+	}
+}
+
+// TestPredictorParametersAreBounded covers the allocation reachable through
+// /DecodeParms. bytesPerRow is Columns*Colors*BitsPerComponent/8, all three
+// file-controlled, and the product sizes the output buffer in pngUnpredict.
+// Checking the product alone is not enough: at these values it overflows
+// int64 and comes back small and innocent-looking, which is why each factor
+// is range-checked separately.
+//
+// The assertion is on the *reason*, not merely on "an error came back".
+// pngUnpredict rejects most of these incidentally, for not dividing evenly
+// into the row size — so a test that accepted any error passed with the
+// bounds removed, and asserted nothing.
+func TestPredictorParametersAreBounded(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		parm Dict
+	}{
+		{"huge columns", Dict{"Predictor": 12, "Columns": 1000000000}},
+		{"overflowing product", Dict{"Predictor": 12, "Columns": 1 << 40, "Colors": 1 << 40, "BitsPerComponent": 8}},
+		{"negative columns", Dict{"Predictor": 12, "Columns": -1}},
+		{"huge colors", Dict{"Predictor": 12, "Columns": 8, "Colors": 1 << 30}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var err error
+			mustTerminate(t, "predictor with out-of-range parameters", func() {
+				_, err = applyPredictorWithParms([]byte("\x00\x01\x02\x03"), tc.parm)
+			})
+			if err == nil {
+				t.Fatal("accepted out-of-range predictor parameters, want an error")
+			}
+			if !strings.Contains(err.Error(), "out of range") {
+				t.Errorf("rejected for the wrong reason: %v\n"+
+					"want the range check to fire, not an incidental row-size mismatch", err)
+			}
+		})
+	}
+}
+
 // TestFontEncodingDropsOutOfRangeDifferences: a /Differences array is a
 // list of (code, glyph-name...) pairs where the code is a file-controlled
 // number. Upstream narrowed it with byte(v), so /Differences [389 /alpha]
