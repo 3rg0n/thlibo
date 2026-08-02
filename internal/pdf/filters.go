@@ -65,53 +65,30 @@ const maxImagePixels = 80 << 20 // 80 Mpx: generous for a 600 DPI page
 // partial garbage) for a stream whose declared geometry is implausible.
 // A scanned page is typically one full-page image XObject, so this is
 // the lossless alternative to re-rasterizing a page we can already read.
+//
+// thlibo: the colour space is read straight from the dict here, which is
+// correct only when it is a direct device name. Anything else — an indirect
+// reference, an ICCBased array, or a /CS0-style resource key — needs the
+// Reader and page resources to resolve, so callers that have them should go
+// through ImageRef.Decode (images.go) instead. This entry point stays for
+// the codecs that carry their own colour information (DCT, CCITT).
 func DecodeImageStream(st *Stream) (image.Image, error) {
 	if st == nil {
 		return nil, errors.New("pdf: nil image stream")
 	}
-	w, _ := st.Dict.Int("Width")
-	h, _ := st.Dict.Int("Height")
-	if w <= 0 || h <= 0 {
-		return nil, fmt.Errorf("pdf: image has no usable dimensions (%dx%d)", w, h)
+	return decodeImage(st, st.Dict["ColorSpace"])
+}
+
+// decodeDCT decodes a JPEG-compressed image stream.
+//
+// st.Data is undecoded for DCT (applyFilter's default branch returns it
+// as-is), so the JPEG bytes are exactly what image/jpeg wants.
+func decodeDCT(st *Stream) (image.Image, error) {
+	img, err := jpeg.Decode(bytes.NewReader(st.Data))
+	if err != nil {
+		return nil, fmt.Errorf("pdf: jpeg: %w", err)
 	}
-	if int64(w)*int64(h) > maxImagePixels {
-		return nil, fmt.Errorf("pdf: image %dx%d exceeds %d pixel cap", w, h, maxImagePixels)
-	}
-
-	// The last filter in the chain is the image codec; anything before
-	// it is a byte-level wrapper already applied by readStreamData.
-	names := filterNames(st.Dict)
-	codec := Name("")
-	if len(names) > 0 {
-		codec = names[len(names)-1]
-	}
-
-	switch codec {
-	case "DCTDecode":
-		// st.Data is undecoded for DCT (upstream's default branch), so
-		// the JPEG bytes are exactly what we want.
-		img, err := jpeg.Decode(bytes.NewReader(st.Data))
-		if err != nil {
-			return nil, fmt.Errorf("pdf: jpeg: %w", err)
-		}
-		return img, nil
-
-	case "CCITTFaxDecode":
-		return decodeCCITT(st, w, h)
-
-	case "JBIG2Decode", "JPXDecode":
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFilter, codec)
-
-	case "FlateDecode", "LZWDecode", "RunLengthDecode", "":
-		// Raw samples. Turning those into an image needs the colour
-		// space, bit depth and decode array — meaningful work we do not
-		// need yet, since the OCR fallback covers it. Refuse rather
-		// than guess.
-		return nil, fmt.Errorf("%w: raw samples (%s)", ErrUnsupportedFilter, codec)
-
-	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFilter, codec)
-	}
+	return img, nil
 }
 
 // decodeCCITT decodes a CCITT Group 3/4 fax image — the common encoding

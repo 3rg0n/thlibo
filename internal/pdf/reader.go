@@ -823,6 +823,16 @@ func (r *Reader) ResolveArray(obj any) (Array, bool) {
 }
 
 func (r *Reader) parseObjectAt(pos int) (any, error) {
+	// thlibo: the position comes from an xref entry, which is a number the
+	// file declares — a negative offset panics the lexer on data[-1], and one
+	// past the end reads as EOF. The compressed-object path already range-
+	// checks its own offset (resolveFromObjStm); this is the same guard for
+	// the uncompressed path, which lacked it. Found by FuzzOpenBytes on an
+	// xref subsection containing "-1 0 n".
+	if pos < 0 || pos >= len(r.data) {
+		return nil, fmt.Errorf("object offset %d outside the file (%d bytes)", pos, len(r.data))
+	}
+
 	lex := NewLexer(r.data)
 	lex.SetPos(pos)
 	parser := &Parser{lex: lex}

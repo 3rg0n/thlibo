@@ -43,9 +43,23 @@ func NewLexer(data []byte) *Lexer {
 	return &Lexer{data: data}
 }
 
-func (l *Lexer) Pos() int     { return l.pos }
-func (l *Lexer) SetPos(p int) { l.pos = p }
-func (l *Lexer) AtEnd() bool  { return l.pos >= len(l.data) }
+func (l *Lexer) Pos() int { return l.pos }
+
+// SetPos moves the lexer. thlibo: the clamp is here because every caller
+// derives p from the file — an xref offset, a stream length — and a negative
+// position panics on data[-1] rather than reading as EOF. Callers still
+// range-check before calling; this makes the failure a no-token read instead
+// of a crash if one ever forgets.
+func (l *Lexer) SetPos(p int) {
+	if p < 0 {
+		p = 0
+	}
+	if p > len(l.data) {
+		p = len(l.data)
+	}
+	l.pos = p
+}
+func (l *Lexer) AtEnd() bool { return l.pos >= len(l.data) }
 
 func (l *Lexer) peek() byte {
 	if l.pos >= len(l.data) {

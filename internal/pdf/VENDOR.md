@@ -52,10 +52,33 @@ New files:
   needs them.
 - `meta.go` — `/Info` and `/Outline` accessors, with the same bounded-walk
   treatment as the rest.
+- `images.go` — `Page.Images()` / `ExtractPageImages`: a content-stream walker
+  returning each painted image with its CTM. Upstream has no image accessor at
+  all, and `meta.go`'s `HasImages` only ever answered yes/no. The distinction
+  matters because `/Resources/XObject` lists what a page *may* paint, not what
+  it does or at what size — a corner logo and a full-page scan are
+  indistinguishable there, and only the second should reach OCR. Deliberately
+  a separate walker from `extractTextWithResources`: that loop is
+  corpus-validated byte-identical and is the hot path, so an image concern
+  threaded through it would cost allocation and stream resolution on every
+  document for no gain. `Page.ScanImage()` is the OCR decision itself.
+- `samples.go` — raw-sample decoding, the path `DecodeImageStream` previously
+  refused outright. After the byte-level filter runs, a `FlateDecode` image is
+  a packed sample array, and turning it into pixels needs the component count,
+  bit depth and `/Decode` mapping read explicitly. Supports DeviceGray/RGB/CMYK,
+  Indexed, CalGray, CalRGB, Lab (as alternate), ICCBased (via `/N`) and stencil
+  masks at 1/2/4/8/16 bpc; refuses Separation and DeviceN, which need a
+  PostScript tint-transform evaluator and are not what a scanner emits.
+  `DecodeImageStream` is now a thin wrapper over `decodeImage`, and reads the
+  colour space straight from the dict — correct only for a direct device name.
+  Anything else (an indirect reference, an ICCBased array, a `/CS0`-style
+  resource key) needs the `Reader` and page resources to resolve, so callers
+  that have them should go through `ImageRef.Decode`.
 - `fuzz_test.go` — upstream ships 102 tests and zero fuzz targets.
-- `lexer_test.go`, `bounds_test.go`, `filters_test.go`, `helper_test.go` —
-  regression tests for the defects below, and hand-built fixtures replacing
-  upstream's `NewCreator()`-based ones (we dropped the generation API).
+- `lexer_test.go`, `bounds_test.go`, `filters_test.go`, `helper_test.go`,
+  `images_test.go`, `samples_test.go` — regression tests for the defects below,
+  and hand-built fixtures replacing upstream's `NewCreator()`-based ones (we
+  dropped the generation API).
 
 Correctness fixes:
 
@@ -94,6 +117,20 @@ bytes pass through; nothing recovers a blocked hook):
   with no visited set; and `collectPages` walked `/Kids` with neither a
   depth bound nor a cycle guard, so a `/Pages` node naming itself recursed
   until the stack gave out.
+
+File-declared *positions* that reach the lexer — the same shape as the sizes
+below, one step earlier. Both found by `FuzzOpenBytes` after `Page.Images()`
+widened the target:
+
+- `reader.go` — an xref entry's offset went straight into `Lexer.SetPos`, so a
+  subsection line of `-1 0 n` indexed `data[-1]`. The compressed-object path
+  (`resolveFromObjStm`) already range-checked its own offset; the uncompressed
+  path (`parseObjectAt`) did not.
+- `lexer.go` — `SetPos` now clamps. That is not belt-and-braces for the above:
+  `readXRefAt` takes its position from `startxref` and from every `/Prev` in
+  the update chain, neither range-checked at the call site, and `/Prev -1` is
+  a perfectly parseable PDF integer that panicked the same way. Two
+  independent paths, one clamp.
 
 File-declared sizes that reach a slice — all in `reader.go`, all found by
 review of PR #103 rather than by the fuzzer, and all the same shape: a number
@@ -136,7 +173,14 @@ go test ./internal/pdf/ -run xxx -fuzz FuzzDecodeTextString -fuzztime 120s
 ```
 
 `FuzzOpenBytes` asserts only "no panic, no hang, no unbounded allocation" —
-correct extraction from a corrupt document has no right answer.
+correct extraction from a corrupt document has no right answer. It drives
+`Page.Images()` and decodes what comes back, which reaches materially more
+untrusted structure than the text path alone: the walker follows Form XObjects
+into file-controlled `/Resources`, and the sample decoder sizes a row stride
+from declared geometry. Seeds cover an inline image, an inline image whose
+`/L` lands inside its own data, and a self-referential Form. Widening it that
+way is what surfaced the two position bugs above, on a target that had
+previously run past 135M execs clean.
 `FuzzDecodeTextString` is stricter, because a `/Title` becomes an H1: it
 asserts the sanitized result never contains a control rune or a double
 space. Crashers are committed under `testdata/fuzz/` and replay on every

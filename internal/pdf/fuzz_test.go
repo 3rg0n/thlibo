@@ -19,6 +19,7 @@ package pdf
 // Run: go test ./internal/pdf/ -run Fuzz -fuzz FuzzOpenBytes -fuzztime 60s
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -38,6 +39,15 @@ func FuzzOpenBytes(f *testing.F) {
 	f.Add([]byte("%PDF-1.7\n1 0 obj\n1 0 R\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"))
 	// Declared length far past the file: the classic over-read.
 	f.Add([]byte("%PDF-1.7\n1 0 obj\n<< /Length 999999 >>\nstream\nshort\nendstream\nendobj\n%%EOF\n"))
+	// An inline image, which is the one place the content-stream tokenizer
+	// has to skip over arbitrary binary rather than parse it. A scan that
+	// stops short leaves the lexer reading pixel bytes as operators.
+	f.Add(inlineImagePDF(f, "BI /W 2 /H 2 /BPC 8 /CS /G ID \x00\x01\x02\x03 EI"))
+	// A declared /L that lands inside the data rather than on EI: the
+	// file-controlled length must be verified, not trusted.
+	f.Add(inlineImagePDF(f, "BI /W 2 /H 2 /BPC 8 /CS /G /L 1 ID \x00\x01\x02\x03 EI"))
+	// A Form XObject naming itself: the fan-out shape the visited set bounds.
+	f.Add(selfReferentialFormPDF(f))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		doc, err := OpenBytes(data)
@@ -60,6 +70,14 @@ func FuzzOpenBytes(f *testing.F) {
 			spans, _ := p.TextSpans()
 			_, _ = p.TextLines()
 			_ = p.HasImages()
+			// Images walks the content stream and follows Form XObjects into
+			// file-controlled /Resources, so it reaches more untrusted
+			// structure than HasImages ever did. Decode the images too: the
+			// sample decoder sizes a row stride from declared geometry, and a
+			// fabricated one must error rather than over-read.
+			for _, im := range p.Images() {
+				_, _ = im.Decode()
+			}
 			if len(spans) > 0 && len(spans) < 4000 {
 				_ = FindTables(spans, nil)
 			}
@@ -98,6 +116,24 @@ func FuzzParseInlineDict(f *testing.F) {
 		// contract is that it is a usable map — not what is in it.
 		_ = len(d)
 	})
+}
+
+// inlineImagePDF wraps a content stream containing an inline image into a
+// one-page document, so the seed reaches the walker through OpenBytes rather
+// than through the lexer directly.
+func inlineImagePDF(t testing.TB, content string) []byte {
+	return buildImagePDF(t, content, nil)
+}
+
+// selfReferentialFormPDF builds the fan-out shape: a Form XObject whose own
+// /Resources name it twice, which expands exponentially with depth if the
+// visited set is not doing its job.
+func selfReferentialFormPDF(t testing.TB) []byte {
+	inner := "/Fm0 Do /Fm0 Do"
+	form := fmt.Sprintf("<< /Type /XObject /Subtype /Form "+
+		"/Resources << /XObject << /Fm0 5 0 R >> >> /Length %d >>\nstream\n%s\nendstream",
+		len(inner), inner)
+	return buildImagePDF(t, "/Fm0 Do", map[string]string{"Fm0": form})
 }
 
 // FuzzDecodeTextString targets metadata and outline decoding. Also a

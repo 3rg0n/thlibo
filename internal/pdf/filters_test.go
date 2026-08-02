@@ -50,8 +50,14 @@ func TestDecodeImageStreamRejectsImplausibleGeometry(t *testing.T) {
 // unsupported codec returns ErrUnsupportedFilter rather than the raw,
 // undecoded bytes dressed up as an image — upstream's `default: return data`
 // is exactly the behaviour this entry point exists to avoid.
+//
+// FlateDecode / LZWDecode / RunLengthDecode are deliberately *not* in this
+// list any more: after samples.go they are decodable, and their bytes are a
+// packed sample array rather than a codec payload. Their failure modes are
+// covered by TestDecodeSamplesRejectsMalformedDicts, which asserts they fail
+// for the *right* reason.
 func TestDecodeImageStreamRefusesUndecodableFilters(t *testing.T) {
-	for _, f := range []string{"JBIG2Decode", "JPXDecode", "FlateDecode", "LZWDecode", "RunLengthDecode", "SomethingElse"} {
+	for _, f := range []string{"JBIG2Decode", "JPXDecode", "SomethingElse"} {
 		t.Run(f, func(t *testing.T) {
 			_, err := DecodeImageStream(&Stream{
 				Dict: Dict{"Width": 8, "Height": 8, "Filter": Name(f)},

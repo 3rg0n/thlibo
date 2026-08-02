@@ -46,6 +46,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   call. False-positive tables on a 384-page manual: 13 → 0. Every surviving
   table in the corpus was inspected and is real.
 
+- **`Page.Images()`: image placement and raw-sample decoding in native Go**
+  (`internal/pdf/images.go`, `samples.go`). Groundwork for OCR without the
+  Python rasterizer, and useful on its own: `Page.ScanImage()` answers "is
+  this page a scan?" from evidence rather than inference. What existed before
+  was `HasImages()`, a yes/no read of `/Resources/XObject` — which lists what
+  a page *may* paint, not what it does or at what size. A corner logo and a
+  full-page scan are indistinguishable there, and only one of them should
+  reach OCR, so the new walker reads the content stream and reports each
+  image with the CTM in force when it was painted. Form XObjects are followed
+  with `/Matrix` composed in (producers routinely wrap a scan in one), inline
+  BI/ID/EI images are read rather than skipped, and the sample decoder handles
+  DeviceGray/RGB/CMYK, Indexed, CalGray, CalRGB, Lab, ICCBased and stencil
+  masks at 1/2/4/8/16 bpc. Separation and DeviceN are refused — they need a
+  PostScript tint-transform evaluator and are not what a scanner emits —
+  as is JPXDecode, which even the commercial Go PDF libraries stub out.
+  Text extraction is untouched: corpus output is byte-identical across all
+  30 documents on hand.
+
 ### Fixed
 
 - **Three hangs in the vendored PDF parser, all found by our own fuzzing.**
@@ -113,6 +131,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the user real output instead of a recovered crash that costs all
   compression on that document. Each has a named regression test, verified
   by reverting the fix and confirming the test fails.
+- **Two unchecked file-declared *positions* reaching the lexer**, the same
+  shape as the sizes above one step earlier, and both crashes on `data[-1]`.
+  (1) An xref entry's offset went straight into `Lexer.SetPos`, so a
+  subsection line of `-1 0 n` panicked with `index out of range [-1]`; the
+  compressed-object path already range-checked its own offset, the
+  uncompressed one did not. (2) `readXRefAt` takes its position from
+  `startxref` and from every `/Prev` in the update chain, neither
+  range-checked at the call site — and `/Prev -1` is a perfectly parseable
+  PDF integer that panicked identically. `SetPos` now clamps, which covers
+  the second path; the first is fixed at `parseObjectAt`. Two independent
+  paths, so each has its own regression test, verified by reverting each half
+  of the fix separately. Found by `FuzzOpenBytes` after `Page.Images()`
+  widened it to walk content-stream structure — the same target had
+  previously run past 135M execs clean, which is the argument for extending a
+  fuzz target when you extend the code it covers rather than trusting the old
+  exec count. It now runs clean past 206M.
 - **CCITTFax scans failed to decode at all, and would have decoded as a
   negative.** Two bugs in `DecodeImageStream`, which had no callers and no
   tests yet — so neither could show up in the corpus sweep. It filled an

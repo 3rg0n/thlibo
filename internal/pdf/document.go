@@ -131,8 +131,72 @@ func (p *Page) Text() (string, error) {
 // HasImages reports whether the page references an image XObject — the
 // signal that separates a scanned page (no text, one big image) from a
 // genuinely blank one.
+//
+// This is the cheap answer: it walks /Resources without parsing the content
+// stream, so it says only that an image is available to paint. Use Images
+// when the answer needs to depend on size or position.
 func (p *Page) HasImages() bool {
 	return p.reader.HasImages(p.dict)
+}
+
+// Images returns every image the page's content stream paints, in painting
+// order, with placement resolved.
+//
+// thlibo: local addition. Unlike HasImages this parses the content stream,
+// which is what makes the result actionable — /Resources says what a page
+// *may* paint, not what it does or how big.
+func (p *Page) Images() []ImageRef {
+	return ExtractPageImages(p.dict, p.reader)
+}
+
+// ScanImage returns the single image that covers this page, or nil.
+//
+// This is the scanned-page test that matters for OCR: exactly one image
+// painted over essentially the whole page. It returns nil for a page with
+// several images (a photo collage, a page of figures) even when one of them
+// is large, because compositing those is rasterization's job — the whole
+// premise of extracting instead of rendering is that one image *is* the
+// page. It also returns nil when the page has real text, since a text page
+// with a full-bleed background image is not a scan and its text is already
+// extractable losslessly.
+func (p *Page) ScanImage() *ImageRef {
+	spans, err := p.TextSpans()
+	if err == nil && countTextRunes(spans) >= minScanPageTextRunes {
+		return nil
+	}
+
+	mb := p.MediaBox()
+	imgs := p.Images()
+	var found *ImageRef
+	for i := range imgs {
+		if !imgs[i].CoversPage(mb) {
+			continue
+		}
+		if found != nil {
+			return nil // more than one full-page image: not a simple scan
+		}
+		found = &imgs[i]
+	}
+	return found
+}
+
+// minScanPageTextRunes is the text budget below which a page still counts
+// as scanned. It is not zero because scanners and OCR-embedding producers
+// routinely stamp a page number, a Bates number, or a "scanned by" footer
+// onto an otherwise imaged page, and rejecting those would send real scans
+// down the no-OCR path.
+const minScanPageTextRunes = 16
+
+func countTextRunes(spans []TextSpan) int {
+	n := 0
+	for _, s := range spans {
+		for _, r := range s.Text {
+			if r != ' ' && r != '\n' && r != '\t' {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // Tables auto-detects all tables on this page.

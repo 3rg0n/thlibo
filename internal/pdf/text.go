@@ -788,32 +788,14 @@ func skipInlineDict(lex *Lexer) {
 	}
 }
 
+// skipInlineImage consumes a BI...ID...EI inline image without keeping it.
+//
+// thlibo: this is readInlineImage (images.go) with the result discarded, and
+// it delegates rather than duplicating the scan. Landing the lexer past EI
+// is the load-bearing part in both cases — inline image data is arbitrary
+// binary, and a tokenizer let loose in it reads pixel bytes as operators.
 func skipInlineImage(lex *Lexer) {
-	// Parse the inline image dict until ID keyword.
-	for {
-		tok, err := lex.NextToken()
-		if err != nil || tok.Type == TEOF {
-			return
-		}
-		if tok.Type == TKeyword && tok.Str == "ID" {
-			break
-		}
-	}
-	// Skip single whitespace byte after ID.
-	if !lex.AtEnd() {
-		lex.read()
-	}
-	// Scan raw bytes for whitespace + "EI" + (whitespace or delimiter or EOF).
-	for lex.pos < len(lex.data)-2 {
-		if isWhitespace(lex.data[lex.pos]) &&
-			lex.data[lex.pos+1] == 'E' && lex.data[lex.pos+2] == 'I' {
-			if lex.pos+3 >= len(lex.data) || isWhitespace(lex.data[lex.pos+3]) || isDelimiter(lex.data[lex.pos+3]) {
-				lex.pos += 3
-				return
-			}
-		}
-		lex.pos++
-	}
+	_, _ = readInlineImage(lex, nil, nil, [6]float64{})
 }
 
 // BuildLines groups text spans into lines and reconstructs text.

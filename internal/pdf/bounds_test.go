@@ -228,6 +228,79 @@ func TestObjStmEntryCountIsNotTrusted(t *testing.T) {
 	}
 }
 
+// TestXRefOffsetIsNotTrusted is the regression test for the panic
+// FuzzOpenBytes found on seed 01baf1fea1afef92: an xref subsection entry of
+// "-1 0 n" declares object 4 lives at offset -1, and that number went
+// straight into Lexer.SetPos, so skipWhitespaceAndComments indexed data[-1]
+// — "index out of range [-1]".
+//
+// The compressed-object path (resolveFromObjStm) already range-checked its
+// own offset; the uncompressed path did not, which is the whole bug. Both
+// negative and past-EOF are covered because they fail differently: negative
+// panics, past-EOF reads as EOF and merely returns nothing.
+//
+// This asserts on the returned error rather than going through
+// mustTerminate: that helper runs its closure in a goroutine, where a panic
+// is unrecoverable and takes the test binary down instead of failing a case.
+func TestXRefOffsetIsNotTrusted(t *testing.T) {
+	r := &Reader{
+		data:  []byte("%PDF-1.7\n1 0 obj\n42\nendobj\n"),
+		xref:  map[int]int64{},
+		cache: map[int]any{},
+	}
+	for _, tc := range []struct {
+		name string
+		pos  int
+	}{
+		{"negative", -1},
+		{"far negative", -1 << 40},
+		{"one past the end", len(r.data)},
+		{"far past the end", 1 << 30},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			obj, err := r.parseObjectAt(tc.pos)
+			if err == nil {
+				t.Errorf("offset %d resolved to %#v, want an error", tc.pos, obj)
+			}
+		})
+	}
+
+	// And the same thing end to end, since the guard only matters if the
+	// offset actually reaches it through Resolve.
+	r.xref[4] = -1
+	if got := r.Resolve(Ref{Num: 4}); got != nil {
+		t.Errorf("resolved %#v from a negative xref offset, want nil", got)
+	}
+}
+
+// TestXRefChainOffsetIsNotTrusted covers the *other* file-declared position
+// that reaches the lexer, which the parseObjectAt guard above does not touch:
+// readXRefAt takes its offset from `startxref` and from each /Prev in the
+// update chain, and neither is range-checked at the call site.
+//
+// /Prev is an ordinary PDF integer, so "-1" is a perfectly parseable value
+// for it — and it panicked the lexer on data[-1] exactly like the xref entry
+// did. The clamp in Lexer.SetPos is what stops both, and this is the case
+// that makes that clamp load-bearing rather than defensive: reverting it with
+// only the parseObjectAt guard in place still crashes here.
+func TestXRefChainOffsetIsNotTrusted(t *testing.T) {
+	for _, prev := range []string{"-1", "-99999", "999999"} {
+		t.Run(prev, func(t *testing.T) {
+			data := rawPDF([]string{
+				"<< /Type /Catalog /Pages 2 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>",
+				"<< /Length 30 >>\nstream\nBT /F1 12 Tf (hi) Tj ET\nendstream",
+			}, "/Prev "+prev+" ")
+
+			// Reading must not panic. Whether the document opens at all is
+			// not the contract — an out-of-range /Prev makes the chain
+			// unreadable, and returning no text is a fine answer.
+			readEverything(data)
+		})
+	}
+}
+
 // TestPredictorParametersAreBounded covers the allocation reachable through
 // /DecodeParms. bytesPerRow is Columns*Colors*BitsPerComponent/8, all three
 // file-controlled, and the product sizes the output buffer in pngUnpredict.
