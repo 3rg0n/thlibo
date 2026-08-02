@@ -1,0 +1,63 @@
+CLAUDE.md
+  s_5811b7f24eccc0::t_07b006c870e9e5 136-154
+internal/processors/cordon.go
+  s_5811b7f24eccc0::t_783e108fd52b6d 1-499
+docs/adr/0016-native-go-cordon-filter.md
+  s_5811b7f24eccc0::t_947d8edff479e6 1-138
+internal/middleware/cordon_fallback_test.go
+  s_5811b7f24eccc0::t_e0f608f182ccea 238-250
+  s_5811b7f24eccc0::t_76cb1b09a69e62 211-217
+  s_5811b7f24eccc0::t_52fd17f2241ac7 56-63
+  s_5811b7f24eccc0::t_2dddfc539f6991 180-199,201-210,218-235
+  s_5811b7f24eccc0::t_b586777a33bba9 10,12
+  s_5811b7f24eccc0::t_d958bff315f915 200
+CHANGELOG.md
+  s_5811b7f24eccc0::t_dc1de0b92a7e02 241-276
+README.md
+  s_5811b7f24eccc0::t_d70d3932cad136 184-189
+  s_5811b7f24eccc0::t_bd315d52daf6db 116
+processors/cordon-filter/processor.yaml
+  s_5811b7f24eccc0::t_55a5acf5ca1e64 2-5
+  s_5811b7f24eccc0::t_6108d4691e97fb 24-25
+internal/inferd/protocol.go
+  s_5811b7f24eccc0::t_6d1ece70b89e7e 16-20,24-26
+  s_5811b7f24eccc0::t_1ed38e51e9b325 21-23
+internal/processors/cordon_test.go
+  s_5811b7f24eccc0::t_5bad859676c87a 1-47,50-65,68-69,71-363,365-579,586-660
+  s_5811b7f24eccc0::t_0f3a5e15f17839 364
+  s_5811b7f24eccc0::t_aa54ea3cf5b8c3 48-49
+  s_5811b7f24eccc0::t_5f494f4e635095 580-585
+  s_5811b7f24eccc0::t_e3ca4da50bd1b7 66-67,70
+internal/processors/cordon_parity_test.go
+  s_5811b7f24eccc0::t_392a96745c211c 1-272
+internal/processors/dispatch.go
+  s_5811b7f24eccc0::t_a4f49cffe29d6e 52-56
+internal/processors/native.go
+  s_5811b7f24eccc0::t_975b14c08fa340 3-6,16-26,28-32,39-44,54,61-70,79-84,88,100
+internal/processors/cordon_signature.go
+  s_5811b7f24eccc0::t_ffdd365a9943f9 109-114
+  s_5811b7f24eccc0::t_3e46c31ba9b336 15-16
+  s_5811b7f24eccc0::t_bf1e487b429e5d 1-14,17-108,115-405
+internal/inferd/embed.go
+  s_5811b7f24eccc0::t_d48de71b3d4f6c 1-268
+docs/adr/README.md
+  s_5811b7f24eccc0::t_2658ae48d731a8 23
+  s_5811b7f24eccc0::t_378259ce2f776e 15
+  s_5811b7f24eccc0::t_4922f7f6a6ba7c 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ac02a9aa71c7a3ce981bbe4ff43cc4383709931d",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
