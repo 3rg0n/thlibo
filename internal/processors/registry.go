@@ -262,7 +262,15 @@ func (r *Registry) RoutableNames() []string {
 //  3. **Line shapes**, prompt — broad substrings (`(?i)traceback|fatal`)
 //     that most easily fire by accident.
 //
-// Tiebreak within a tier is stable alphabetical (r.order).
+// Tiebreak within a tier is stable alphabetical (r.order), except that
+// tier 1 prefers a native filter over a script one. Two processors can
+// legitimately claim the same format: `pdf-filter` (native, in-process)
+// and `pdf-to-md` (Python script) both declare `^%PDF-`, and which wins
+// must not depend on how the folders happen to sort — renaming either
+// would silently swap the engine. Native wins because it needs no
+// interpreter and no installed dependencies, so it can't fail for
+// environmental reasons the caller can't see. This is derived from the
+// declared type, not a priority field (ADR 0014).
 //
 // Why tier 1 exists: before it, precedence was "first alphabetical
 // script/native hit wins", so `go-test-filter` — whose
@@ -278,7 +286,7 @@ func (r *Registry) RoutableNames() []string {
 func (r *Registry) MatchFastPath(input string) *Descriptor {
 	binary := binaryLooking(input)
 
-	var lineScript, linePrompt *Descriptor
+	var sigNative, sigOther, lineScript, linePrompt *Descriptor
 	for _, n := range r.order {
 		d := r.byName[n]
 		// Tiers 2-3 are line shapes. On binary input they are all
@@ -291,10 +299,23 @@ func (r *Registry) MatchFastPath(input string) *Descriptor {
 		if !d.MatchesFastPath(input) {
 			continue
 		}
-		// Tier 1: a rooted signature is decisive. r.order is stable, so
-		// the first signature hit is a deterministic winner.
+		// Tier 1: a rooted signature is decisive against every line
+		// shape, so a hit here ends the tier-2/3 search. Within the tier,
+		// a native filter beats a script one; r.order is stable, so the
+		// first hit of each kind is a deterministic winner. We can't
+		// return immediately: a script signature must still lose to a
+		// native one later in the order.
 		if d.MatchIsSignature() {
-			return d
+			if d.Type == KindNative {
+				if sigNative == nil {
+					sigNative = d
+				}
+				continue
+			}
+			if sigOther == nil {
+				sigOther = d
+			}
+			continue
 		}
 		if d.Type == KindScript || d.Type == KindNative {
 			if lineScript == nil {
@@ -305,6 +326,12 @@ func (r *Registry) MatchFastPath(input string) *Descriptor {
 		if linePrompt == nil {
 			linePrompt = d
 		}
+	}
+	if sigNative != nil {
+		return sigNative
+	}
+	if sigOther != nil {
+		return sigOther
 	}
 	if lineScript != nil {
 		return lineScript

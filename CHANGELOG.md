@@ -7,8 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`pdf-filter`: PDF → markdown in pure Go, no Python, ~99× faster.** ADR
+  0007 chose pdfplumber on the premise that "matching pdfplumber's table
+  quality with raw content-stream parsing is research-grade work." We
+  measured it, and the premise doesn't hold: on the same corpus a vendored
+  gopdf mangled *less* text than pdfplumber (0.11% vs 6.39%) at two orders
+  of magnitude less cost. Head-to-head on five corpus documents,
+  **51.3s → 0.52s aggregate** (per-file 31×–130×), with output sizes within
+  ±15% either way — the speed is not bought with content. The
+  38-second-per-document case matters most: a hook that slow is one the user
+  experiences as a hang. Across a 41-document corpus, 75.6 MB → 1.90 MB
+  (**97.48%**), no crashes. Four tiers, best evidence first: a Tagged PDF's
+  own `/StructTreeRoot` (the producer stating its headings, tables and
+  reading order, rather than us inferring them), native text extraction,
+  geometry table detection, and a `[scanned page N]` placeholder handing
+  image-only pages to the existing Gemma-vision OCR path.
+  **`pdf-to-md` is retained, not replaced** — ADR 0009's OCR flow needs page
+  *rasterization*, which no pure-Go library in our license posture provides.
+  Both claim `^%PDF-`; ADR 0014's tier-1 tiebreak (native beats script
+  within rooted signatures) settles it, pinned by a test that also checks
+  the reversed alphabetical case so it can't pass by luck. Rolling back is
+  deleting one `init()` registration.
+  See [ADR 0015](docs/adr/0015-native-go-pdf-extraction.md) and
+  `internal/pdf/VENDOR.md`.
+- **Invisible layout grids are rejected by measuring gutters, not text.**
+  Slide decks and multi-column prose position text with grids a geometry
+  detector reads as tables. Text-adjacency heuristics can't distinguish a
+  real column boundary from a mid-word cut — both are just two adjacent
+  strings. But **a column boundary is space**: adjacent cells in a real
+  table are separated by a visible gap, because that gap is how a human
+  reader sees the columns at all. So we measure it — left cell's rightmost
+  glyph to right cell's leftmost, against the font size. Over the corpus,
+  every genuine table scored 0.00 tight junctions and the paragraph/TOC
+  false positives scored 0.47–1.00, with **nothing in between**, so the 0.25
+  threshold sits in the middle of an empty gap rather than on a judgement
+  call. False-positive tables on a 384-page manual: 13 → 0. Every surviving
+  table in the corpus was inspected and is real.
+
 ### Fixed
 
+- **Three hangs in the vendored PDF parser, all found by our own fuzzing.**
+  A hang is strictly worse than a panic under architectural invariant #2:
+  `RunNative` recovers a panic and passes the original bytes through, so a
+  crash degrades to "no compression" and the fail-open contract holds —
+  but nothing recovers a hang. The hook blocks and the AI client waits on
+  it. All three were in that class, on input a merely *corrupt* PDF
+  reaches: (1) `NextToken` dispatches `)`, `{`, `}` to `readKeyword`, whose
+  scan loop stopped on a delimiter **without advancing `pos`** — and every
+  caller loops until EOF, so one stray `)` in a content stream meant text
+  extraction never returned (found on the one-byte input `")"`); (2) an
+  xref subsection's declared entry count was trusted, and `NextToken`
+  returns `(TEOF, nil)` rather than an error at end of input, so a header of
+  `0 60000000000` spun sixty billion no-op iterations; (3) `/Prev` is a
+  file-controlled offset followed by recursion with no visited set, and
+  `collectPages` walked `/Kids` with neither a depth bound nor a cycle
+  guard, so a `/Pages` node naming itself recursed until the stack gave out.
+  Upstream ships 102 tests and zero fuzz targets — defensible for a library
+  that reads files its own caller wrote; thlibo reads whatever an AI client
+  was pointed at. Three fuzz targets now run past 50M execs each, crashers
+  are committed under `internal/pdf/testdata/fuzz/`, and each walk has a
+  named regression test because a replayed hang otherwise surfaces as a
+  package timeout that says nothing about which walk looped.
+- **`/Differences` no longer corrupts decoded text via byte truncation.**
+  The encoding-override code is a file-controlled number narrowed with
+  `byte(v)`, so `/Differences [300 /alpha]` aliased onto `0x85` and
+  overwrote whichever glyph legitimately sat there. Silent text corruption
+  rather than a crash, which is why it survived 102 upstream tests.
+  Out-of-range codes are now dropped. Verified against the 41-document
+  corpus: no real PDF reaches this branch, so output is byte-identical and
+  only malformed input behaves differently.
+- **Structure-tree text no longer duplicates 13.8× across pages.** Marked-
+  content IDs are unique only *per page*, and keying the tag→text binding on
+  MCID alone collided across them — measured at 13.8× content inflation,
+  i.e. the same prose repeated into the model's context. Now keyed on
+  `(page, MCID)`. Separately, BDC handling discarded the inline properties
+  dictionary, so every span carried `MCID: -1` and nothing bound at all.
+  Tags become model-facing input, so this tier is verified against the
+  corpus rather than trusted: a confidently wrong structure tree is worse
+  output than no structure tree.
+- **Encrypted PDFs are refused instead of extracted as ciphertext.**
+  Upstream has no `/Encrypt` handling whatsoever, so an encrypted document
+  parsed to garbage that looked like successfully extracted text. Now
+  detected and passed through unchanged.
 - **An unparseable PDF now falls back to the original bytes instead of
   replacing the document with an error message.** Every `pdf-to-md`
   failure path wrote a two-line HTML comment to *stdout* and exited 0 —

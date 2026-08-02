@@ -1,0 +1,30 @@
+name: pdf-filter
+type: native
+# PDFs start with %PDF-<version>, so this is a rooted format signature —
+# it says what the input *is*, and MatchFastPath tier 1 makes it decisive
+# over any line-shape filter that coincidentally matches inside a
+# compressed stream (ADR 0014, #97). Scanned (image-only) PDFs hit the
+# same processor; the per-page logic decides what to do when text
+# extraction comes up empty.
+match: "^%PDF-"
+commands: []
+description: >
+  Convert a PDF to GitHub-flavored markdown, in-process and in pure Go —
+  no Python, no pdfplumber, no interpreter launch. Four tiers, best
+  evidence first: a Tagged PDF's own structure tree (/StructTreeRoot)
+  states headings, tables and reading order outright; native text
+  extraction reads glyph positions and groups them into lines; geometry
+  detection recovers tables the producer never tagged; and image-only
+  pages get a `[scanned page N]` placeholder for the caller's vision OCR
+  (ADR 0009).
+
+  Also emits the document's own metadata (title, author, page count) and
+  its bookmark outline, which is the cheapest structure a PDF offers.
+  Running headers/footers that recur across most pages are dropped once
+  identified document-wide, numbered section headings are promoted to
+  markdown headings, and invisible layout grids are rejected so a slide
+  deck's positioning frames don't come out as tables.
+
+  Encrypted documents are refused outright rather than emitting the
+  ciphertext extraction would produce. Non-PDF input passes through
+  unchanged; output is emitted only when strictly smaller than the input.
