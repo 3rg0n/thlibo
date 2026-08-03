@@ -737,23 +737,23 @@ html.no-js .reveal{ opacity:1; transform:none }
         </div>
       </article>
 
-      <!-- pdf → markdown (atc-sse-prd) ......................................... -->
+      <!-- pdf → markdown (born-digital, native Go) ............................ -->
       <article class="bar reveal"
-               data-raw="38250" data-compressed="12173" data-scale="0.3183">
+               data-raw="142701" data-compressed="1814" data-scale="0.0127">
         <div class="bar-label">
-          <span class="cmd">PDF (17 pages, 326 KB)</span>
-          <span class="processor">via <b>pdf-to-md → cordon-filter</b> · python + local model</span>
+          <span class="cmd">PDF (7 pages, 160 KB, born-digital)</span>
+          <span class="processor">via <b>pdf-filter</b> · native Go · no Python</span>
         </div>
         <div class="bar-canvas">
           <div class="bar-track" aria-hidden="true">
-            <div class="bar-raw" style="--scale:0.3183"></div>
-            <div class="bar-compressed" style="--pct:31.83%"></div>
+            <div class="bar-raw" style="--scale:0.0127"></div>
+            <div class="bar-compressed" style="--pct:1.27%"></div>
           </div>
           <div class="bar-figures">
-            <span class="from">~38,250&nbsp;tok</span>
+            <span class="from">~142,701&nbsp;tok<sup>†</sup></span>
             <span class="arrow">→</span>
-            <span class="to" data-counter-to="12173">~12,173<span class="unit">&nbsp;tok</span></span>
-            <span class="reduction">−68.2%</span>
+            <span class="to" data-counter-to="1814">~1,814<span class="unit">&nbsp;tok</span></span>
+            <span class="reduction">−98.7%</span>
           </div>
         </div>
       </article>
@@ -825,7 +825,7 @@ html.no-js .reveal{ opacity:1; transform:none }
 
     <div class="demo-foot">
       <span>Methodology + reproduction notes in the <a href="https://github.com/3rg0n/thlibo#methodology">README</a>.</span>
-      <span><sup>†</sup> raw-token figure estimated from byte count; the log never fits a context window, so it's the size thlibo saves you from sending.</span>
+      <span><sup>†</sup> raw-token figure estimated from byte count; the input never fits a context window, so it's the size thlibo saves you from sending. For a PDF that raw count is the container's bytes, not extractable prose — the honest comparison is against the pages you'd otherwise read as images (see <sup>‡</sup>).</span>
       <span><sup>‡</sup> baseline is Claude's own fallback for an image-only PDF: install PDF libs, render each page to PNG, read the pages as multimodal images (~1,590 tok/page).</span>
     </div>
 
@@ -1000,11 +1000,13 @@ html.no-js .reveal{ opacity:1; transform:none }
       <h3>Native filters, where a regex will do.</h3>
       <p>
         <code>git-filter</code>, <code>npm-filter</code>, <code>cargo-filter</code>,
-        <code>har-filter</code>, and more. Compiled Go with tight regex rules,
+        <code>har-filter</code>, <code>pdf-filter</code>, and more. Compiled Go,
         run in-process. They collapse diff hunks, strip dep-tree chatter,
-        keep the failing tests, redact secrets from HTTP archives. Nothing
-        a model could do better, faster, or more reliably — and no Python
-        needed.
+        keep the failing tests, redact secrets from HTTP archives, and read
+        PDFs without shelling out. Nothing a model could do better, faster,
+        or more reliably — and <b>Python is off the compression path
+        entirely</b>: it's needed only to rasterize a <em>scanned</em> PDF for
+        OCR.
       </p>
       <p>
         Add your own in <code>~/.thlibo/processors/&lt;name&gt;/</code> — a

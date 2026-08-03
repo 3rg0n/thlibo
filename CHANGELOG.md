@@ -56,6 +56,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Sigstore keyless bundles verify** against the workflow identity at
   `refs/tags/v0.11.3` (finding #27) — the two supply-chain items the
   snapshot's prose still describes as open.
+- **Project page (`docs/site/index.html`): the born-digital PDF result no
+  longer credits Python.** The demo bar still read
+  `pdf-to-md → cordon-filter · python + local model` — the v0.11.3
+  headline exactly backwards, since ADR 0015 moved that path to native Go
+  and ADR 0016 took cordon off Python too. Replaced with a freshly
+  measured `pdf-filter` run (7-page born-digital PDF, 160 KB →
+  4,570 bytes of markdown; ~142,701 → ~1,814 est. tokens, −98.7%, ~290 ms
+  in-process) using the same estimator as
+  `internal/middleware/tokenest_test.go` so the figure is reproducible.
+  The `†` footnote now says plainly that a PDF's raw token count is the
+  *container's* bytes rather than extractable prose, so the number isn't
+  read as prose-for-prose compression. The "native filters" card gained
+  `pdf-filter` and now states the actual v0.11.3 posture: Python is off
+  the compression path, needed only to rasterize a **scanned** PDF for
+  OCR. No `pdf-to-md` claim was removed from the scanned/OCR bar, which is
+  still accurate.
 
 ## [0.11.3] - 2026-08-03
 
