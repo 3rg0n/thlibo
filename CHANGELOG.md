@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`THREAT_MODEL.md`: addendum recording surface drift since the v0.1.0
+  snapshot.** The body is a dated MAESTRO snapshot (2026-05-14) kept
+  immutable so the risk table stays a faithful record of what was found
+  and how each finding was closed — but its *prose* now describes a
+  codebase two refactors behind. Documentation only; **no finding is
+  reopened, all 28 remain Mitigated.** Names what changed: `cmd/thlibod`
+  and `internal/ipc` are gone (findings #5/#6/#14/#24 describe code that
+  moved to the `inferd` repo, not code that regressed), the model SHA pin
+  and `internal/install/model.go` left with it (finding #4), llamafile is
+  migration-cleanup only and there is no localhost port at all, `go-winio`
+  is no longer a dependency (retiring the §L4 SDDL reasoning), Python is
+  down to one processor and off the compression path, and `compress`
+  temperature is 0.0 rather than 1.0. One correction matters beyond
+  bookkeeping: §L3 credits **GBNF for hard-constraining router output**,
+  but the v2 wire removed that field — enforcement is now
+  `parseRouteResult` validating against `Registry.RoutableNames()`, with
+  `response_format` only best-effort, so the posture holds for a different
+  reason than the document gives. Also records what is newly in scope and
+  uncovered by the body: the vendored `internal/pdf/` parser over
+  untrusted input, `cordon-filter`'s network reach, the ADR 0012 inference
+  bound, and the `release.yml` tag-injection fix.
+- Verified from the published v0.11.3 artifacts rather than asserted:
+  all 22 workflow `uses:` are commit-SHA pinned (finding #2) and **6/6
+  Sigstore keyless bundles verify** against the workflow identity at
+  `refs/tags/v0.11.3` (finding #27) — the two supply-chain items the
+  snapshot's prose still describes as open.
+
 ## [0.11.3] - 2026-08-03
 
 ### Added
