@@ -6,7 +6,7 @@ agents that need architectural context in a single shot.
 
 ## Status
 
-v0.11.2 (current). Single binary shipped (`thlibo`); inference runs in
+v0.11.3 (current). Single binary shipped (`thlibo`); inference runs in
 a separate sidecar, **`inferd`** (its own repo, github.com/3rg0n/inferd),
 which `thlibo install` probe-or-installs. `thlibo install` is zero-touch
 on all three OSes (incl. Windows arm64): it copies inferd's `backends/`
@@ -26,6 +26,13 @@ hook file is auto-discovered by **VS Code Copilot** (1.111+, Insiders),
 whose Claude-Code wire format the scripts detect and match. Full test +
 scanner CI on linux/macOS/Windows, signed releases via Sigstore keyless,
 CycloneDX SBOM.
+
+**Python is no longer needed on the compression path** (v0.11.3). ADR
+0015 moved PDF text extraction to native Go and ADR 0016 ported
+`cordon-filter`, closing both of ADR 0010's carve-outs. The single
+remaining Python processor is `pdf-to-md`, reached only for ADR 0009's
+scanned-page rasterization — so the prereq now applies to scanned PDFs
+alone, not to ordinary tool output.
 
 > History: through v0.5.x thlibo shipped a second binary, `thlibod`,
 > that spawned llamafile directly. ADR 0005 extracted all inference
