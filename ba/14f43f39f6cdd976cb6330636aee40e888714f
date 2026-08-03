@@ -1,0 +1,29 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_51c8732ccc2eae 10-30
+internal/processors/cordon_test.go
+  s_5811b7f24eccc0::t_aa450163542f16 305-308,320-323,331-334,345-348,355
+  s_5811b7f24eccc0::t_441acc673fb3d8 674-715,719-727
+  s_5811b7f24eccc0::t_c4bc1b084dcdde 716-718
+  s_5811b7f24eccc0::t_d206ddc50011c4 4
+internal/processors/cordon.go
+  s_5811b7f24eccc0::t_6256c61ce8f576 86-88
+  s_5811b7f24eccc0::t_457d1a96193fba 392
+  s_5811b7f24eccc0::t_e4112af1356ec4 351,359,365-376
+  s_5811b7f24eccc0::t_6073f43bb60d5f 185-189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ba14f43f39f6cdd976cb6330636aee40e888714f",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
