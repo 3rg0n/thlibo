@@ -83,7 +83,9 @@ type cordonSettings struct {
 	BatchSize     int
 
 	// EmbedTimeout bounds one batch round-trip; TotalTimeout bounds the
-	// whole filter across every batch.
+	// whole filter — every embed batch *and* the k-NN scoring pass, which
+	// is O(n²) in the window count and so can blow the budget on its own
+	// even when the daemon answers instantly.
 	//
 	// TotalTimeout is new, and it is not a nicety. As a script processor
 	// cordon was bounded at 30s by Dispatcher.ScriptTimeout — its own 60s
@@ -180,7 +182,11 @@ func cordonFilter(ctx context.Context, input []byte) []byte {
 		return input
 	}
 
-	scores := cordonKNNScores(vectors, cfg.KNeighbours)
+	scores, err := cordonKNNScores(ctx, vectors, cfg.KNeighbours)
+	if err != nil {
+		cordonDebugf("scoring: %v; passthrough", err)
+		return input
+	}
 
 	// Top-percentile by score. Ties break toward the earlier window, which
 	// keeps the selection stable when a stream has many identical records.
@@ -342,7 +348,7 @@ func cordonEmbedAll(ctx context.Context, cfg cordonSettings, texts []string) ([]
 // Brute-force O(n²) on purpose. n is the window count (low thousands at
 // most, and CORDON_MAX_WINDOWS caps it), and a spatial index would be
 // several hundred lines of code to save time this filter does not spend.
-func cordonKNNScores(vectors [][]float64, kNeighbours int) []float64 {
+func cordonKNNScores(ctx context.Context, vectors [][]float64, kNeighbours int) ([]float64, error) {
 	n := len(vectors)
 	scores := make([]float64, n)
 	k := kNeighbours
@@ -350,12 +356,24 @@ func cordonKNNScores(vectors [][]float64, kNeighbours int) []float64 {
 		k = n - 1
 	}
 	if k <= 0 {
-		return scores // single vector: nothing to be far from
+		return scores, nil // single vector: nothing to be far from
 	}
 
 	// Reused across rows so the inner loop doesn't allocate per vector.
 	dists := make([]float64, 0, n)
 	for i := range vectors {
+		// This loop is O(n²) in the window count, so it is the one part of
+		// the filter that can outlive TotalTimeout on its own — embedding
+		// finishing fast doesn't mean the filter is nearly done. Measured at
+		// 256 dimensions: 1k windows 0.17s, 5k 5.8s, 10k 28s, 20k 118s. Since
+		// RunNativeCtx cannot interrupt a running filter, an unchecked
+		// deadline here is a hung PreToolUse hook, not a slow one — the exact
+		// failure TotalTimeout exists to prevent. Checked per row, not per
+		// inner iteration, because one row is bounded by n and the check
+		// would otherwise dominate the distance computation.
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("k-NN scoring stopped after %d/%d windows: %w", i, n, err)
+		}
 		dists = dists[:0]
 		for j := range vectors {
 			if j != i {
@@ -371,7 +389,7 @@ func cordonKNNScores(vectors [][]float64, kNeighbours int) []float64 {
 		}
 		scores[i] = sum / float64(k)
 	}
-	return scores
+	return scores, nil
 }
 
 // cordonSquaredDistance is the squared Euclidean distance between two

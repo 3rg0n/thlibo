@@ -1,6 +1,7 @@
 package processors
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -301,7 +302,10 @@ func TestCordonKNNScoresRanksTheOutlier(t *testing.T) {
 		{0, 0}, {0, 0.1}, {0.1, 0}, {0.1, 0.1},
 		{50, 50},
 	}
-	scores := cordonKNNScores(vectors, 2)
+	scores, err := cordonKNNScores(context.Background(), vectors, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	outlier := 4
 	for i := range vectors {
 		if i != outlier && scores[i] >= scores[outlier] {
@@ -313,7 +317,10 @@ func TestCordonKNNScoresRanksTheOutlier(t *testing.T) {
 func TestCordonKNNScoresKnownValue(t *testing.T) {
 	// Three points on a line at 0, 3, 4. For k=1: nearest neighbour
 	// distances are 3, 1, 1.
-	scores := cordonKNNScores([][]float64{{0}, {3}, {4}}, 1)
+	scores, err := cordonKNNScores(context.Background(), [][]float64{{0}, {3}, {4}}, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	want := []float64{3, 1, 1}
 	for i := range want {
 		if scores[i] != want[i] {
@@ -321,7 +328,10 @@ func TestCordonKNNScoresKnownValue(t *testing.T) {
 		}
 	}
 	// For k=2: means of (3,4), (1,3), (1,4) -> 3.5, 2, 2.5.
-	scores = cordonKNNScores([][]float64{{0}, {3}, {4}}, 2)
+	scores, err = cordonKNNScores(context.Background(), [][]float64{{0}, {3}, {4}}, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	want = []float64{3.5, 2, 2.5}
 	for i := range want {
 		if scores[i] != want[i] {
@@ -332,14 +342,17 @@ func TestCordonKNNScoresKnownValue(t *testing.T) {
 
 func TestCordonKNNScoresClampsK(t *testing.T) {
 	// k larger than the neighbour count clamps rather than panicking.
-	scores := cordonKNNScores([][]float64{{0}, {1}}, 5)
+	scores, err := cordonKNNScores(context.Background(), [][]float64{{0}, {1}}, 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(scores) != 2 || scores[0] != 1 || scores[1] != 1 {
 		t.Errorf("got %v, want [1 1]", scores)
 	}
 }
 
 func TestCordonKNNScoresSingleVector(t *testing.T) {
-	if scores := cordonKNNScores([][]float64{{0, 0}}, 5); len(scores) != 1 || scores[0] != 0 {
+	if scores, err := cordonKNNScores(context.Background(), [][]float64{{0, 0}}, 5); err != nil || len(scores) != 1 || scores[0] != 0 {
 		t.Errorf("got %v, want [0]", scores)
 	}
 }
@@ -657,4 +670,58 @@ func (s slowEmbedder) Embed(ctx context.Context, inputs []string) ([][]float64, 
 		out[i] = []float64{0}
 	}
 	return out, nil
+}
+
+// TestCordonKNNScoresHonoursDeadline pins the fix for the merge-gate review
+// finding on ADR 0016: TotalTimeout wrapped only the embedding calls, so the
+// O(n²) scoring pass could run past it unbounded. Measured at 256 dimensions
+// (EmbedDimensions), 20k windows took ~118s against a 30s ceiling. That is
+// not a slow filter — RunNativeCtx cannot interrupt a running filter, so it
+// is a hung PreToolUse hook, the exact failure TotalTimeout exists to stop.
+//
+// An already-cancelled context must be caught on the first row rather than
+// after the whole matrix, so this asserts the error, not just a duration.
+func TestCordonKNNScoresHonoursDeadline(t *testing.T) {
+	vectors := make([][]float64, 64)
+	for i := range vectors {
+		vectors[i] = []float64{float64(i), float64(i * 2)}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	scores, err := cordonKNNScores(ctx, vectors, 5)
+	if err == nil {
+		t.Fatal("cancelled context produced no error; scoring ran to completion unbounded")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("error does not wrap context.Canceled: %v", err)
+	}
+	if scores != nil {
+		t.Errorf("expected nil scores on cancellation, got %d", len(scores))
+	}
+}
+
+// TestCordonFilterPassesThroughOnScoringDeadline is the end-to-end half: a
+// deadline that expires after embedding succeeds must yield the ORIGINAL
+// bytes (invariant #2), not a partial ranking. The stub embedder returns
+// instantly, so the only thing left to interrupt is the scoring pass.
+func TestCordonFilterPassesThroughOnScoringDeadline(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 400; i++ {
+		fmt.Fprintf(&sb, "2026-08-03T01:00:%02d service=api request_id=%d status=200 ok\n", i%60, i)
+	}
+	input := []byte(sb.String())
+
+	withEmbedder(t, &stubEmbedder{vec: func(text string) []float64 {
+		return []float64{float64(len(text)), float64(strings.Count(text, "="))}
+	}})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := cordonFilter(ctx, input)
+	if !bytes.Equal(out, input) {
+		t.Errorf("expected byte-exact passthrough on an expired deadline, got %d bytes from %d", len(out), len(input))
+	}
 }
