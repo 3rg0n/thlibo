@@ -137,7 +137,7 @@ curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.s
 Pin to a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.11.2 bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.11.3 bash
 ```
 
 ### One-liner (Windows PowerShell)
@@ -149,7 +149,7 @@ irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | ie
 Or pinned:
 
 ```powershell
-$env:THLIBO_VERSION='v0.11.2'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+$env:THLIBO_VERSION='v0.11.3'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
 Both installers:
@@ -401,14 +401,16 @@ same name as a built-in override the built-in.
 
 | Name | Type | Handles |
 |---|---|---|
-| `git-filter` | script | `git status`, `git diff`, `git log` |
-| `npm-filter` | script | `npm`, `npx`, `pnpm`, `yarn` |
-| `cargo-filter` | script | `cargo build`, `cargo test`, `cargo clippy` |
-| `pytest-filter` | script | `pytest` output |
-| `ndjson-filter` | script | structured-log streams |
-| `stacktrace-filter` | script | Python / Go / Rust / Java / Node stack traces |
-| `lint-filter` | script | clang, gcc, clippy, eslint, golangci-lint, gosec, shellcheck, flake8, ruff, mypy, rubocop, stylelint. Auto-wraps `gosec`, `staticcheck`, `golangci-lint`, `shellcheck` (not `go`/`make`/`docker` — see below) |
-| `go-test-filter` | script | `go test -v` / `go test -json` — keeps failures + package tally, drops passing-test noise. Auto-wraps `go test` (only that subcommand) |
+| `git-filter` | native | `git status`, `git diff`, `git log` |
+| `npm-filter` | native | `npm`, `npx`, `pnpm`, `yarn` |
+| `cargo-filter` | native | `cargo build`, `cargo test`, `cargo clippy` |
+| `pytest-filter` | native | `pytest` output |
+| `ndjson-filter` | native | structured-log streams |
+| `stacktrace-filter` | native | Python / Go / Rust / Java / Node stack traces |
+| `lint-filter` | native | clang, gcc, clippy, eslint, golangci-lint, gosec, shellcheck, flake8, ruff, mypy, rubocop, stylelint. Auto-wraps `gosec`, `staticcheck`, `golangci-lint`, `shellcheck` (not `go`/`make`/`docker` — see below) |
+| `go-test-filter` | native | `go test -v` / `go test -json` — keeps failures + package tally, drops passing-test noise. Auto-wraps `go test` (only that subcommand) |
+| `trivy-filter` | native | `trivy` scan output — keeps findings by severity, drops the per-target boilerplate |
+| `cordon-filter` | native | Semantic anomaly surfacer for logs: windows the input, embeds each window via inferd, ranks by k-NN distance and keeps the outliers. Fires automatically when `ndjson-filter` over-collapses a stream (so a repetitive access log doesn't compress down to one uninformative row), or on request in a chain. Never model-selected |
 | `har-filter` | native | `.har` (HTTP Archive) captures — **content-matched**, not command-wrapped. One redacted line per request (`METHOD status url (mime size ms)`); drops static assets + non-text bodies + timing plumbing; redacts query-string secrets, auth headers, POST-body creds, JWTs + long tokens (typically ~99% smaller) |
 | `mhtml-filter` | native | `.mhtml`/`.mht` saved-web-page archives — **content-matched**. Extracts the article HTML from the MIME bundle → Markdown (headings, lists, links, code/pre, tables, images as `![alt](src)` refs); drops the base64-embedded images/CSS/scripts that are ~90% of the file (typically ~98% smaller) |
 | `pdf-filter` | native | PDF → GitHub-flavored markdown, in-process, no Python — **content-matched** on `%PDF-`. Four tiers, best evidence first: a Tagged PDF's own `/StructTreeRoot` (headings, tables and reading order stated by the producer), native text extraction, geometry table detection, and a `[scanned page N]` placeholder handing image-only pages to the OCR path. Also emits document metadata + bookmark outline; drops running headers/footers, promotes numbered headings, rejects invisible layout grids so a slide deck's positioning frames aren't reported as tables. Encrypted documents pass through untouched (typically ~97% smaller) |
