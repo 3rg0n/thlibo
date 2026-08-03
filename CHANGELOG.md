@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`cordon-filter`: `CORDON_TIMEOUT` now bounds the whole filter, not just
+  the embedding calls.** Found by the independent merge-gate review of ADR
+  0016. `TotalTimeout` wrapped `cordonEmbedAll`, but the k-NN scoring pass
+  that follows it is **O(n²) in the window count** and ran with no deadline
+  check — so a fast daemon didn't mean a fast filter. Measured at
+  `EmbedDimensions` (256): 1k windows 0.17s, 5k 5.8s, 10k **28s**, 20k
+  **118s**, against a 30s ceiling; with `CORDON_MAX_WINDOWS=0` (the
+  default, no cap) a large enough log reaches those counts. This is the
+  precise failure the bound exists to prevent: `RunNativeCtx` cannot
+  interrupt a running filter, so an unchecked deadline in a native filter
+  is a **hung PreToolUse hook**, not a slow one — and the monotonic
+  output guard cannot contain it, because that guard only runs once the
+  filter has already returned. `cordonKNNScores` now takes a context and
+  checks `ctx.Err()` per row (per row, not per inner iteration: one row is
+  bounded by n, and a finer check would cost more than the distance
+  computation), returning an error that fails the filter open to the
+  original bytes per invariant #2. The `TotalTimeout` doc comment claimed
+  it "bounds the whole filter across every batch" — now it does.
+
 ### Changed
 
 - **`THREAT_MODEL.md`: addendum recording surface drift since the v0.1.0
