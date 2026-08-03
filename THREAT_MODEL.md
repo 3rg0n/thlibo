@@ -402,3 +402,140 @@ Like every other boundary, TB-6 is one-way: thlibo pushes; nothing
 inbound crosses it. The collector, its storage, and any onward
 forwarding are the operator's responsibility, outside thlibo's trust
 boundary.
+
+---
+
+## Addendum — 2026-08-03: surface drift since the v0.1.0 snapshot
+
+The body above is a **dated snapshot** (2026-05-14, v0.1.0). It is kept
+immutable on purpose: the risk table records what was surfaced and each
+finding's terminal state, and rewriting it would destroy that record.
+The consequence is that its *prose* describes a codebase that no longer
+exists in several places. This addendum names the drift so a reader does
+not mistake a v0.1.0 description for the current attack surface, and
+pins what was re-verified against HEAD (`0edcaed`, v0.11.3).
+
+**No finding is reopened here.** All 28 remain Mitigated per §"Status
+after remediation passes".
+
+### Verified still-true at HEAD
+
+| Claim | Verification |
+|---|---|
+| **#2 — Actions SHA-pinned.** The prose in §Executive Summary, §L4 and §Recommended Mitigations still reads present-tense "pinned by mutable tag"; the fix landed in `d2b813e` and the prose was never revised. | All **22** `uses:` across `ci.yml` / `release.yml` / `pages.yml` are 40-hex commit SHAs with a trailing `# vN` comment. Zero tag-only references. |
+| **#27 — a release-level compromise defeats the checksum.** The body calls cosign-signed attestations "ADR-worthy". | Landed, and **independently verified from the published artifacts**: 6/6 Sigstore keyless bundles verify with `--certificate-identity` pinned to the workflow at `refs/tags/v0.11.3` and `--certificate-oidc-issuer https://token.actions.githubusercontent.com`. This is what the finding asked for — the signature's trust root is Fulcio plus the workflow identity, not the release that hosts the bytes. |
+| **#1 — tool-output bytes reach the model unescaped.** | `internal/promptsan` exists and is on the routing path (imported by `internal/router`). |
+| **#22 — exec policy.** | `internal/execpolicy`. |
+
+### Drift — v0.1.0 descriptions that no longer match HEAD
+
+Structural, from the `inferd` extraction (ADR 0005) and later work:
+
+- **`cmd/thlibod` is gone.** `cmd/` holds one binary, `thlibo`. Every
+  finding phrased as "the daemon does X" now refers to a *separate
+  project* (`github.com/3rg0n/inferd`) with its own threat model.
+  Findings **#5** (daemon NDJSON frame cap), **#6** (systemd
+  `StartLimit*`), **#14** (systemd hardening) and **#24**
+  (`ipc.PeerIdentity`) describe code that no longer lives in this repo.
+  Their mitigations are not undone — they moved.
+- **`internal/ipc` no longer exists.** The client surface is
+  `internal/inferd`, thlibo's own codec written against inferd's
+  `protocol-v2.md`. Every `internal/ipc/...:NNN` line reference in the
+  body is dangling.
+- **The model pin left this repo.** `internal/install/model.go` — the
+  subject of finding **#4** (`equalFold` not constant-time) — is gone;
+  thlibo neither downloads nor SHA-verifies the GGUF. §Scope's "SHA-256
+  pinned at build time via `-ldflags -X`" and the Gemma-download
+  narrative belong to inferd now.
+- **llamafile is not the engine.** It survives only as *migration
+  cleanup* (`internal/install/migrate_v05.go` deletes the v0.5-era
+  binary). §Scope's "External runtime: llamafile, spawned as a private
+  subprocess on a private localhost port" is false at HEAD twice over:
+  no llamafile, and **no localhost port at all** — the transport is a
+  per-user UDS / named pipe, and inferd binds no network listener
+  (ADR 0022).
+- **§Scope's dependency list is stale.** `github.com/Microsoft/go-winio`
+  is **no longer a dependency** — absent from `go.mod`, and the Windows
+  named-pipe dialer uses `os.OpenFile` inline
+  (`internal/inferd/dial_windows.go`) to keep the package
+  dependency-free. That retires the SDDL/DACL reasoning in §L4
+  ("Windows named pipe") and the low-confidence part of finding **#24**.
+  Go is 1.26.5, not 1.26.3.
+- **"Python 3 (three script processors)" is now one**, and it is off the
+  compression path: ADR 0015 (native PDF extraction) and ADR 0016
+  (native `cordon-filter`) closed both of ADR 0010's carve-outs.
+  `pdf-to-md` remains solely for ADR 0009 page rasterization. Note the
+  repo still *ships* 11 `run.py` files — retained as **reference only**;
+  each ported filter's `processor.yaml` declares `type: native`, so they
+  are never executed. An auditor counting script processors with
+  `find -name '*.py'` will over-count by 10.
+- **Temperature.** §Scope lists "temperature 1.0 in compress/casefolder
+  prompts" under Non-Determinism. `compress` is now **0.0** (greedy) and
+  `casefolder` **0.3**.
+
+### Security-relevant correction: the GBNF guarantee is gone
+
+§L3 ("Grammar-enforced routing") and the closing line of §Trust
+Boundaries both rest on GBNF *hard*-constraining the router's output,
+and cite it as the reason "an attacker who gets a foothold in the
+prompt-processor turn cannot make the router produce an unknown name."
+
+**That field was removed by the v2 wire.** Per
+`internal/router/router.go:8-15`, the daemon does not enforce a tool's
+`input_schema` against emitted arguments, so routing output is **no
+longer structurally guaranteed at the protocol level**. The mitigation
+moved into thlibo, and is now defence-in-depth rather than a hard
+constraint:
+
+1. `response_format` (JSON-Schema) is **best-effort**. On llamacpp the
+   daemon compiles it to GBNF; a backend without structured-output
+   support **ignores it silently and returns unconstrained text**.
+2. `parseRouteResult` validates the returned name against
+   `Registry.RoutableNames()` and passes through on anything unknown or
+   malformed. **This, not the schema, is the enforcement point** — and it
+   is why ADR 0013 requires validating against the *routable* set rather
+   than the full registry: a backend that ignores `response_format` could
+   otherwise name `shorthand`, which rewrites prose in place, for tool
+   output.
+
+Net posture is unchanged or better — the failure mode is passthrough per
+ADR 0006 — but the *reason* it holds is different, and a reader should
+not credit a protocol guarantee that no longer exists.
+
+### Newly in scope, not covered by the body at all
+
+- **`internal/pdf/` — a vendored, locally patched PDF parser over
+  untrusted input** (ADR 0015), absent at snapshot time. Three fuzz
+  targets (`FuzzOpenBytes`, `FuzzParseInlineDict`,
+  `FuzzDecodeTextString`); prior fuzzing found three **hangs** and two
+  OOB crashes. The controlling invariant is thlibo-specific:
+  `RunNative` recovers a panic and passes the original bytes through, but
+  **nothing recovers a blocked PreToolUse hook** — so here a hang is
+  strictly worse than a panic. Any new walk over file-controlled
+  structure must be bounded and fuzz-seeded.
+- **`cordon-filter` reaches the network** — the only native filter that
+  does (`inferd.EmbedClient`, line-delimited JSON on its own socket).
+  Bounded twice: per-batch inside `EmbedClient`, and `CORDON_TIMEOUT`
+  (30s) around the whole filter, because `RunNativeCtx` cannot interrupt
+  a running filter (ADR 0012).
+- **Every inference round-trip is bounded** at 15s inside
+  `inferd.Client.Post` (`$THLIBO_INFERD_TIMEOUT`), never at call sites
+  (ADR 0012). At snapshot time these calls were unbounded and every
+  caller passed `context.Background()`.
+- **Tag-name shell injection in `release.yml`** — found and fixed after
+  this snapshot (`e09a729`), in a job holding `contents: write` +
+  `id-token: write`. The root cause was not the workflow but the
+  **gate**: semgrep in `ci.yml` scanned only `./cmd ./internal
+  ./processors`, so `.github/` — the highest-privilege files in the repo
+  — was never scanned, and six findings survived every release. It now
+  scans `.`, and semgrep reports 0 findings repo-wide. *A scanner that
+  cannot see the release pipeline is not gating it.*
+
+### Convention going forward
+
+The correct fix for this drift is a full MAESTRO re-run against the
+current architecture, not further addenda — the body's line references
+are dangling and its component inventory is two major refactors behind.
+Until then: **the risk table is authoritative for finding state, this
+addendum is authoritative for what the code looks like, and neither
+replaces `docs/adr/` for why.**
