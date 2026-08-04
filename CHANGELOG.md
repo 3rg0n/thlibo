@@ -93,6 +93,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comment in `filter_pdf.go` said "~156x" with no recorded basis anywhere
   and now cites ADR 0015's aggregate figure and its scope instead.
 
+  Review caught one real trap in the first draft: **under `-race` the cordon
+  ceiling failed reliably**, 8.80 s against a 2 s budget. Not noise — the
+  detector instruments every memory access, which is essentially the entire
+  cost of a tight numeric loop, a measured **17.5×** on identical input. CI
+  does not currently pass `-race`, so this would have sat dormant until
+  someone ran the suite that way or added the flag. Fixed with a
+  build-tagged `budgetSlack` multiplier (`budget_race_test.go` /
+  `budget_norace_test.go`) rather than either alternative, both of which lose
+  something: a 50 s budget in the plain build would stop catching anything,
+  and skipping under `-race` would drop the coverage silently. The README's
+  99× also now states its scope inline (aggregate, five real documents, one
+  hand measurement) instead of leaving a bare multiplier for a reader to
+  attribute to the new benchmarks.
+
 ### Changed
 
 - **`THREAT_MODEL.md`: addendum recording surface drift since the v0.1.0

@@ -160,15 +160,30 @@ func BenchmarkCordonFilter(b *testing.B) {
 // benchEmbedder returns a vector derived from the text, cheaply. Not
 // stubEmbedder: that one records every input it sees, which turns a
 // benchmark loop into an unbounded append and measures the recorder.
+//
+// Deterministic by construction — the vector is a pure function of the
+// input bytes and the index, with no randomness, no map iteration and no
+// clock. That matters more here than in a test: non-determinism in the
+// fixture would land as noise directly inside the thing being measured.
 type benchEmbedder struct{ dims int }
 
 func (e *benchEmbedder) Embed(_ context.Context, inputs []string) ([][]float64, error) {
 	out := make([][]float64, len(inputs))
 	for i, in := range inputs {
 		v := make([]float64, e.dims)
+		// h seeded from the length so an empty input still yields a defined
+		// vector; the byte mixing below is skipped rather than indexing into
+		// an empty string. cordonWindows joins WindowSize non-blank lines so
+		// it cannot currently produce one, but a helper that panics on empty
+		// input is a poor thing to have in a package whose whole contract is
+		// that filters don't crash the hook.
 		h := len(in)
 		for d := range v {
-			h = h*31 + int(in[(d+i)%len(in)])
+			if len(in) > 0 {
+				h = h*31 + int(in[(d+i)%len(in)])
+			} else {
+				h = h*31 + d
+			}
 			v[d] = float64(h%1000) / 1000.0
 		}
 		out[i] = v
@@ -213,11 +228,13 @@ func benchVectors(n, dims int) [][]float64 {
 // change in *complexity* (an accidental cubic, a ctx check moved into the
 // inner loop, a per-distance allocation), not a change in constant factor.
 // benchstat over BenchmarkCordonKNNScores is the tool for the latter.
+//
+// budgetSlack widens the ceiling under -race, where instrumenting every
+// memory access in this loop costs a measured 17.5×. See
+// budget_race_test.go.
 func TestCordonKNNScoringStaysUnderBudget(t *testing.T) {
-	const (
-		windows = 2048
-		budget  = 2 * time.Second
-	)
+	const windows = 2048
+	budget := 2 * time.Second * budgetSlack
 
 	vectors := benchVectors(windows, inferd.EmbedDimensions)
 
@@ -260,10 +277,8 @@ func TestCordonKNNScoringStaysUnderBudget(t *testing.T) {
 // catch a complexity change or a large constant regression; a 2× one is
 // benchstat's job, not this test's.
 func TestPDFFilterStaysUnderBudget(t *testing.T) {
-	const (
-		pages  = 64
-		budget = time.Second
-	)
+	const pages = 64
+	budget := time.Second * budgetSlack
 
 	content := make([]string, pages)
 	for i := range content {

@@ -107,7 +107,12 @@ The deterministic filters (`git-filter`, `npm-filter`, `cargo-filter`,
 are **native Go** — compiled into the binary, run in-process, no inferd and
 no Python (ADR 0010, ADR 0015). PDFs included: `pdf-filter` reads them
 in-process, roughly 99× faster than the Python path and with less text
-mangling, using the document's own structure tree when it has one.
+mangling, using the document's own structure tree when it has one. (That
+figure is an end-to-end aggregate over five real corpus documents,
+51.3 s → 0.52 s — full table and method in
+[ADR 0015](docs/adr/0015-native-go-pdf-extraction.md). It was measured once
+against Python during the port and is not re-derived by the in-tree
+benchmarks, which are Go-only.)
 `pdf-to-md` remains installed for the one thing native Go can't do — a
 *scanned*, image-only PDF has no extractable text, so its pages get
 rasterized and handed to inferd's Gemma vision model for OCR (see below).
