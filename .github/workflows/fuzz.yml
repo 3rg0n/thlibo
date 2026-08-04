@@ -1,0 +1,148 @@
+name: Fuzz
+
+# Nightly fuzzing of internal/pdf — the only package that parses
+# untrusted input.
+#
+# Why this exists as its own workflow rather than a step in ci.yml:
+# fuzzing is unbounded work with a wall-clock budget, and CI is a
+# merge gate that has to finish in a couple of minutes. Bolting
+# 30 minutes of fuzzing onto every PR would make the gate unusable,
+# and shortening it to fit would make it theatre.
+#
+# The gap this closes: internal/pdf ships three Fuzz targets, and
+# until now NOTHING ran them in CI. They found all three of the
+# hangs fixed in ADR 0015's review (lexer non-advance on a stray
+# delimiter, a trusted xref entry count, a self-referential page
+# tree), and then only ran when someone remembered to. The seed
+# corpus in testdata/fuzz/ protects those specific regressions via
+# `go test`, but seeds only re-check known inputs — they don't
+# search for new ones.
+#
+# Why the stakes are higher here than "a test failed": under
+# invariant #2 the middleware fails open, and RunNative recovers a
+# panic and passes the original bytes through. A hang has no such
+# net — nothing recovers a blocked PreToolUse hook, so the AI
+# client just stops. That asymmetry is why the targets assert only
+# "no panic, no hang, no unbounded allocation" and why unbounded
+# walks over file-controlled structure are the highest-value find.
+
+on:
+  schedule:
+    # 04:17 UTC. Off the hour deliberately — scheduled workflows are
+    # queued best-effort and the top of the hour is the most
+    # contended slot on GitHub's shared runners.
+    - cron: "17 4 * * *"
+  # Manual runs for when a change lands in internal/pdf and waiting
+  # for the nightly isn't good enough. fuzztime is overridable so a
+  # parser change can be given a long soak on demand.
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: "Per-target fuzz duration (Go duration, e.g. 10m)"
+        required: false
+        default: "10m"
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never run two fuzz jobs at once: they'd race on the shared corpus
+  # cache and the later upload would clobber the earlier one. No
+  # cancel-in-progress — a nightly that is 25 minutes into a 30
+  # minute soak should finish rather than be killed by a manual run.
+  group: fuzz
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  fuzz:
+    name: fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    # A generous ceiling over fuzztime so a hang inside the fuzzer
+    # itself surfaces as a failed job rather than burning the
+    # account's minutes. fuzztime is per-target and this is per-job.
+    timeout-minutes: 30
+    strategy:
+      # Every target reports independently. fail-fast would hide a
+      # second finding behind the first, and with three targets
+      # there is no runner cost worth saving.
+      fail-fast: false
+      matrix:
+        # One job per target rather than a loop, so the matrix leg
+        # name in the UI says which parser surface failed.
+        target: [FuzzOpenBytes, FuzzParseInlineDict, FuzzDecodeTextString]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+          # cache: false, unlike ci.yml. setup-go's cache covers
+          # $GOCACHE, and Go keeps the fuzz corpus at $GOCACHE/fuzz —
+          # so leaving it on would put two cache actions on
+          # overlapping paths, racing to restore and save the same
+          # directory. The corpus cache below is the one that matters
+          # here; recompiling one package is cheap next to a 10-minute
+          # fuzz run.
+          cache: false
+
+      - name: Restore fuzz corpus
+        # The corpus is what makes nightly fuzzing worth more than a
+        # cold 10-minute run: Go keeps generated inputs under
+        # $GOCACHE/fuzz and seeds the next run from them, so coverage
+        # compounds night over night instead of restarting from the
+        # committed seeds every time. A cold start re-derives the
+        # same shallow inputs and never reaches the deep structure
+        # where the interesting bugs live.
+        #
+        # Scoped to this target's own directory so the three matrix
+        # legs never write the same cache entry. key includes run_id
+        # because a cache entry is immutable once written — a stable
+        # key would restore night one's corpus forever and silently
+        # stop compounding. restore-keys then degrades a miss to
+        # "load the most recent previous corpus" rather than "start
+        # from nothing".
+        #
+        # Small: measured at ~1.5 MB for FuzzOpenBytes after a day's
+        # runs, so this is nowhere near the 10 GB per-repo cache cap.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build/fuzz/github.com/3rg0n/thlibo/internal/pdf/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+
+      - name: Fuzz
+        env:
+          FUZZTIME: ${{ inputs.fuzztime || '10m' }}
+        # -run '^$' so the ordinary unit tests don't re-run in every
+        # matrix leg; ci.yml already gates those on three OSes.
+        # -timeout 0 disables the *test binary's* 10-minute default,
+        # which would otherwise kill a fuzztime >= 10m and report it
+        # as a panic — a confusing false positive that looks exactly
+        # like the hang we're hunting.
+        run: |
+          go test ./internal/pdf/ \
+            -run '^$' \
+            -fuzz '^${{ matrix.target }}$' \
+            -fuzztime "$FUZZTIME" \
+            -timeout 0
+
+      - name: Collect crashers
+        # Only on failure. A crash writes the minimised input to the
+        # package's testdata/fuzz/<Target>/ — that file IS the
+        # regression test, so it must leave the runner or the finding
+        # is lost when the workspace is torn down. Committing it and
+        # re-running `go test` reproduces the failure with no fuzzing.
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crashers-${{ matrix.target }}
+          path: internal/pdf/testdata/fuzz/
+          if-no-files-found: warn
+          # Long enough to survive a weekend; a crasher that nobody
+          # has triaged in two weeks needs an issue, not an artifact.
+          retention-days: 14
