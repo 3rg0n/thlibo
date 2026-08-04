@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **CI's three scanner installs are version-pinned instead of `@latest`**
+  (`.github/workflows/ci.yml`): `staticcheck@v0.7.0`,
+  `govulncheck@v1.6.0`, `gosec@v2.28.0`. `@latest` resolves at job time, so
+  whatever is tagged latest when CI runs is what executes inside a job with
+  repository access — the shape of the March 2026 Trivy compromise, and the
+  same reasoning that already SHA-pins every `uses:` (THREAT_MODEL finding
+  #2). It is a weaker case than the Actions one, because Go's module proxy
+  and checksum database do verify what gets fetched; but they verify bytes,
+  not intent, and a malicious release of a legitimate module still installs
+  cleanly. Pinning also makes a scanner result reproducible: a new release
+  changing its own rules is otherwise indistinguishable from our code
+  regressing. Versions were resolved at runtime via
+  `go list -m -versions`, skipping staticcheck's `v0.8.0-rc.1` prerelease,
+  and all three reproduce the repo's existing zero-finding result at the
+  pinned versions.
+
+  Two things the comment in the workflow now records, because both are
+  easy to assume wrongly. **Dependabot does not track these** — it watches
+  `go.mod` and `uses:` SHAs, and a `go install` line in a `run:` body is
+  invisible to both, so bumping them is a manual chore rather than a PR
+  that arrives. They are also deliberately *not* added to `go.mod` as tool
+  dependencies, which would make them visible: that pulls each scanner's
+  whole dependency tree into our module graph, where the `govulncheck` gate
+  fails the job on any third-party CVE — so a vulnerability in a linter's
+  transitive dependency would block unrelated work.
+
 ## [0.11.4] - 2026-08-04
 
 Hardens what v0.11.3 shipped rather than adding to it. The native PDF path
