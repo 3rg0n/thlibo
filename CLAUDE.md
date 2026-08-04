@@ -267,6 +267,7 @@ go build ./...                 # build all
 go build -ldflags "-X github.com/3rg0n/thlibo/internal/version.Tag=v0.X.Y" -o thlibo ./cmd/thlibo
 go test ./...                  # full suite
 go test ./internal/middleware/... -run TokenSavings   # the savings benchmark
+go test ./internal/processors/ -run '^$' -bench . -benchmem   # filter perf
 go vet ./...                   # required before commit
 staticcheck ./...              # required — blocks CI
 gosec ./...                    # required — blocks CI
@@ -275,6 +276,22 @@ gosec ./...                    # required — blocks CI
 The version tag is injected via `-ldflags -X …/internal/version.Tag`;
 an un-injected build reports `dev` and skips the background
 update-check.
+
+**Two filters carry a performance ceiling as a test, and one of them is a
+safety property.** `internal/processors/bench_test.go` benchmarks
+`pdf-filter` and cordon's k-NN pass, plus `-run StaysUnderBudget` ceiling
+tests that run with the ordinary suite. For cordon that ceiling is
+**availability, not speed**: the scoring pass is O(n²) in the window count,
+and if it degrades far enough to stop finishing inside `CORDON_TIMEOUT`, the
+deadline fires and the filter returns the input verbatim — which is the
+*correct* documented behaviour (invariant #2), so every other test still
+passes while cordon has silently become a permanent no-op. That is the #106
+failure mode encoded as a test. Both budgets are sized to catch a change in
+*complexity*, not constant factor; a flaky perf test gets deleted rather
+than investigated, so use `benchstat` across revisions for anything
+narrower. The published "~99×" is a one-off hand measurement against Python
+(ADR 0015) — these are Go-only and cannot re-derive it; they only catch this
+path regressing.
 
 ## When adding code
 

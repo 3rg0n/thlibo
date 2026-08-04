@@ -4,10 +4,19 @@ package processors
 //
 // This is the native replacement for the pdf-to-md Python script (ADR
 // 0007). The script needs pypdf + pdfplumber installed, costs a Python
-// interpreter launch per invocation, and — measured on this repo's
-// corpus — extracts text ~156x slower than the vendored Go engine with
-// more word mangling (6.39% vs 0.11% of words), so the Python
-// dependency was buying nothing on the text path.
+// interpreter launch per invocation, and ran ~99× slower end to end than
+// the vendored Go engine (51.3 s → 0.52 s over five representative corpus
+// documents) with more word mangling (6.39% vs 0.11% of words) — so the
+// Python dependency was buying nothing on the text path. Full table and
+// methodology in ADR 0015; that is the number to quote, since it is the one
+// with a recorded basis.
+//
+// Those figures were taken once, by hand, against Python. Nothing
+// re-measures them, so treat them as the historical case for the port
+// rather than a current fact. What guards this path *now* is
+// BenchmarkPDFFilter plus TestPDFFilterStaysUnderBudget in bench_test.go —
+// Go-only, so they cannot restate the speedup, but they do catch this path
+// regressing back toward the wall-clock that motivated the change.
 //
 // TIER LADDER. Four strategies, best evidence first. Each tier states
 // something the next one has to guess:
