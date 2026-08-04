@@ -1,0 +1,24 @@
+internal/install/mirror_test.go
+  s_5811b7f24eccc0::t_9cb4ddb56016aa 179-180,183-186
+  s_5811b7f24eccc0::t_aeeb0fcdb5656d 162-167,169-170
+  s_5811b7f24eccc0::t_cd071229683ec0 104-108,117-118,123-126,152-161,168,171-178,181-182,187-194
+  s_5811b7f24eccc0::t_eea6f07b7d1b1d 195-196
+CHANGELOG.md
+  s_5811b7f24eccc0::t_3539820350e990 187-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "9dd283926e9b9f60bb7eaf8eadf832f3fb07e840",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
