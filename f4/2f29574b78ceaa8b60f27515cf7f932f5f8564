@@ -1,0 +1,40 @@
+THREAT_MODEL.md
+  s_5811b7f24eccc0::t_389b74719754e5 67-73
+  s_5811b7f24eccc0::t_7aea626062426b 549-684
+CHANGELOG.md
+  s_5811b7f24eccc0::t_436a20c3770e76 10-59
+internal/processors/filter_pdf.go
+  s_5811b7f24eccc0::t_d899eb1589eb4f 103-121
+internal/pdf/fuzz_test.go
+  s_5811b7f24eccc0::t_e423fab011b102 51-58,147-161
+.github/workflows/ci.yml
+  s_5811b7f24eccc0::t_d4490a88f8201b 161-165
+  s_5811b7f24eccc0::t_ca6aacc70801f8 133-154,156-160,166-198
+internal/pdf/parser.go
+  s_5811b7f24eccc0::t_befdb68a66d766 103-110
+  s_5811b7f24eccc0::t_b0b2177d4278fd 132-140
+  s_5811b7f24eccc0::t_12bdfe67730de4 9-10,13-31
+  s_5811b7f24eccc0::t_03b8ca714ab475 32
+internal/pdf/bounds_test.go
+  s_5811b7f24eccc0::t_8c8121107b2527 382-451
+internal/processors/filter_pdf_test.go
+  s_5811b7f24eccc0::t_3a1cd85f60f850 147-182
+.gitignore
+  s_5811b7f24eccc0::t_94cb0f97a41330 75-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f42f29574b78ceaa8b60f27515cf7f932f5f8564",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
