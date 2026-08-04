@@ -152,6 +152,17 @@ jobs:
         # trace are advisory-only (imported but not called) and are not
         # counted; only a finding whose most specific frame names a
         # non-stdlib module fails the job.
+        #
+        # NOTE: under `-format=json`, govulncheck exits **0 even when it
+        # finds reachable CVEs** — the documented exit code 3 ("findings
+        # exist") applies to the text format only. So the python below is
+        # the entire gate; `set -o pipefail` guards a crashed or missing
+        # scanner, not a positive finding. Verified empirically rather than
+        # from the docs: this exact step, extracted verbatim from this file
+        # and run against a module pinned to gopkg.in/yaml.v2 v2.2.1, exits
+        # 1 and names `gopkg.in/yaml.v2: GO-2020-0036, GO-2021-0061,
+        # GO-2022-0956`. Re-check that when changing anything here — the
+        # previous version of this step passed for a week without scanning.
         run: |
           set -o pipefail
           govulncheck -format=json ./... > vulns.json
