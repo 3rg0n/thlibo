@@ -700,6 +700,11 @@ emits its own `thlibo.*` signals.
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md).
 - Run the tests: `go test ./... -timeout 120s`
 - Scanner sweep: `go vet ./... && staticcheck ./... && gosec ./... && govulncheck ./...`
+- Fuzz the PDF parser (the untrusted-input boundary):
+  `go test ./internal/pdf/ -run '^$' -fuzz '^FuzzOpenBytes$' -fuzztime 60s`.
+  Three targets — `FuzzOpenBytes`, `FuzzParseInlineDict`,
+  `FuzzDecodeTextString` — run nightly in CI, not per-PR. Touching the
+  parser? Soak it before the PR rather than waiting for the nightly.
 
 ### Project layout
 

@@ -179,6 +179,17 @@ recovers a panic and passes the original bytes through but nothing recovers a
 blocked hook. If you add a walk over file-controlled structure here, bound
 it and add a fuzz seed.
 
+The three targets run **nightly**, not per-PR (`.github/workflows/fuzz.yml`,
+one matrix leg each, 10 min apiece, corpus cached so coverage compounds).
+`go test` replays the committed seeds in `testdata/fuzz/` on every run, which
+guards the known regressions — but finding a *new* hang is the nightly's job,
+so a parser change is not "fuzz-clean" because CI went green. Soak it first:
+`gh workflow run fuzz.yml -f fuzztime=30m`, or locally
+`go test ./internal/pdf/ -run '^$' -fuzz '^FuzzOpenBytes$' -fuzztime 60s`.
+A nightly failure uploads the minimised input as a `crashers-<Target>`
+artifact; commit it under `testdata/fuzz/<Target>/` and it becomes a
+permanent regression test that needs no fuzzing to reproduce.
+
 ## Talking to inferd
 
 thlibo is a *client* of inferd; it does not own the model or the

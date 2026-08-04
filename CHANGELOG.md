@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Nightly fuzzing of `internal/pdf` in CI (`.github/workflows/fuzz.yml`).**
+  The package shipped three `Fuzz` targets and **nothing in CI ran any of
+  them** — they found all three of the hangs fixed during ADR 0015's review
+  (lexer non-advance on a stray delimiter, a trusted xref entry count, a
+  self-referential page tree) and then only ran when someone remembered to.
+  The committed seed corpus protects those specific regressions through
+  `go test`, but seeds only re-check known inputs; they don't search for new
+  ones. This is the package that parses untrusted input, and a *hang* there
+  has no safety net: `RunNative` recovers a panic and passes the original
+  bytes through, but nothing recovers a blocked PreToolUse hook. Its own
+  workflow rather than a step in `ci.yml` because fuzzing is unbounded work
+  with a wall-clock budget, and a merge gate has to finish in minutes —
+  shortening a fuzz run to fit a gate makes it theatre. One matrix leg per
+  target (so the failing leg names the parser surface), 10 min each by
+  default, `workflow_dispatch` with an overridable `fuzztime` for soaking a
+  parser change on demand. The corpus is cached per target so coverage
+  **compounds** night over night instead of re-deriving shallow inputs from
+  cold every run; `setup-go`'s `cache:` is off in this job because it covers
+  `$GOCACHE`, which *contains* `$GOCACHE/fuzz`, and two cache actions on
+  overlapping paths race. On failure the minimised crasher is uploaded as an
+  artifact — that file *is* the regression test, so it has to leave the
+  runner before the workspace is torn down. Verified end-to-end with a
+  deliberate temporary crash: the failing input lands in
+  `internal/pdf/testdata/fuzz/<Target>/`, which is exactly the path the
+  upload step collects. All four actions are SHA-pinned.
+
 ### Fixed
 
 - **`cordon-filter`: `CORDON_TIMEOUT` now bounds the whole filter, not just
