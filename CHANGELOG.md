@@ -107,6 +107,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hand measurement) instead of leaving a bare multiplier for a reader to
   attribute to the new benchmarks.
 
+- **Unit tests for the `install` archive-extraction guards and the `pdfocr`
+  rasterization bounds.** `internal/install` sat at **19.9%** statement
+  coverage and `internal/pdfocr` at **14.0%**, and the uncovered code was
+  not incidental: `safeJoin`, `stripLeadingComponent`, `extractTarGz` and
+  `extractZip` were at **0%**, and they are the only place in thlibo that
+  writes attacker-influenced *filenames* to disk. `thlibo install` downloads
+  an inferd release archive over the network and unpacks it into the user's
+  home directory, so a member named `../../../.ssh/authorized_keys` is a
+  file-overwrite primitive if the traversal guard is wrong. Cosign
+  verification is the first line of defence but `tryCosignVerify` is
+  best-effort — it degrades to a warning when cosign is absent — so
+  `safeJoin` is load-bearing on its own. Coverage now **19.9% → 38.2%** and
+  **14.0% → 81.7%**.
+
+  `install`: `extract_test.go` builds tar.gz and zip archives in-process
+  rather than committing fixtures (a malicious tarball in the repo would trip
+  scanners and is harder to read than the code that builds it) and covers
+  wrapper-stripping, traversal refusal in **both** formats — separate
+  implementations of the same contract, so testing one says nothing about the
+  other — corrupt input (an HTML 404 served with a 200, which is what a
+  broken mirror actually returns), the executable bit the daemon needs to
+  run, and `sha256OfFile` against a literal digest rather than one
+  recomputed with the same library the function uses. Two cases exist because
+  the bug is invisible on inspection: `safeJoin` must reject a *sibling*
+  directory sharing the base's string prefix (`…/extract` vs
+  `…/extract-evil`, which a naive `HasPrefix` accepts) and must accept base
+  itself. The traversal assertions walk the whole parent directory rather
+  than stat-ing one guessed path — a payload landing somewhere unanticipated
+  is still a traversal. `mirror_test.go` covers `isExecutable`, and
+  `mirrorFS`'s modes, idempotence, mode *repair* (`os.WriteFile` honours its
+  mode only on create, so without the explicit `Chmod` an upgrade leaves
+  stale permissions and script processors then fail at dispatch — silently,
+  because the middleware fails open), foreign-file preservation (users drop
+  their own processors in the same directory) and error propagation.
+  `autostart_windows_test.go` covers `quoteIfNeeded` and `cmdBody`, which
+  generate a batch file Windows executes at **every logon**: an unquoted `&`
+  in a path is a second command there, so the quoting is injection-adjacent
+  even though the input is thlibo-resolved.
+
+  `pdfocr`: `renderPageRGB` and `PageCount` were at 0% and 64% because they
+  shell out to the processor's `run.py` — reachable in a test because the
+  interpreter is a *parameter*, not a constant, so pointing it at the test
+  binary and switching on an env var gives a stub subprocess whose stdout is
+  controlled byte for byte. That covers the decompression-bomb guard, which
+  is the reason to bother: a stub advertising a 30000×30000 canvas in a
+  40-byte PNG must be refused from the **header**, before any pixel buffer is
+  allocated, and the failure mode if that regresses is not a wrong answer but
+  a dead machine. Also the RGB conversion (exactly 3 bytes/px, no alpha —
+  an extra channel would misalign every row on the daemon side),
+  subprocess-stderr propagation, a missing interpreter (the common case now
+  that Python is optional), context cancellation, and `MaxPages` — asserted
+  by counting stub launches, because it's a cost control and what matters is
+  that it stops doing the work, not that the summary line prints the right
+  number. `ocrPage`'s success path stays uncovered here: it needs
+  `inferd.Client.Post` to answer and the client's dial seam is unexported.
+
 ### Changed
 
 - **`THREAT_MODEL.md`: addendum recording surface drift since the v0.1.0

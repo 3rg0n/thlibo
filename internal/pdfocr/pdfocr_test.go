@@ -6,8 +6,10 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -82,5 +84,78 @@ func TestPageCountBadProcessor(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := PageCount(context.Background(), pythonForTest(), filepath.Join(dir, "missing"), []byte("%PDF-1.4")); err == nil {
 		t.Error("expected error for missing processor dir")
+	}
+}
+
+// TestTranscribeFailsOpenWhenNoPageRenders covers the whole-document
+// failure path, which is the one ADR 0006 depends on: every page fails to
+// rasterize, so Transcribe must return an error (the caller then keeps the
+// original low-value output) rather than a document of placeholder lines
+// that looks like a successful transcription.
+//
+// The client is nil on purpose. renderPageRGB fails before ocrPage ever
+// touches it, so this also pins that ordering: if a future edit dialled
+// inferd before rasterizing, this test would panic instead of failing, and
+// a panic in a hook is the one outcome invariant #2 forbids outright.
+func TestTranscribeFailsOpenWhenNoPageRenders(t *testing.T) {
+	dir := t.TempDir()
+	noPython := filepath.Join(dir, "definitely-not-python")
+	out, err := Transcribe(context.Background(), nil, []byte("%PDF-1.4"), Options{
+		ProcessorDir: dir,
+		PageCount:    3,
+		Python:       noPython,
+	})
+	if err == nil {
+		t.Fatalf("Transcribe reported success with no page transcribed; got %q", out)
+	}
+	if out != "" {
+		t.Errorf("Transcribe returned %q alongside an error; the caller may use it", out)
+	}
+	if !strings.Contains(err.Error(), "no page produced a transcription") {
+		t.Errorf("error = %v, want the no-transcription complaint", err)
+	}
+}
+
+// TestTranscribeHonoursCancellation: a cancelled context must end the run
+// rather than grinding through every page. Reachable because the per-page
+// render checks the context.
+func TestTranscribeHonoursCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := Transcribe(ctx, nil, []byte("%PDF-1.4"), Options{
+		ProcessorDir: t.TempDir(),
+		PageCount:    2,
+	}); err == nil {
+		t.Error("Transcribe ran to completion under a cancelled context")
+	}
+}
+
+// TestTranscribeStopsRenderingAtPageCap: MaxPages is a cost control — the
+// comment on it says a runaway 500-page scan would otherwise hang the read
+// — so the assertion that matters is that it stops *doing the work*, not
+// that the summary line says the right number. Counted by tallying stub
+// subprocess launches.
+//
+// Uses the render stub so the pages fail after being attempted; the
+// resulting error is expected and not what's under test here.
+func TestTranscribeStopsRenderingAtPageCap(t *testing.T) {
+	tally := filepath.Join(t.TempDir(), "calls")
+	python, dir := stubProcessor(t, "empty")
+	t.Setenv(helperTally, tally)
+
+	_, _ = Transcribe(context.Background(), nil, []byte("%PDF-1.4"), Options{
+		ProcessorDir: dir,
+		PageCount:    9,
+		MaxPages:     3,
+		Python:       python,
+	})
+
+	body, err := os.ReadFile(tally)
+	if err != nil {
+		t.Fatalf("stub was never invoked: %v", err)
+	}
+	if len(body) != 3 {
+		t.Errorf("rendered %d pages, want 3 — MaxPages did not bound the work",
+			len(body))
 	}
 }
