@@ -1,0 +1,39 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_fe5537ff44055d 59-95
+CLAUDE.md
+  s_5811b7f24eccc0::t_ff5a01585e5974 270,280-294
+  s_126aec4081f728::t_2b02cdae87e21b 295
+internal/processors/bench_test.go
+  s_5811b7f24eccc0::t_b9505d229a28f2 1-253,262-264,266-296
+  s_5811b7f24eccc0::t_7a03f9a890bffd 254-261,265
+internal/processors/cordon.go
+  s_5811b7f24eccc0::t_f5fab0808856d9 368-373
+README.md
+  s_5811b7f24eccc0::t_65c5fb65f85019 708-715
+internal/processors/filter_pdf.go
+  s_5811b7f24eccc0::t_720f39e1cbfbf0 7-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "039161a8c4fc62f8b940b2fb26d24c97465df764",
+  "prompts": {},
+  "sessions": {
+    "s_126aec4081f728": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27423376-a69e-4c48-a6dc-36ba96a5574e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
