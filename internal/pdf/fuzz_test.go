@@ -48,6 +48,14 @@ func FuzzOpenBytes(f *testing.F) {
 	f.Add(inlineImagePDF(f, "BI /W 2 /H 2 /BPC 8 /CS /G /L 1 ID \x00\x01\x02\x03 EI"))
 	// A Form XObject naming itself: the fan-out shape the visited set bounds.
 	f.Add(selfReferentialFormPDF(f))
+	// Object nesting past maxObjectDepth. Seeded rather than left to the
+	// mutator because the mutator will not find it: reaching the unguarded
+	// version's failure took ~1.3M levels, and a fatal stack overflow never
+	// returns to the harness to be reported anyway. What this seed guards is
+	// the *guard* — that a rejected object still yields a clean error through
+	// the whole read path rather than a partially-built document.
+	// See TestObjectNestingIsBounded.
+	f.Add(deeplyNestedPDF(maxObjectDepth + 64))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		doc, err := OpenBytes(data)
@@ -134,6 +142,21 @@ func selfReferentialFormPDF(t testing.TB) []byte {
 		"/Resources << /XObject << /Fm0 5 0 R >> >> /Length %d >>\nstream\n%s\nendstream",
 		len(inner), inner)
 	return buildImagePDF(t, "/Fm0 Do", map[string]string{"Fm0": form})
+}
+
+// deeplyNestedPDF builds a valid document whose one page carries a
+// /Resources value nested `depth` levels deep — the shape that made
+// parseArray and parseDict recurse until the goroutine stack was exhausted.
+// The nesting sits in /Resources rather than an unused catalog key because
+// text extraction has to resolve it: an over-nested object nobody descends
+// proves nothing.
+func deeplyNestedPDF(depth int) []byte {
+	nested := strings.Repeat("[", depth) + "0" + strings.Repeat("]", depth)
+	return rawPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /Resources << /Deep " + nested + " >> >>",
+	}, "")
 }
 
 // FuzzDecodeTextString targets metadata and outline decoding. Also a

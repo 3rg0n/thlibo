@@ -72,3 +72,6 @@ __pycache__/
 # Local working notes (stashed alongside repo, not source)
 .notes/
 .tmp-review.diff
+
+# govulncheck JSON, written by the CI scanners job (see ci.yml)
+vulns.json

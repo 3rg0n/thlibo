@@ -144,6 +144,42 @@ func TestPDFFilterFailsOpen(t *testing.T) {
 	}
 }
 
+// TestPDFFilterFailsOpenOnZeroPages covers the failure the case list above
+// misses, and it is a different shape from every entry in it: the document
+// parses *successfully*.
+//
+// Reader.Pages() errors only when the trailer or catalog is missing outright.
+// A catalog whose /Pages names an object that isn't there — or a page tree
+// whose nodes fail to parse — collects zero pages and returns no error, so
+// OpenBytes succeeds. pdfMarkdown then renders its metadata header anyway
+// and emits "- pages: 0", which is not blank and so passes the only
+// remaining guard. Measured before the fix: 161 bytes in, 11 bytes of
+// "- pages: 0" out.
+//
+// RunNative's monotonic clause cannot catch this either, which is what makes
+// it worth a test of its own — 11 bytes is a byte-count improvement, so it
+// looks exactly like a successful compression.
+func TestPDFFilterFailsOpenOnZeroPages(t *testing.T) {
+	// /Pages points at object 99, which the file does not contain.
+	in := buildTestPDF(nil, "")
+	in = []byte(strings.Replace(string(in), "/Pages 2 0 R", "/Pages 99 0 R", 1))
+
+	// Guard the fixture in both directions: it must open, and it must have
+	// no pages. Either failing makes the assertion below vacuous.
+	doc, err := pdf.OpenBytes(in)
+	if err != nil {
+		t.Fatalf("fixture does not open, so it exercises the OpenBytes error path instead: %v", err)
+	}
+	if doc.NumPages() != 0 {
+		t.Fatalf("fixture has %d pages; test would be vacuous", doc.NumPages())
+	}
+
+	if out := pdfFilter(in); string(out) != string(in) {
+		t.Errorf("a zero-page document was rewritten (%d bytes in, %d out):\n%.200q",
+			len(in), len(out), out)
+	}
+}
+
 // An encrypted document parses fine and extracts ciphertext, with no
 // error anywhere to key off — so the /Encrypt check is the only thing
 // standing between the caller and plausible-looking garbage.

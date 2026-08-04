@@ -64,6 +64,13 @@ Every finding below lives inside the **trust-boundary invariants already documen
 
 Risk = likelihood × impact after agentic-factor modifiers (+1 likelihood for non-determinism, +1 impact for autonomy / A2A; both capped at 3). Bands: Low 1–2, Medium 3–4, High 6, Critical 9.
 
+Findings **#29–#31** were raised after this table was written and are
+tabulated in the 2026-08-04 addendum, against surfaces
+(`internal/pdf/`, `cordon-filter`, the CI scanner gate) that did not
+exist at snapshot time. All three are mitigated. The table stays
+authoritative for finding state, so a reader counting findings must
+count both.
+
 ## Layer Analysis
 
 ### Layer 1 — Foundation Model
@@ -539,3 +546,139 @@ are dangling and its component inventory is two major refactors behind.
 Until then: **the risk table is authoritative for finding state, this
 addendum is authoritative for what the code looks like, and neither
 replaces `docs/adr/` for why.**
+
+## Addendum — 2026-08-04: MAESTRO pass over `internal/pdf/` and `cordon-filter`
+
+The two surfaces the 2026-08-03 addendum flagged as "newly in scope, not
+covered by the body at all" have now had a review. Three findings, all
+remediated in the same change; the risk-table rows are #29–#31.
+
+| # | ASI Threat | Layer | Title | Severity | L | I | Risk | Agentic Factors | Framework |
+|---|---|---|---|---|---|---|---|---|---|
+| 29 | T20, T12 | L3 | Unbounded array/dict nesting in `internal/pdf/parser.go` is a **fatal** stack overflow, not a recoverable panic — `RunNative`'s `recover()` cannot catch it, so the process exits with the tool output unwritten | **high** | 2 | 3 | **6** | A2A | CWE-674 |
+| 30 | T20 | L3 | `pdf-filter` replaces the document with `- pages: 0` when a PDF opens but collects no pages; `RunNative`'s monotonic guard accepts it because it is a byte-count improvement | medium | 2 | 3 | 6 | A2A | CWE-670 |
+| 31 | T13 | L7 | `govulncheck` step in `ci.yml` failed on a removed flag (`-show=summary`) with the error swallowed by `set +e`, so the third-party-CVE gate reported success while scanning nothing | medium | 2 | 3 | 6 | — | CWE-1288 |
+
+### #29 — unbounded object nesting is the one failure class the contract cannot absorb
+
+`parseArray` and `parseDict` recurse into each other through
+`parseFromToken`, so `[[[[…` descends once per input byte. The
+`Parser` carried no depth field and neither function had a bound.
+
+This sits at the top of `internal/pdf/`'s own severity taxonomy, above
+both the hangs and the OOB panics that fuzzing found. Go grows a
+goroutine stack on demand to 1 GB and then calls `runtime.throw`, which
+**`recover()` cannot catch** — so the fail-open net at
+`internal/processors/native.go:96` never fires. A panic degrades to "no
+compression"; a hang blocks the hook; this *kills the process with the
+tool output still on the input side of the pipe*.
+
+Measured end to end through a real `thlibo compress`, before the fix:
+
+```
+depth=2000000  bytes=4000444
+EXIT=2   stdout=0   stderr=49980
+runtime: goroutine stack exceeds 1000000000-byte limit
+fatal error: stack overflow
+```
+
+Bisected threshold: exit 0 at 100k–1.0M levels, exit 2 at 1.3M–1.8M —
+so **~2.0–2.6 MB of input**, against the 64 MiB `readAll` accepts
+(`internal/middleware/middleware.go:389`). Well inside reach.
+
+Neither the fuzz targets nor the nightly run could have found it. Their
+stated contract is "no panic, no hang, no unbounded allocation", and a
+fatal throw satisfies none of those checks because it never returns to
+the harness; separately, fuzzing does not generate multi-megabyte inputs
+of one repeated byte.
+
+Fixed with `maxObjectDepth = 1024` and a guard on **both** functions —
+bounding one leaves `<< /K << /K …` unbounded, which is why the
+regression test has an `alternating` case. Regression test
+`TestObjectNestingIsBounded` (`internal/pdf/bounds_test.go`) plus a
+`FuzzOpenBytes` seed; both were verified to fail with the guard reverted.
+
+The read path's other eight file-controlled `for {}` loops were audited
+in the same pass and all terminate: five exit on `TEOF`/error, three
+shorten their string each iteration. Two `continue` on an unexpected
+token and so depend on the lexer's progress invariant — the
+stray-delimiter guard in `lexer.go:319-346`, itself a fix for a hang
+`FuzzParseInlineDict` found. `Reader.Resolve` is iterative and cached,
+with no equivalent flaw. `parseInlineDict` in `text.go` already had a
+depth cap of 16; the asymmetry with the main object parser was the bug.
+
+### #30 — a document that opens but has no pages destroyed the output
+
+Independent of #29 and reachable by any malformed PDF. `Reader.Pages()`
+returns an error only when the trailer or catalog is missing outright; a
+catalog whose `/Pages` names an absent object collects zero pages and
+returns **no error**. So `OpenBytes` succeeds, `pdfMarkdown` renders its
+metadata header anyway, and the filter emits `- pages: 0` — which is not
+blank, so it passes the only guard that existed
+(`strings.TrimSpace(md) == ""`).
+
+Measured: a **161-byte** PDF whose `/Pages` points at object 99 returned
+11 bytes of `- pages: 0` in place of the input.
+
+`RunNative`'s monotonic clause cannot catch this, which is what makes it
+its own finding rather than a cosmetic one: 11 bytes *is* a byte-count
+improvement, so a destroyed document is indistinguishable from a
+successful compression. Fixed with an explicit `doc.NumPages() == 0`
+passthrough; `TestPDFFilterFailsOpenOnZeroPages` verified to fail
+without it.
+
+Note that this failure shape is invisible to the existing fail-open test
+list, every entry of which is a document that *fails to open*.
+
+### #31 — the CVE gate had been passing vacuously for at least a week
+
+Found while running the pre-commit scanner cycle for the above:
+`govulncheck -show=summary` is no longer a valid invocation
+(v1.6.0 accepts only `traces,color,version,verbose`). The step runs
+under `set +e`, so the non-zero exit was swallowed, `$OUT` was empty, and
+the `grep -E '^Module: '` that gates the job found nothing to fail on.
+
+Confirmed from CI logs that this is **not** a regression from the
+2026-08-04 version pinning (#112) — run 30387905827 on 2026-07-28 shows
+the identical `invalid value "summary" for flag -show` under
+`@latest`. Any third-party CVE introduced in that window would not have
+blocked a release.
+
+Rewritten to parse `-format=json`, a declared interface, rather than the
+text output, which has no stability contract. The new step also fails
+when govulncheck produces *no* records at all — the specific failure
+above — because a gate that cannot fail is worse than no gate: it is
+indistinguishable from a passing one. Both directions were verified
+locally against real and synthesized JSON before commit.
+
+### `cordon-filter` — reviewed, no findings
+
+Its network reach is the only one among the native filters, so it was
+reviewed against the same criteria and came back clean:
+
+- **Both bounds present and correctly placed.** `EmbedClient.Timeout`
+  bounds one batch round-trip inside the client (not at call sites, per
+  ADR 0012); `CORDON_TIMEOUT` (30s) bounds the whole filter, which is
+  what matters because `RunNativeCtx` cannot interrupt a running filter.
+  A watchdog goroutine closes the connection on context expiry, and the
+  deferred rewrite reports the context error so a blown deadline stays
+  distinguishable from a wire fault.
+- **Response reading is bounded** at 16 MiB with an explicit cap rather
+  than `bufio.Scanner`, whose "token too long" is indistinguishable from
+  EOF.
+- **Vector count is checked positionally** against the input length, and
+  empty vectors are rejected. A silent partial result would score the
+  wrong text — cordon indexes the returned slice against its windows.
+- **Every error path passes the input through** (`cordonFilter` returns
+  `input` on config, window-count, embed, and scoring failure).
+- **No TCP.** UDS on Unix, named pipe on Windows; no listener either way.
+
+One residual, accepted rather than changed: `runtimeDir()`'s last resort
+is `/tmp/inferd/`, reached only when `XDG_RUNTIME_DIR` is unset **and**
+`os.UserHomeDir()` fails. A local attacker who could bind a socket there
+first would receive cordon's log windows — real tool output. The
+preconditions make it a stretch (both env resolutions failing on a host
+that also has a hostile local user), and the exposure is the same class
+as existing finding #24 (no `SO_PEERCRED` on thlibo's side of the wire;
+IPC identity is socket permissions). Naming it rather than fixing it,
+consistent with how #24 is carried.
