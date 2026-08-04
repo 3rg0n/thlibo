@@ -107,6 +107,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hand measurement) instead of leaving a bare multiplier for a reader to
   attribute to the new benchmarks.
 
+- **Unit tests for the `install` archive-extraction guards and the `pdfocr`
+  rasterization bounds.** `internal/install` sat at **19.9%** statement
+  coverage and `internal/pdfocr` at **14.0%**, and the uncovered code was
+  not incidental: `safeJoin`, `stripLeadingComponent`, `extractTarGz` and
+  `extractZip` were at **0%**, and they are the only place in thlibo that
+  writes attacker-influenced *filenames* to disk. `thlibo install` downloads
+  an inferd release archive over the network and unpacks it into the user's
+  home directory, so a member named `../../../.ssh/authorized_keys` is a
+  file-overwrite primitive if the traversal guard is wrong. Cosign
+  verification is the first line of defence but `tryCosignVerify` is
+  best-effort — it degrades to a warning when cosign is absent — so
+  `safeJoin` is load-bearing on its own. Coverage now **19.9% → 38.2%** and
+  **14.0% → 81.7%**.
+
+  `install`: `extract_test.go` builds tar.gz and zip archives in-process
+  rather than committing fixtures (a malicious tarball in the repo would trip
+  scanners and is harder to read than the code that builds it) and covers
+  wrapper-stripping, traversal refusal in **both** formats — separate
+  implementations of the same contract, so testing one says nothing about the
+  other — corrupt input (an HTML 404 served with a 200, which is what a
+  broken mirror actually returns), the executable bit the daemon needs to
+  run, and `sha256OfFile` against a literal digest rather than one
+  recomputed with the same library the function uses. Two cases exist because
+  the bug is invisible on inspection: `safeJoin` must reject a *sibling*
+  directory sharing the base's string prefix (`…/extract` vs
+  `…/extract-evil`, which a naive `HasPrefix` accepts) and must accept base
+  itself. The traversal assertions walk the whole parent directory rather
+  than stat-ing one guessed path — a payload landing somewhere unanticipated
+  is still a traversal. `mirror_test.go` covers `isExecutable`, and
+  `mirrorFS`'s modes, idempotence, mode *repair* (`os.WriteFile` honours its
+  mode only on create, so without the explicit `Chmod` an upgrade leaves
+  stale permissions and script processors then fail at dispatch — silently,
+  because the middleware fails open), foreign-file preservation (users drop
+  their own processors in the same directory) and error propagation.
+  `autostart_windows_test.go` covers `quoteIfNeeded` and `cmdBody`, which
+  generate a batch file Windows executes at **every logon**: an unquoted `&`
+  in a path is a second command there, so the quoting is injection-adjacent
+  even though the input is thlibo-resolved.
+
+  `pdfocr`: `renderPageRGB` and `PageCount` were at 0% and 64% because they
+  shell out to the processor's `run.py` — reachable in a test because the
+  interpreter is a *parameter*, not a constant, so pointing it at the test
+  binary and switching on an env var gives a stub subprocess whose stdout is
+  controlled byte for byte. That covers the decompression-bomb guard, which
+  is the reason to bother: a stub advertising a 30000×30000 canvas in a
+  40-byte PNG must be refused from the **header**, before any pixel buffer is
+  allocated, and the failure mode if that regresses is not a wrong answer but
+  a dead machine. Also the RGB conversion (exactly 3 bytes/px, no alpha —
+  an extra channel would misalign every row on the daemon side),
+  subprocess-stderr propagation, a missing interpreter (the common case now
+  that Python is optional), context cancellation, and `MaxPages` — asserted
+  by counting stub launches, because it's a cost control and what matters is
+  that it stops doing the work, not that the summary line prints the right
+  number. `ocrPage`'s success path stays uncovered here: it needs
+  `inferd.Client.Post` to answer and the client's dial seam is unexported.
+
+  Review flagged three assertions that could pass for the wrong reason, all
+  tightened. The substantive one: the cancellation test used an
+  *already-cancelled* context, which only proves `exec.Start` refuses and
+  says nothing about a rasterizer that has started and then hangs — the case
+  invariant #2 forbids outright, since a blocked PreToolUse hook has no
+  recovery path the way a panic does. Split into two tests, the second
+  driving a stub that sleeps 60 s against a 300 ms deadline and asserting on
+  *elapsed time* rather than just the error (returning an error promptly
+  while leaving the child alive would satisfy `err != nil` and still leak a
+  process per scanned page). Verified by mutation: swapping
+  `exec.CommandContext` for `exec.Command` makes it hang the full 60 s and
+  fail with exactly that diagnostic, while the pre-cancelled test alone
+  would not have caught it. Also: the `MaxPages` test now runs an uncapped
+  control over the same 9-page document, so the capped count means something;
+  and the APPDATA-fallback test redirects `USERPROFILE` to a temp dir and
+  requires it as a prefix, where an `"AppData\Roaming"` substring check would
+  have passed against a hardcoded constant. A fourth finding was rejected —
+  the reviewer read the `MaxPages` tally as insensitive to deleting the
+  clamp, but without the clamp the loop runs nine times and tallies nine
+  bytes against an assertion of three.
+
+  CI then failed on ubuntu and macOS while passing on Windows, and the cause
+  was in the test rather than in `mirrorFS`: the mode-repair case damaged the
+  file to `0400` and expected the re-mirror to fix it, but `os.WriteFile`
+  runs *before* the explicit `Chmod`, so the repair only reaches modes that
+  are still owner-writable. That is the right ordering to keep —
+  `mirrorFS` only ever produces `0600` or `0700`, so a read-only file in the
+  processors directory was locked deliberately, and `thlibo install`
+  reporting "permission denied" beats silently chmod-ing over that decision.
+  The repair case now damages the mode to `0666` (wrong, still writable) and
+  a second test pins the other side of the boundary. It runs on all three
+  platforms: Go's `Chmod` on Windows sets `FILE_ATTRIBUTE_READONLY` rather
+  than touching the file's ACL, but that attribute denies writes on its own,
+  so `0400` produces the same refusal there by a different mechanism — and
+  the test restores write permission in `t.Cleanup`, because on Windows the
+  attribute would otherwise block `t.TempDir`'s removal. The reason this
+  reached CI at all is worth naming: a `runtime.GOOS != "windows"` guard
+  meant the broken assertion never executed on the machine it was written
+  on. Local verification of platform-guarded tests now cross-compiles the
+  test binary and runs it under WSL.
+
 ### Changed
 
 - **`THREAT_MODEL.md`: addendum recording surface drift since the v0.1.0
