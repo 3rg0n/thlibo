@@ -1,0 +1,26 @@
+internal/pdf/fuzz_test.go
+  s_5811b7f24eccc0::t_5ca2e6bbf242ab 57-63
+CLAUDE.md
+  s_5811b7f24eccc0::t_2ddaf30fe9078b 182-193
+  s_5811b7f24eccc0::t_67d32abfc175aa 205-216
+CHANGELOG.md
+  s_5811b7f24eccc0::t_e4824b5580f236 26-37
+THREAT_MODEL.md
+  s_5811b7f24eccc0::t_c7ab3ad931b671 589-601
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "9ad20ad5765bd869fd7bf030dfd0a4a44416e8b2",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
