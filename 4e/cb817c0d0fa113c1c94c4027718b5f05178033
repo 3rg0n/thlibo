@@ -1,0 +1,29 @@
+internal/install/autostart_windows_test.go
+  s_5811b7f24eccc0::t_af91b61717913e 223-227,229,231-232,238-242
+internal/pdfocr/render_test.go
+  s_5811b7f24eccc0::t_e51b6a40fb0ca3 291-293,302-331
+  s_5811b7f24eccc0::t_849b3faf503815 279-288
+  s_5811b7f24eccc0::t_79adf9b1e059e0 16
+  s_5811b7f24eccc0::t_ae5671c350bb6c 83-87
+  s_5811b7f24eccc0::t_1730759ae4b209 332-333
+CHANGELOG.md
+  s_5811b7f24eccc0::t_32d3deded48834 166-186
+internal/pdfocr/pdfocr_test.go
+  s_5811b7f24eccc0::t_2838ddab17f5b5 141-145,147-151,153-164,166-167,169-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "4ecb817c0d0fa113c1c94c4027718b5f05178033",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
