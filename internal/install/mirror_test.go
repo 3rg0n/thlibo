@@ -101,6 +101,11 @@ func TestMirrorFSWritesTreeAndModes(t *testing.T) {
 // creating a file, so re-mirroring over an existing file with the wrong
 // permissions would otherwise leave them wrong. That is the upgrade path,
 // not a hypothetical.
+//
+// The damaged mode is 0666 — wrong but still writable. That is the range
+// the repair actually covers, because WriteFile runs *before* the Chmod and
+// so needs write permission to get there; see
+// TestMirrorFSFailsOnReadOnlyFile for the other side of that boundary.
 func TestMirrorFSIsIdempotentAndRepairsMode(t *testing.T) {
 	src := fstest.MapFS{"p/run.sh": {Data: []byte("echo hi")}}
 	dest := t.TempDir()
@@ -109,18 +114,16 @@ func TestMirrorFSIsIdempotentAndRepairsMode(t *testing.T) {
 	}
 
 	target := filepath.Join(dest, "p", "run.sh")
-	// Change the content first, to prove a re-mirror overwrites rather than
-	// skipping an existing file. Before the chmod, because on Windows a
-	// 0o400 file carries the read-only attribute and cannot be written even
-	// by the test that set it.
+	// Stale content, to prove a re-mirror overwrites rather than skipping an
+	// existing file.
 	if err := os.WriteFile(target, []byte("stale"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Damage the mode only where it means something. mirrorFS never
-	// produces a read-only file itself (0600/0700), so this models an
-	// externally-modified install rather than a state the mirror creates.
 	if runtime.GOOS != "windows" {
-		if err := os.Chmod(target, 0o400); err != nil {
+		// Group/other-readable and non-executable: the shape a careless
+		// umask or a hand-edit leaves behind, and the shape that breaks
+		// script dispatch silently because the middleware fails open.
+		if err := os.Chmod(target, 0o666); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -143,6 +146,51 @@ func TestMirrorFSIsIdempotentAndRepairsMode(t *testing.T) {
 		if fi.Mode().Perm() != 0o700 {
 			t.Errorf("re-mirror left mode %v, want 0700 restored", fi.Mode().Perm())
 		}
+	}
+}
+
+// TestMirrorFSFailsOnReadOnlyFile pins the limit of the repair above.
+// mirrorFS writes before it chmods, so a file it cannot open for writing
+// stops it with an error — it does not force the mode first.
+//
+// That is the right behaviour rather than a gap: mirrorFS only ever
+// produces 0600 or 0700, both owner-writable, so a read-only file in the
+// processors dir did not come from thlibo. Someone locked it deliberately,
+// and `thlibo install` reporting "permission denied" is better than
+// silently chmod-ing over that decision. Asserted so the ordering isn't
+// "fixed" later without the tradeoff being considered.
+//
+// Runs on all three platforms. Go's Chmod on Windows sets
+// FILE_ATTRIBUTE_READONLY rather than touching the file's ACL, but that
+// attribute denies writes on its own — an open for write fails with
+// ERROR_ACCESS_DENIED regardless of what the DACL grants — so 0400 produces
+// the same refusal here as it does on Unix, by a different mechanism.
+func TestMirrorFSFailsOnReadOnlyFile(t *testing.T) {
+	// Geteuid returns -1 on Windows, so this only fires on a Unix root run,
+	// where the permission bits are advisory.
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits don't deny writes")
+	}
+	src := fstest.MapFS{"p/run.sh": {Data: []byte("echo hi")}}
+	dest := t.TempDir()
+	if err := mirrorFS(src, ".", dest); err != nil {
+		t.Fatal(err)
+	}
+	locked := filepath.Join(dest, "p", "run.sh")
+	if err := os.Chmod(locked, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	// Restore write permission before the test ends: t.TempDir's cleanup
+	// removes the tree, and on Windows the read-only attribute blocks the
+	// delete, which would surface as an unrelated cleanup failure.
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o600) })
+
+	err := mirrorFS(src, ".", dest)
+	if err == nil {
+		t.Fatal("mirrorFS silently overwrote a read-only file")
+	}
+	if !strings.Contains(err.Error(), "mirror ") {
+		t.Errorf("error = %v, want it to name the file it could not mirror", err)
 	}
 }
 

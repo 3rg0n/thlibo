@@ -184,6 +184,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clamp, but without the clamp the loop runs nine times and tallies nine
   bytes against an assertion of three.
 
+  CI then failed on ubuntu and macOS while passing on Windows, and the cause
+  was in the test rather than in `mirrorFS`: the mode-repair case damaged the
+  file to `0400` and expected the re-mirror to fix it, but `os.WriteFile`
+  runs *before* the explicit `Chmod`, so the repair only reaches modes that
+  are still owner-writable. That is the right ordering to keep —
+  `mirrorFS` only ever produces `0600` or `0700`, so a read-only file in the
+  processors directory was locked deliberately, and `thlibo install`
+  reporting "permission denied" beats silently chmod-ing over that decision.
+  The repair case now damages the mode to `0666` (wrong, still writable) and
+  a second test pins the other side of the boundary. It runs on all three
+  platforms: Go's `Chmod` on Windows sets `FILE_ATTRIBUTE_READONLY` rather
+  than touching the file's ACL, but that attribute denies writes on its own,
+  so `0400` produces the same refusal there by a different mechanism — and
+  the test restores write permission in `t.Cleanup`, because on Windows the
+  attribute would otherwise block `t.TempDir`'s removal. The reason this
+  reached CI at all is worth naming: a `runtime.GOOS != "windows"` guard
+  meant the broken assertion never executed on the machine it was written
+  on. Local verification of platform-guarded tests now cross-compiles the
+  test binary and runs it under WSL.
+
 ### Changed
 
 - **`THREAT_MODEL.md`: addendum recording surface drift since the v0.1.0
