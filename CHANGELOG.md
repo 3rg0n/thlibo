@@ -56,6 +56,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   original bytes per invariant #2. The `TotalTimeout` doc comment claimed
   it "bounds the whole filter across every batch" — now it does.
 
+- **Benchmarks and performance ceilings for `pdf-filter` and
+  `cordon-filter` (`internal/processors/bench_test.go`).** The repo had
+  **zero** `Benchmark` functions while the README and ADR 0015 published
+  "roughly 99× faster than the Python path" — a figure measured once, by
+  hand, during the port. Nothing re-measured it, so a change that gave back
+  an order of magnitude would have shipped silently with the docs still
+  asserting the old number. Adds `BenchmarkPDFFilter` (1/8/64 pages,
+  scaled so an accidental quadratic in the span grouper or table detector
+  shows up as a falling MB/s), `BenchmarkCordonKNNScores` (256/1k/4k
+  windows at the real `EmbedDimensions` width, embedder excluded so daemon
+  latency can't mask the curve), and `BenchmarkCordonFilter` end to end
+  with an in-process embedder.
+
+  **The cordon ceiling is the point, and it is an availability test, not a
+  speed one.** `TestCordonKNNScoringStaysUnderBudget` encodes the failure
+  mode fixed above: the scoring pass is O(n²) in the window count, so if it
+  degrades far enough to stop finishing inside `CORDON_TIMEOUT`, the
+  deadline fires and the filter returns the input verbatim. That is the
+  *correct* documented behaviour under invariant #2 — which is exactly why
+  nothing else in the suite can catch it. Every existing test still passes
+  while cordon has quietly become a permanent no-op, indistinguishable from
+  "correctly failed open". `TestPDFFilterStaysUnderBudget` is the
+  counterpart for the ADR's own argument that "a 38-second hook is a hook
+  the user experiences as a hang".
+
+  Both budgets are deliberately loose (measured 516 ms against a 2 s
+  ceiling; 10 ms against 1 s), sized to catch a change in *complexity* — an
+  added nested loop, a `ctx.Err()` check moved into the inner loop, a
+  per-distance allocation — not a constant factor. A flaky perf test gets
+  deleted rather than investigated, and CI runners are several times slower
+  under load; `benchstat` across revisions is the tool for narrower
+  regressions. Suite cost is ~0.5 s on a 51 s package, inside run-to-run
+  noise. These are Go-only and so **cannot** re-derive the published 99×,
+  which remains a historical one-off comparison against Python; the source
+  comment in `filter_pdf.go` said "~156x" with no recorded basis anywhere
+  and now cites ADR 0015's aggregate figure and its scope instead.
+
 ### Changed
 
 - **`THREAT_MODEL.md`: addendum recording surface drift since the v0.1.0

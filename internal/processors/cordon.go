@@ -365,7 +365,12 @@ func cordonKNNScores(ctx context.Context, vectors [][]float64, kNeighbours int) 
 		// This loop is O(n²) in the window count, so it is the one part of
 		// the filter that can outlive TotalTimeout on its own — embedding
 		// finishing fast doesn't mean the filter is nearly done. Measured at
-		// 256 dimensions: 1k windows 0.17s, 5k 5.8s, 10k 28s, 20k 118s. Since
+		// 256 dimensions: 1k windows 0.17s, 5k 5.8s, 10k 28s, 20k 118s —
+		// BenchmarkCordonKNNScores tracks the same curve, and
+		// TestCordonKNNScoringStaysUnderBudget fails if it degrades far
+		// enough that this pass can no longer finish inside TotalTimeout
+		// (which would make the filter a permanent no-op, since passthrough
+		// on a deadline is correct behaviour and so looks like success). Since
 		// RunNativeCtx cannot interrupt a running filter, an unchecked
 		// deadline here is a hung PreToolUse hook, not a slow one — the exact
 		// failure TotalTimeout exists to prevent. Checked per row, not per

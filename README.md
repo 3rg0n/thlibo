@@ -705,6 +705,14 @@ emits its own `thlibo.*` signals.
   Three targets — `FuzzOpenBytes`, `FuzzParseInlineDict`,
   `FuzzDecodeTextString` — run nightly in CI, not per-PR. Touching the
   parser? Soak it before the PR rather than waiting for the nightly.
+- Benchmark the two filters whose cost is load-bearing:
+  `go test ./internal/processors/ -run '^$' -bench . -benchmem`. Compare
+  revisions with [`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat)
+  rather than eyeballing one run. Two ceiling *tests* run with the ordinary
+  suite (`-run StaysUnderBudget`) — for `cordon-filter` that ceiling is an
+  availability guard, not a speed one: its k-NN pass is O(n²), and once it
+  can no longer finish inside `CORDON_TIMEOUT` the filter fails open and
+  silently becomes a no-op that every other test still passes.
 
 ### Project layout
 
