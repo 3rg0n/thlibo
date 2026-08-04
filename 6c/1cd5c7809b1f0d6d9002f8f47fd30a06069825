@@ -1,0 +1,29 @@
+internal/processors/budget_race_test.go
+  s_5811b7f24eccc0::t_7512de0b76d20a 1-20
+internal/processors/bench_test.go
+  s_5811b7f24eccc0::t_5e9c259562fe7e 231-234,236-237
+  s_5811b7f24eccc0::t_a93b6de4599b4f 163-167,174-179,182-186
+  s_5811b7f24eccc0::t_5515f18ca84fce 280-281
+internal/processors/budget_norace_test.go
+  s_5811b7f24eccc0::t_a2f30026c35a41 1-8
+README.md
+  s_5811b7f24eccc0::t_917d61faf038c7 110-115
+CHANGELOG.md
+  s_5811b7f24eccc0::t_79a675880c0e4e 96-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "6c1cd5c7809b1f0d6d9002f8f47fd30a06069825",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
