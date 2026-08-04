@@ -101,13 +101,34 @@ jobs:
           fi
           echo "gofmt clean"
 
+      # The three scanner installs below are version-pinned, not `@latest`.
+      # `@latest` resolves at job time, so whatever is tagged latest when CI
+      # runs is what executes in a job with repository access — the shape of
+      # the Trivy compromise. Go's module proxy and checksum database do
+      # verify integrity, which makes this weaker than the Actions-tag case,
+      # but they verify bytes rather than intent: a malicious release of a
+      # legitimate module still installs cleanly. Pinning also makes a CI
+      # result reproducible: a new scanner release changing its own rules is
+      # otherwise indistinguishable from our code regressing.
+      #
+      # These are NOT tracked by Dependabot. It watches `go.mod` and `uses:`
+      # SHAs; a `go install` line in a `run:` body is invisible to both, so
+      # bumping them is a manual chore. They are deliberately not added to
+      # `go.mod` as tool dependencies: that would pull each scanner's whole
+      # dependency tree into our module graph, where the govulncheck gate
+      # below fails the job on any third-party CVE — a vulnerability in a
+      # linter's transitive dep would then block unrelated work.
+      #
+      # Bumping one: resolve the real latest at runtime
+      # (`go list -m -versions <module>`), never from memory, and skip
+      # prereleases — v0.8.0-rc.1 of staticcheck is not a candidate.
       - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
       - name: staticcheck
         run: staticcheck ./...
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
       - name: govulncheck (informational for stdlib)
         # govulncheck exit code 3 means "findings exist". We run it
         # at `-show=summary` so the human output is readable in logs,
@@ -132,7 +153,7 @@ jobs:
           exit 0
 
       - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
       - name: gosec (shipped code only)
         # .test/ is a gitignored dev sandbox; we scan only what we ship.
         run: gosec ./cmd/... ./internal/... ./processors/...
