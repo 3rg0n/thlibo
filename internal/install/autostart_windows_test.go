@@ -220,15 +220,26 @@ func TestNewWindowsInstallerUsesAppData(t *testing.T) {
 
 // TestNewWindowsInstallerFallsBackToHome: with APPDATA unset the installer
 // must still resolve a per-user path rather than erroring out.
+//
+// USERPROFILE is redirected to a temp dir so the assertion can require that
+// path as a prefix. Merely checking for an "AppData\Roaming" substring
+// would pass even if the function returned a hardcoded constant — the point
+// is that it consulted os.UserHomeDir().
 func TestNewWindowsInstallerFallsBackToHome(t *testing.T) {
+	home := t.TempDir()
 	t.Setenv("APPDATA", "")
+	t.Setenv("USERPROFILE", home) // what os.UserHomeDir reads on Windows
+
 	inst, err := newWindowsInstaller()
 	if err != nil {
 		t.Fatalf("newWindowsInstaller with no APPDATA: %v", err)
 	}
 	w := inst.(*windowsInstaller)
-	if !strings.Contains(w.startupDir, filepath.Join("AppData", "Roaming")) {
-		t.Errorf("startupDir = %q, want a path under AppData\\Roaming", w.startupDir)
+	want := filepath.Join(home, "AppData", "Roaming",
+		"Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+	if w.startupDir != want {
+		t.Errorf("startupDir = %q, want %q — the home fallback was not used",
+			w.startupDir, want)
 	}
 }
 

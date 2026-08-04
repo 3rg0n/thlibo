@@ -163,6 +163,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   number. `ocrPage`'s success path stays uncovered here: it needs
   `inferd.Client.Post` to answer and the client's dial seam is unexported.
 
+  Review flagged three assertions that could pass for the wrong reason, all
+  tightened. The substantive one: the cancellation test used an
+  *already-cancelled* context, which only proves `exec.Start` refuses and
+  says nothing about a rasterizer that has started and then hangs — the case
+  invariant #2 forbids outright, since a blocked PreToolUse hook has no
+  recovery path the way a panic does. Split into two tests, the second
+  driving a stub that sleeps 60 s against a 300 ms deadline and asserting on
+  *elapsed time* rather than just the error (returning an error promptly
+  while leaving the child alive would satisfy `err != nil` and still leak a
+  process per scanned page). Verified by mutation: swapping
+  `exec.CommandContext` for `exec.Command` makes it hang the full 60 s and
+  fail with exactly that diagnostic, while the pre-cancelled test alone
+  would not have caught it. Also: the `MaxPages` test now runs an uncapped
+  control over the same 9-page document, so the capped count means something;
+  and the APPDATA-fallback test redirects `USERPROFILE` to a temp dir and
+  requires it as a prefix, where an `"AppData\Roaming"` substring check would
+  have passed against a hardcoded constant. A fourth finding was rejected —
+  the reviewer read the `MaxPages` tally as insensitive to deleting the
+  clamp, but without the clamp the loop runs nine times and tallies nine
+  bytes against an assertion of three.
+
 ### Changed
 
 - **`THREAT_MODEL.md`: addendum recording surface drift since the v0.1.0

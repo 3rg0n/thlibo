@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Tests for the rasterization half of the package: PageCount and
@@ -79,6 +80,11 @@ func runHelper(mode string) int {
 		_, _ = os.Stdout.WriteString("<html>not a png</html>")
 	case "empty":
 		// exit 0 with no output
+	case "wedge":
+		// Stand in for a rasterizer stuck on a pathological page: produce
+		// nothing and outlive any reasonable deadline. The parent's context
+		// is what must end this.
+		time.Sleep(60 * time.Second)
 	case "fail":
 		_, _ = os.Stderr.WriteString("render failed: no such page")
 		return 3
@@ -270,17 +276,58 @@ func TestRenderPageRGBMissingInterpreter(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for a missing interpreter")
 	}
+	// Name the page and the interpreter. A bare "render failed" would
+	// satisfy err != nil while telling the user nothing about *why* their
+	// scanned PDF declined to OCR, and this is the field's most common
+	// cause now that Python is optional (v0.11.3).
+	if !strings.Contains(err.Error(), "render page 1") {
+		t.Errorf("error = %v, want it to name the page", err)
+	}
+	if !strings.Contains(err.Error(), "definitely-not-python") {
+		t.Errorf("error = %v, want it to name the interpreter it could not run", err)
+	}
 }
 
-// TestRenderPageRGBHonoursContextCancellation: the render is bounded by
-// the caller's context. Without this the hook has no way to stop a
-// wedged rasterizer.
-func TestRenderPageRGBHonoursContextCancellation(t *testing.T) {
+// TestRenderPageRGBRefusesCancelledContext: the cheap half of the
+// contract — an already-dead context must not launch a subprocess at all.
+func TestRenderPageRGBRefusesCancelledContext(t *testing.T) {
 	python, dir := stubProcessor(t, "png")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, _, _, err := renderPageRGB(ctx, python, dir, []byte("%PDF"), 1); err == nil {
 		t.Error("renderPageRGB ran with an already-cancelled context")
+	}
+}
+
+// TestRenderPageRGBKillsWedgedSubprocess is the half that matters. A
+// pre-cancelled context only proves exec.Start refuses; it says nothing
+// about a rasterizer that has *already started* and then hangs. That case
+// is the one invariant #2 forbids outright — a blocked PreToolUse hook is
+// worse than a panic, because nothing recovers it and the AI client waits
+// on it. exec.CommandContext is what kills the child, and if a future edit
+// switched to exec.Command the pre-cancelled test above would still pass
+// while this one would sit here for 60 seconds and then fail.
+//
+// Asserts on elapsed time rather than just the error: returning an error
+// promptly while leaving the child running would satisfy `err != nil` and
+// still leak a process per scanned page.
+func TestRenderPageRGBKillsWedgedSubprocess(t *testing.T) {
+	python, dir := stubProcessor(t, "wedge")
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, _, _, err := renderPageRGB(ctx, python, dir, []byte("%PDF"), 1)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("renderPageRGB returned success from a wedged subprocess")
+	}
+	// The stub sleeps 60s. Anything in that neighbourhood means the
+	// deadline did not reach the child.
+	if elapsed > 15*time.Second {
+		t.Errorf("renderPageRGB took %v to give up on a wedged render; the "+
+			"context deadline is not bounding the subprocess", elapsed)
 	}
 }
 
