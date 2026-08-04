@@ -179,6 +179,18 @@ recovers a panic and passes the original bytes through but nothing recovers a
 blocked hook. If you add a walk over file-controlled structure here, bound
 it and add a fuzz seed.
 
+**Unbounded recursion is worse still, and no scanner or fuzzer will tell
+you.** A Go stack overflow is a `runtime.throw`, not a panic: the runtime
+grows the goroutine stack to 1 GB and then kills the *process*, so
+`RunNativeCtx`'s `defer recover()` — thlibo's fail-open net — cannot catch
+it, and the hook dies with tool output unwritten. That was THREAT_MODEL #29
+(unbounded `parseArray`/`parseDict`, reached from a ~2.6 MB file against the
+64 MiB the middleware accepts), now bounded by `maxObjectDepth`. Two
+non-obvious consequences: mutual recursion needs the guard on **both**
+functions (`parseArray` ↔ `parseDict` via `parseFromToken`), and the bound
+needs a **direct unit test** — see the fuzz note below for why the fuzzer
+won't cover it.
+
 The three targets run **nightly**, not per-PR (`.github/workflows/fuzz.yml`,
 one matrix leg each, 10 min apiece, corpus cached so coverage compounds).
 `go test` replays the committed seeds in `testdata/fuzz/` on every run, which
@@ -189,6 +201,18 @@ so a parser change is not "fuzz-clean" because CI went green. Soak it first:
 A nightly failure uploads the minimised input as a `crashers-<Target>`
 artifact; commit it under `testdata/fuzz/<Target>/` and it becomes a
 permanent regression test that needs no fuzzing to reproduce.
+
+**A green fuzz run does not mean "no stack overflow."** Measured against a
+target rigged to throw on demand: `go test -fuzz` printed `PASS` and exited
+**0** while its workers were being killed by stack overflow — the only
+symptom was the exec rate dropping from ~550k/sec to ~35/sec, which nothing
+asserts on. The worker dies before it can report, and the parent treats that
+as a lost worker rather than a finding. So a regression of `maxObjectDepth`
+would sail through both the nightly and a 30-minute soak. Recursion bounds
+are covered by `TestObjectNestingIsBounded` in the ordinary suite, and that
+test asserts on `Parser` directly rather than through the `mustTerminate`
+helper — the helper runs its body in a goroutine, where neither a throw nor
+a panic can fail the case.
 
 ## Talking to inferd
 

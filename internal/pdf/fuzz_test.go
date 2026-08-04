@@ -54,7 +54,13 @@ func FuzzOpenBytes(f *testing.F) {
 	// returns to the harness to be reported anyway. What this seed guards is
 	// the *guard* — that a rejected object still yields a clean error through
 	// the whole read path rather than a partially-built document.
-	// See TestObjectNestingIsBounded.
+	//
+	// Do not read this seed as fuzz coverage of the overflow itself. Measured
+	// on a target built to throw on demand: `go test -fuzz` reports **PASS
+	// and exits 0** while its workers are dying of stack overflow — the only
+	// symptom is the exec rate collapsing (550k/sec to 35/sec). So a
+	// regression of maxObjectDepth would go green here.
+	// TestObjectNestingIsBounded is the sole guard; keep it.
 	f.Add(deeplyNestedPDF(maxObjectDepth + 64))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
