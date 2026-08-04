@@ -23,13 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nesting a real producer emits. An over-nested object is now rejected as
   malformed and `pdf-filter` passes the original bytes through.
 
-  The fuzz targets could not have found this. Their contract is "no panic,
-  no hang, no unbounded allocation", and a fatal throw satisfies none of
-  those checks because it never returns to the harness; separately,
-  fuzzing does not generate multi-megabyte inputs of one repeated byte.
-  `TestObjectNestingIsBounded` plus a `FuzzOpenBytes` seed cover it now,
-  and the read path's other eight file-controlled loops were audited in
-  the same pass (all terminate). THREAT_MODEL finding #29.
+  The fuzz targets could not have found this and still cannot. Their
+  contract is "no panic, no hang, no unbounded allocation", and a fatal
+  throw satisfies none of those checks because it never returns to the
+  harness; separately, fuzzing does not generate multi-megabyte inputs of
+  one repeated byte. Measured against a target rigged to overflow on
+  demand, `go test -fuzz` reports `PASS` and exits 0 while its workers are
+  being killed — the only symptom is throughput collapsing, which nothing
+  asserts on. So `TestObjectNestingIsBounded` in the ordinary suite is the
+  regression guard, not the `FuzzOpenBytes` seed (which covers only that a
+  rejected object still yields a clean error through the read path). The
+  read path's other eight file-controlled loops were audited in the same
+  pass (all terminate). THREAT_MODEL finding #29.
 
 - **A PDF that opened with zero pages was replaced by `- pages: 0`**
   (`internal/processors/filter_pdf.go`). `Reader.Pages()` errors only when

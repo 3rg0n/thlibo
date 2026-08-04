@@ -586,11 +586,19 @@ Bisected threshold: exit 0 at 100k–1.0M levels, exit 2 at 1.3M–1.8M —
 so **~2.0–2.6 MB of input**, against the 64 MiB `readAll` accepts
 (`internal/middleware/middleware.go:389`). Well inside reach.
 
-Neither the fuzz targets nor the nightly run could have found it. Their
-stated contract is "no panic, no hang, no unbounded allocation", and a
-fatal throw satisfies none of those checks because it never returns to
-the harness; separately, fuzzing does not generate multi-megabyte inputs
-of one repeated byte.
+Neither the fuzz targets nor the nightly run could have found it, and
+**they still cannot** — which is why the regression guard is a unit test
+and not the seed. Their stated contract is "no panic, no hang, no
+unbounded allocation", and a fatal throw satisfies none of those checks
+because it never returns to the harness. Measured rather than assumed:
+against a target rigged to overflow on demand, `go test -fuzz` printed
+`PASS` and exited **0** while its workers were being killed, the sole
+symptom being throughput falling from ~550k exec/sec to ~35 — the parent
+process treats a killed worker as a lost worker, not a finding, and
+nothing asserts on the rate. Separately, fuzzing does not generate
+multi-megabyte inputs of one repeated byte. So a future regression of
+`maxObjectDepth` would go green through both the nightly and a 30-minute
+soak; `TestObjectNestingIsBounded` is the only thing standing under it.
 
 Fixed with `maxObjectDepth = 1024` and a guard on **both** functions —
 bounding one leaves `<< /K << /K …` unbounded, which is why the
