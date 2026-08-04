@@ -1,0 +1,37 @@
+internal/pdfocr/render_test.go
+  s_5811b7f24eccc0::t_5417a4ba21da5b 132-134,136-141,143-145
+  s_5811b7f24eccc0::t_71177a8cb07ec9 8-10
+  s_5811b7f24eccc0::t_0b116beaa83920 1-7,11-34,39-57,68-131,135,142,146-340
+  s_5811b7f24eccc0::t_7a3640ec3eb83f 58-67
+  s_5811b7f24eccc0::t_a28a5c93e446da 35-38
+internal/install/mirror_test.go
+  s_5811b7f24eccc0::t_8875bfdfad931a 1-50,52-111,116-117,126-257
+  s_5811b7f24eccc0::t_e309b930d5712f 51
+  s_5811b7f24eccc0::t_de71a1ea718a4f 112-115,118-125
+internal/pdfocr/pdfocr_test.go
+  s_5811b7f24eccc0::t_49322daeee4c91 89-132
+  s_5811b7f24eccc0::t_4daf24070fd833 133-161
+  s_5811b7f24eccc0::t_ebca61d0c20e3a 9,12
+internal/install/extract_test.go
+  s_5811b7f24eccc0::t_9d6bfa312d3b4f 1-442
+internal/install/autostart_windows_test.go
+  s_5811b7f24eccc0::t_b826c42aa61ddb 1-240
+CHANGELOG.md
+  s_5811b7f24eccc0::t_5a5b07f10f835f 110-165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a2dc219918b34c272115e3aee8187ad591dea188",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
