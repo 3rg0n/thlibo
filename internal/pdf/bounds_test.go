@@ -379,3 +379,73 @@ func TestFontEncodingAppliesInRangeDifferences(t *testing.T) {
 		t.Errorf("code 0x85 = %q, want ellipsis", enc[0x85])
 	}
 }
+
+// TestObjectNestingIsBounded is the regression test for the one defect in
+// this file that no fuzz target found and none would: unbounded array and
+// dictionary nesting.
+//
+// parseArray and parseDict recurse into each other through parseFromToken,
+// so `[[[[…` descends once per byte of input. Go grows a goroutine stack on
+// demand to 1 GB and then calls runtime.throw — which `recover()` cannot
+// catch. So this is the *worst* class in this file's taxonomy: not a hang
+// that blocks the hook and not a panic that RunNative absorbs, but a fatal
+// exit that takes the process down with the tool output still unwritten.
+// Measured before the fix, end to end through `thlibo compress`: exit 2 and
+// empty stdout at ~1.3M levels — a 2.6 MB file, against the 64 MiB the
+// middleware accepts.
+//
+// The fuzzers cannot reach it. Their contract is "no panic, no hang, no
+// unbounded allocation", and a fatal stack overflow satisfies none of those
+// checks because it never returns to the harness at all. More basically,
+// fuzzing does not generate multi-megabyte inputs of one repeated byte.
+//
+// Asserted directly on the Parser rather than through mustTerminate: that
+// helper runs its closure in a goroutine, and neither a fatal throw nor a
+// panic there can fail a case — it kills the test binary.
+func TestObjectNestingIsBounded(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		open  string
+		close string
+	}{
+		{"arrays", "[", "]"},
+		{"dicts", "<< /K ", ">>"},
+		// Alternating is the case that a guard on only one of the two
+		// functions would miss: neither counter alone reaches its bound.
+		{"alternating", "[ << /K ", ">> ]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Well past maxObjectDepth but small enough to parse instantly;
+			// the point is that the bound fires, not how deep it can go.
+			const depth = maxObjectDepth * 4
+			body := strings.Repeat(tc.open, depth) + "null" + strings.Repeat(tc.close, depth)
+
+			p := NewParser([]byte(body))
+			obj, err := p.ParseObject()
+			if err == nil {
+				t.Fatalf("parsed %d levels of nesting without error, got %T", depth, obj)
+			}
+			if !strings.Contains(err.Error(), "nesting exceeds") {
+				t.Errorf("error = %v, want it to name the nesting bound", err)
+			}
+		})
+	}
+
+	// The bound must not reject the nesting real producers emit. Four levels
+	// is already deeper than anything in a normal document.
+	p := NewParser([]byte("[[[[1 2 3]]]]"))
+	if _, err := p.ParseObject(); err != nil {
+		t.Errorf("rejected four levels of legitimate nesting: %v", err)
+	}
+	// And depth must unwind: a document with many sibling deep-ish objects
+	// must not accumulate toward the bound. This fails if the guard
+	// increments without a matching decrement.
+	deep := strings.Repeat("[", 600) + "1" + strings.Repeat("]", 600)
+	p = NewParser([]byte(deep + " " + deep))
+	if _, err := p.ParseObject(); err != nil {
+		t.Fatalf("first 600-level object: %v", err)
+	}
+	if _, err := p.ParseObject(); err != nil {
+		t.Errorf("second 600-level object failed, so depth did not unwind: %v", err)
+	}
+}

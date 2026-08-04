@@ -130,27 +130,83 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
       - name: govulncheck (informational for stdlib)
-        # govulncheck exit code 3 means "findings exist". We run it
-        # at `-show=summary` so the human output is readable in logs,
-        # and intentionally don't fail the job: Go stdlib CVEs
-        # follow the Go compiler's release cadence, not ours, and
-        # a fresh CVE every month would block unrelated work. We
-        # rely on `-C <path>` + the summary to catch findings in
-        # *our imports*, which is where a real action item would
-        # come from.
+        # Fails the job only when a third-party dependency has an
+        # exploitable CVE. Go stdlib findings are informational: they follow
+        # the compiler's release cadence, not ours, and a fresh CVE every
+        # month would block unrelated work. They get chased via Go version
+        # bumps on our own schedule.
+        #
+        # Read the JSON, not the human output. The text format has no stable
+        # contract — `-show=summary` was removed upstream and the step then
+        # failed on "invalid value for flag -show" for at least a week
+        # (2026-07-28 through 2026-08-04, under both `@latest` and the
+        # v1.6.0 pin). `set +e` swallowed the non-zero exit, `$OUT` was
+        # empty, and the grep below found nothing to fail on — so the gate
+        # reported success while scanning nothing. A gate that cannot fail
+        # is worse than no gate, because it is indistinguishable from a
+        # passing one.
+        #
+        # `-format=json` is a declared interface: `osv` entries are the
+        # advisories and `finding` entries are what is actually reachable in
+        # our code, each carrying the module it belongs to. Findings with no
+        # trace are advisory-only (imported but not called) and are not
+        # counted; only a finding whose most specific frame names a
+        # non-stdlib module fails the job.
+        #
+        # NOTE: under `-format=json`, govulncheck exits **0 even when it
+        # finds reachable CVEs** — the documented exit code 3 ("findings
+        # exist") applies to the text format only. So the python below is
+        # the entire gate; `set -o pipefail` guards a crashed or missing
+        # scanner, not a positive finding. Verified empirically rather than
+        # from the docs: this exact step, extracted verbatim from this file
+        # and run against a module pinned to gopkg.in/yaml.v2 v2.2.1, exits
+        # 1 and names `gopkg.in/yaml.v2: GO-2020-0036, GO-2021-0061,
+        # GO-2022-0956`. Re-check that when changing anything here — the
+        # previous version of this step passed for a week without scanning.
         run: |
-          set +e
-          OUT=$(govulncheck -show=summary ./...)
-          echo "$OUT"
-          # Fail only if a third-party dependency (non-stdlib) has
-          # an exploitable CVE. "Standard library" findings are
-          # informational and chased via Go version bumps on our
-          # own schedule.
-          if echo "$OUT" | grep -E '^Module: ' | grep -v '^Module: Standard library$' | grep -q '.'; then
-            echo "::error ::govulncheck found a CVE in a third-party dependency"
-            exit 1
-          fi
-          exit 0
+          set -o pipefail
+          govulncheck -format=json ./... > vulns.json
+          python3 - <<'PY'
+          import json, sys
+
+          # One JSON object per top-level value, concatenated. encoding is
+          # explicit because govulncheck emits UTF-8 and Python would
+          # otherwise use the platform default (this decoded as cp1252 and
+          # crashed when the fix was written on Windows).
+          dec, buf, objs = json.JSONDecoder(), open("vulns.json", encoding="utf-8").read(), []
+          i = 0
+          while i < len(buf):
+              while i < len(buf) and buf[i].isspace():
+                  i += 1
+              if i >= len(buf):
+                  break
+              obj, i = dec.raw_decode(buf, i)
+              objs.append(obj)
+
+          third_party = {}
+          for o in objs:
+              f = o.get("finding")
+              if not f or not f.get("trace"):
+                  continue  # advisory only: imported, not reachable
+              mod = f["trace"][0].get("module", "")
+              if mod and mod != "stdlib":
+                  third_party.setdefault(mod, set()).add(f.get("osv", "?"))
+
+          for o in objs:
+              f = o.get("finding")
+              if f and f.get("trace"):
+                  m = f["trace"][0].get("module", "?")
+                  print(f"reachable: {f.get('osv')} in {m}")
+
+          if not objs:
+              print("::error ::govulncheck produced no output; the scan did not run")
+              sys.exit(1)
+          if third_party:
+              for mod, ids in sorted(third_party.items()):
+                  print(f"::error ::{mod}: {', '.join(sorted(ids))}")
+              sys.exit(1)
+          print(f"no reachable third-party CVEs ({len(objs)} records scanned)")
+          PY
 
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0

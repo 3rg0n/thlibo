@@ -100,6 +100,25 @@ func pdfFilter(raw []byte) []byte {
 		return raw
 	}
 
+	// No pages: not a document we can say anything about, so say nothing.
+	//
+	// This is a fail-open path, not a cosmetic one. Reader.Pages() returns
+	// an error only when the trailer or catalog is missing outright; a
+	// catalog whose /Pages names a missing object, or a page tree whose
+	// nodes fail to parse, produces an empty slice and no error at all. So
+	// OpenBytes succeeds, NumPages() is 0, and pdfMarkdown still renders
+	// its metadata header — `- pages: 0` — which is non-empty and therefore
+	// sails past the TrimSpace check below. Measured: a 161-byte PDF whose
+	// /Pages points at object 99 (absent) returned 11 bytes of "- pages: 0"
+	// in place of the input.
+	//
+	// That is the failure mode invariant #2 exists to prevent, and the
+	// monotonic guard in RunNative cannot catch it — 11 bytes is a byte-count
+	// improvement, so it looks like a successful compression.
+	if doc.NumPages() == 0 {
+		return raw
+	}
+
 	md := pdfMarkdown(doc)
 	if strings.TrimSpace(md) == "" {
 		return raw

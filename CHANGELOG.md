@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A nested-object PDF crashed the process instead of failing open**
+  (`internal/pdf/parser.go`). `parseArray` and `parseDict` recurse into
+  each other through `parseFromToken` with no depth bound, so `[[[[…`
+  descends once per input byte. That is not a recoverable panic: Go grows a
+  goroutine stack to 1 GB and then calls `runtime.throw`, which
+  **`recover()` cannot catch** — so `RunNative`'s fail-open net never
+  fires and the process exits with the tool output still unwritten.
+  Measured end to end through `thlibo compress` before the fix: exit 2 and
+  empty stdout at ~1.3M levels, i.e. a **2.6 MB file** against the 64 MiB
+  the middleware accepts. Bounded at 1024 levels on both functions —
+  bounding one leaves `<< /K << /K …` unbounded — which is far past any
+  nesting a real producer emits. An over-nested object is now rejected as
+  malformed and `pdf-filter` passes the original bytes through.
+
+  The fuzz targets could not have found this. Their contract is "no panic,
+  no hang, no unbounded allocation", and a fatal throw satisfies none of
+  those checks because it never returns to the harness; separately,
+  fuzzing does not generate multi-megabyte inputs of one repeated byte.
+  `TestObjectNestingIsBounded` plus a `FuzzOpenBytes` seed cover it now,
+  and the read path's other eight file-controlled loops were audited in
+  the same pass (all terminate). THREAT_MODEL finding #29.
+
+- **A PDF that opened with zero pages was replaced by `- pages: 0`**
+  (`internal/processors/filter_pdf.go`). `Reader.Pages()` errors only when
+  the trailer or catalog is missing outright; a catalog whose `/Pages`
+  names an absent object collects no pages and returns no error, so
+  `OpenBytes` succeeds and the metadata header renders anyway. That string
+  is not blank, so it passed the only guard there was. Measured: a
+  **161-byte** malformed PDF returned 11 bytes in place of the input.
+  `RunNative`'s monotonic guard cannot catch it either — 11 bytes is a
+  byte-count improvement, so a destroyed document looked exactly like a
+  successful compression. Now passes through explicitly.
+  THREAT_MODEL finding #30.
+
+- **CI's third-party-CVE gate had been passing without scanning anything**
+  (`.github/workflows/ci.yml`). `govulncheck -show=summary` is no longer a
+  valid invocation — v1.6.0 accepts only `traces,color,version,verbose` —
+  and the step runs under `set +e`, so the non-zero exit was swallowed,
+  `$OUT` was empty, and the `grep` that gates the job found nothing to
+  fail on. Confirmed from CI logs that this predates the version pinning
+  below: run 30387905827 on 2026-07-28 shows the identical error under
+  `@latest`, so the gate was dead for at least a week and any third-party
+  CVE introduced in that window would not have blocked a release. Now
+  parses `-format=json`, which is a declared interface rather than human
+  output with no stability contract, and additionally fails when
+  govulncheck emits no records at all — a gate that cannot fail is
+  indistinguishable from a passing one. THREAT_MODEL finding #31.
+
 ### Changed
 
 - **CI's three scanner installs are version-pinned instead of `@latest`**
