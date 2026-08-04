@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.4] - 2026-08-04
+
+Hardens what v0.11.3 shipped rather than adding to it. The native PDF path
+and cordon port landed with no CI fuzzing, no benchmarks, and two packages
+under 20% statement coverage; this release closes all three and fixes the
+one real bug that came out of reviewing them — cordon's k-NN scoring pass
+was not bounded by `CORDON_TIMEOUT`, so a fast daemon did not imply a fast
+filter. No behaviour change on the compression path.
+
 ### Added
 
 - **Nightly fuzzing of `internal/pdf` in CI (`.github/workflows/fuzz.yml`).**
