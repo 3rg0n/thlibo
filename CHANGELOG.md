@@ -118,6 +118,43 @@ filter. No behaviour change on the compression path.
 
 ### Added
 
+- **Tests for the six packages that had none, plus the Linux autostart
+  backend.** `cmd/thlibo`, `cmd/thlibo/{casecmd,compresscmd,installcmd,
+  upgradecmd}` and `internal/version` all reported 0.0% coverage, and
+  `internal/install`'s systemd-user backend had no test at all while the
+  Windows backend had a full one — which mattered because systemd-user *is*
+  the Linux install mechanism and the unit body carries THREAT_MODEL
+  findings #6 (restart-storm limits) and #14 (filesystem confinement). Each
+  hardening directive is now asserted by name, since a reformat that
+  dropped one would pass every other test and stay invisible until an
+  incident. Verified on real Linux, not just cross-compiled: 10/10 under
+  WSL Ubuntu.
+
+  The rest targets decision-making branches rather than a line-count
+  figure — exit codes the hooks key on, argv gates, and the fail-open
+  paths. `shorthandcmd`'s Write/Edit hook got the most attention because it
+  is the one code path that rewrites files the user authored: every
+  bail-out gate (feature off by default, `THLIBO_DISABLED` in all four
+  truthy spellings, malformed envelope, path outside the allowlist, body
+  under `min_bytes`) now asserts empty stdout, because silence is what
+  tells the client to keep the original bytes. `installcmd` gained the full
+  install path — all six hook scripts, the settings merge, the `/caselog`
+  skill, reinstall idempotence, and the `<path>.new` conflict branch that
+  preserves a user's edits (invariant #6). `configcmd --reset` now pins its
+  confirmation gate across all seven y/n/empty spellings.
+
+  Two fixtures carry guards against passing for the wrong reason: the
+  synthetic textless PDF asserts it exceeds `MinBytesForRouting` (2000)
+  or the pipeline short-circuits before `pdf-filter` ever runs, and the
+  shorthand config fixture asserts `$THLIBO_CONFIG` was actually honoured
+  or every "enabled but bailed" case would pass with the feature off.
+  Where a property genuinely is not assertable — an unreachable daemon has
+  no env override for its socket path — the tests say so and point at
+  `middleware.TestFallbackMatrix` case B8a, which injects the client. One
+  test seam was added to production code: `upgradecmd.runInstaller` is now
+  a package-level var so argv/env handling is testable without shelling
+  out to `curl | bash`.
+
 - **Nightly fuzzing of `internal/pdf` in CI (`.github/workflows/fuzz.yml`).**
   The package shipped three `Fuzz` targets and **nothing in CI ran any of
   them** — they found all three of the hangs fixed during ADR 0015's review

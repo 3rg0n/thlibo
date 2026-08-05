@@ -53,6 +53,15 @@ Options:
 		}
 	}
 
+	return runInstaller()
+}
+
+// runInstaller dispatches to the platform's installer transport. A
+// package-level var, not a direct call, so tests can exercise Run's
+// argv/env handling without shelling out to `curl | bash` — the real
+// implementations reach the network by design and there is nothing
+// about them to unit-test. Production never reassigns it.
+var runInstaller = func() int {
 	switch runtime.GOOS {
 	case "windows":
 		return runWindows()
