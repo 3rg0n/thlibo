@@ -196,7 +196,9 @@ one matrix leg each, 10 min apiece, corpus cached so coverage compounds).
 `go test` replays the committed seeds in `testdata/fuzz/` on every run, which
 guards the known regressions — but finding a *new* hang is the nightly's job,
 so a parser change is not "fuzz-clean" because CI went green. Soak it first:
-`gh workflow run fuzz.yml -f fuzztime=30m`, or locally
+`gh workflow run fuzz.yml -f fuzzminutes=30` (bare minutes — the job's own
+`timeout-minutes` is computed from it, so the two can't drift out of sync and
+cancel the run), or locally
 `go test ./internal/pdf/ -run '^$' -fuzz '^FuzzOpenBytes$' -fuzztime 60s`.
 A nightly failure uploads the minimised input as a `crashers-<Target>`
 artifact; commit it under `testdata/fuzz/<Target>/` and it becomes a
