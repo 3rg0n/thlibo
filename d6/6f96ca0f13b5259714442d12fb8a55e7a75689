@@ -1,0 +1,25 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_6d868cd76d9b1c 10-60
+docs/site/index.html
+  s_5811b7f24eccc0::t_0b1a3f52e86018 560,615
+README.md
+  s_5811b7f24eccc0::t_0b1a3f52e86018 145,157
+CLAUDE.md
+  s_5811b7f24eccc0::t_784bdc46a3cfc9 9,16-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d66f96ca0f13b5259714442d12fb8a55e7a75689",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
