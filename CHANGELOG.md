@@ -62,6 +62,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   govulncheck emits no records at all — a gate that cannot fail is
   indistinguishable from a passing one. THREAT_MODEL finding #31.
 
+- **The documented 30-minute fuzz soak could never report a result**
+  (`.github/workflows/fuzz.yml`). The job's `timeout-minutes` was
+  hardcoded to 30 while CLAUDE.md documented `-f fuzztime=30m`, so the
+  job budget and the fuzz budget were identical and checkout plus setup
+  guaranteed a cancellation. Measured on run 30959878497: `FuzzOpenBytes`
+  was still healthy at 29m21s — 97,864,838 execs, 337 new interesting
+  inputs, no crashes — and was killed at 30m16s, as were the other two
+  legs. Worse, `Collect crashers` was guarded by `if: failure()`, which
+  does not match a **cancelled** job, and cancellation-at-the-deadline is
+  exactly when a crasher is most likely to be sitting unretrieved in
+  `testdata/fuzz/` — so the one artifact the workflow exists to produce
+  was the thing it dropped. The ceiling is now computed as
+  `fuzzminutes + 6` in a `budget` job (GitHub expressions have no
+  arithmetic, so this cannot be an inline `+`), the input is validated
+  bare minutes so `30m` fails loudly instead of silently misconfiguring
+  the run, and the upload fires on `failure() || cancelled()`.
+
 ### Changed
 
 - **CI's three scanner installs are version-pinned instead of `@latest`**

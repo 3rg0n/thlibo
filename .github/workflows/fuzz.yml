@@ -33,14 +33,18 @@ on:
     # contended slot on GitHub's shared runners.
     - cron: "17 4 * * *"
   # Manual runs for when a change lands in internal/pdf and waiting
-  # for the nightly isn't good enough. fuzztime is overridable so a
+  # for the nightly isn't good enough. The duration is overridable so a
   # parser change can be given a long soak on demand.
   workflow_dispatch:
     inputs:
-      fuzztime:
-        description: "Per-target fuzz duration (Go duration, e.g. 10m)"
+      fuzzminutes:
+        # Minutes as a bare number, not a Go duration, because
+        # timeout-minutes below is computed from it — see the arithmetic
+        # on the job. Passing "30m" here is a loud fromJSON parse error
+        # rather than a silent misconfiguration, which is the intent.
+        description: "Per-target fuzz duration, in minutes (e.g. 30)"
         required: false
-        default: "10m"
+        default: "10"
 
 permissions:
   contents: read
@@ -57,13 +61,56 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  # Computes the job timeout from the fuzz duration. This exists as its
+  # own job because GitHub's expression language has **no arithmetic** —
+  # `${{ fromJSON(inputs.fuzzminutes) + 6 }}` is a hard parse error
+  # ("Unexpected symbol: '+'") that rejects the whole workflow file, so
+  # the addition has to happen in a shell.
+  #
+  # Worth a whole job because the alternative is a constant, and a
+  # constant is what broke: timeout-minutes was hardcoded to 30 while the
+  # documented long-soak command was `-f fuzztime=30m`, so that run could
+  # not finish by construction. Measured on run 30959878497: FuzzOpenBytes
+  # was still healthy at 29m21s (97.8M execs, no crashes) and was
+  # cancelled at 30m16s. A soak that always ends `cancelled` reports
+  # nothing — and worse, `failure()` does not match cancellation, so the
+  # crasher upload was skipped too.
+  budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      fuzzminutes: ${{ steps.calc.outputs.fuzzminutes }}
+      timeout: ${{ steps.calc.outputs.timeout }}
+    steps:
+      - id: calc
+        env:
+          # Via env, not interpolated into the script body: a
+          # workflow_dispatch input is attacker-influenced text and
+          # `${{ }}` inside a run: block is a shell injection (the same
+          # class semgrep flagged in release.yml).
+          RAW: ${{ inputs.fuzzminutes || '10' }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$RAW" =~ ^[0-9]+$ ]] || [ "$RAW" -lt 1 ]; then
+            echo "::error ::fuzzminutes must be a positive integer number of minutes (got '$RAW'); use 30, not 30m"
+            exit 1
+          fi
+          # +6 covers checkout, setup-go, corpus restore, and the
+          # artifact upload on the way out (~45s observed, so this is
+          # slack rather than a tight fit).
+          echo "fuzzminutes=$RAW" >> "$GITHUB_OUTPUT"
+          echo "timeout=$((RAW + 6))" >> "$GITHUB_OUTPUT"
+          echo "fuzzing ${RAW}m per target, job ceiling $((RAW + 6))m"
+
   fuzz:
     name: fuzz ${{ matrix.target }}
+    needs: budget
     runs-on: ubuntu-latest
-    # A generous ceiling over fuzztime so a hang inside the fuzzer
-    # itself surfaces as a failed job rather than burning the
-    # account's minutes. fuzztime is per-target and this is per-job.
-    timeout-minutes: 30
+    # Derived from the fuzz duration, never a constant — see `budget`.
+    # The ceiling still serves its original purpose: a hang inside the
+    # fuzzer itself fails the job rather than burning the account's
+    # minutes.
+    timeout-minutes: ${{ fromJSON(needs.budget.outputs.timeout) }}
     strategy:
       # Every target reports independently. fail-fast would hide a
       # second finding behind the first, and with three targets
@@ -117,7 +164,9 @@ jobs:
 
       - name: Fuzz
         env:
-          FUZZTIME: ${{ inputs.fuzztime || '10m' }}
+          # From the budget job, so the fuzz duration and the job ceiling
+          # are always derived from the same validated number.
+          FUZZTIME: ${{ needs.budget.outputs.fuzzminutes }}m
         # -run '^$' so the ordinary unit tests don't re-run in every
         # matrix leg; ci.yml already gates those on three OSes.
         # -timeout 0 disables the *test binary's* 10-minute default,
@@ -132,12 +181,22 @@ jobs:
             -timeout 0
 
       - name: Collect crashers
-        # Only on failure. A crash writes the minimised input to the
-        # package's testdata/fuzz/<Target>/ — that file IS the
-        # regression test, so it must leave the runner or the finding
-        # is lost when the workspace is torn down. Committing it and
-        # re-running `go test` reproduces the failure with no fuzzing.
-        if: failure()
+        # A crash writes the minimised input to the package's
+        # testdata/fuzz/<Target>/ — that file IS the regression test, so
+        # it must leave the runner or the finding is lost when the
+        # workspace is torn down. Committing it and re-running `go test`
+        # reproduces the failure with no fuzzing.
+        #
+        # `failure() || cancelled()`, not `failure()` alone: a cancelled
+        # job is exactly when a crasher is most likely to be stranded
+        # (job timeout, or someone stopping a run), and `failure()` does
+        # not match cancellation. Steps guarded by `cancelled()` do still
+        # run during teardown, within the runner's grace period.
+        #
+        # Not `!cancelled()` either — testdata/fuzz/ always contains the
+        # committed seeds, so a success-path upload would publish an
+        # artifact of nothing every night.
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: crashers-${{ matrix.target }}
