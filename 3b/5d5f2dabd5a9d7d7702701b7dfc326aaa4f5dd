@@ -1,0 +1,42 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_aedf84fa0155e0 84-120
+cmd/thlibo/installcmd/install_test.go
+  s_5811b7f24eccc0::t_24c96a8745d6b3 467,478,493,501-504
+  s_5811b7f24eccc0::t_62d83ce86a81cc 419-423,425,427-428,432-437,441,443-449,452-454,457,460-466,505-506,516-519,524
+  s_5811b7f24eccc0::t_cab0cb15081404 468-477,479-492,494-500
+  s_5811b7f24eccc0::t_b65499c0e7ce53 507-515,520-523,525-553
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_626d25f6526fc3 178
+  s_5811b7f24eccc0::t_5728cd0f8232f1 493,623-635,644-648,650,658-676
+  s_5811b7f24eccc0::t_227ded2f553ad3 551-564,566-576,580-584,588-599,603-608,610-611,613-614,616,618,621-622,643,651-655,657
+  s_5811b7f24eccc0::t_072440d363c0ac 636-642,649,656
+  s_5811b7f24eccc0::t_e766235463a6e0 471,477-492
+  s_5811b7f24eccc0::t_9d5c2680a916f4 585-587
+  s_5cd1b28ed520c1::t_228c71c2315640 494
+.plan/inferd-linux-handoff.md
+  s_5811b7f24eccc0::t_f60f2c47e3338b 200-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "3b5d5f2dabd5a9d7d7702701b7dfc326aaa4f5dd",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    },
+    "s_5cd1b28ed520c1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82e2267c-23d5-4c0c-8d96-7d91a00e70c4",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
