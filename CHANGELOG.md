@@ -81,6 +81,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The installer's WSL advisory was three releases out of date; it now warns
+  about a failure that still exists** (`cmd/thlibo/installcmd/install.go`).
+  `wslAPEInteropHint()` told WSL users to disable interop
+  (`echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop`) because the llamafile
+  engine was a polyglot APE binary whose `MZ` header WSL's binfmt handler
+  would hijack. ADR 0005 moved inference to inferd, which ships an ordinary
+  ELF, so there has been nothing to hijack since v0.6.0 — the hint could
+  only advise a user to give up Windows interop for no benefit. Removed, and
+  its slot given to `linuxUserServiceHint()`.
+
+  The replacement covers a real gap. inferd autostarts from a systemd
+  **user** unit, and `install.Install` deliberately ignores
+  `systemctl --user` failures so a systemd-less host still gets the unit
+  file for a later session. The cost of that choice is silence: the unit is
+  written, nothing starts it, the daemon never listens, and thlibo's
+  fail-open path (invariant #2) turns every hook into a permanent
+  passthrough. Compression stops working and **nothing is ever printed** —
+  indistinguishable, from the user's side, from thlibo working. The hint
+  names the consequence rather than the symptom ("inferd will not autostart
+  … every hook falls open"), distinguishes no-systemd from
+  systemd-without-a-user-bus because the remedies differ, and is suppressed
+  under `--skip-inferd`, where an unstarted daemon is what was asked for.
+  Detection is filesystem-only: `/run/systemd/system` for systemd itself,
+  then the user bus.
+
+  Verified against three real hosts, not just cross-compiled: silent on WSL
+  Ubuntu 24.04 (healthy user session), the user-bus branch on WSL Ubuntu
+  26.04 (`user@1000.service` failed, `systemctl --user` returns "Failed to
+  connect to user scope bus"), and the no-systemd branch in a busybox
+  container. That 26.04 host also caught a bug in the first draft of the
+  probe: `DBUS_SESSION_BUS_ADDRESS` is exported there as
+  `unix:path=/run/user/1000/bus` **while that socket does not exist**, so
+  treating the variable's presence as proof of a bus reported healthy on
+  precisely the host the warning exists for. The probe now resolves the
+  address to a path and stats it, trusting only abstract/tcp addresses that
+  have no filesystem entry to check.
+
 - **CI's three scanner installs are version-pinned instead of `@latest`**
   (`.github/workflows/ci.yml`): `staticcheck@v0.7.0`,
   `govulncheck@v1.6.0`, `gosec@v2.28.0`. `@latest` resolves at job time, so

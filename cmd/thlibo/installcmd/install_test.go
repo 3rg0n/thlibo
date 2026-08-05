@@ -416,41 +416,140 @@ func TestReportInferdInstallNamesTheBranch(t *testing.T) {
 	}
 }
 
-// wslAPEInteropHint is the one genuinely WSL-specific branch in the
-// installer. Its three guards are AND-ed: linux, a WSLInterop binfmt
-// entry, and a /proc/version naming microsoft or WSL. On any other
-// platform it must return "" — a Windows or macOS install printing WSL
-// advice would be pure noise.
-func TestWSLHintSilentOffLinux(t *testing.T) {
+// linuxUserServiceHint is the installer's only warning about a Linux
+// host where inferd cannot autostart. On any other platform it must
+// return "" — macOS uses a LaunchAgent and Windows a Startup shortcut,
+// so systemd advice there is pure noise.
+func TestUserServiceHintSilentOffLinux(t *testing.T) {
 	if runtime.GOOS == "linux" {
-		t.Skip("the negative case is only assertable off linux; the linux path is covered by TestWSLHintShapeOnLinux")
+		t.Skip("the negative case is only assertable off linux; the linux paths are covered below")
 	}
-	if got := wslAPEInteropHint(); got != "" {
-		t.Errorf("wslAPEInteropHint() on %s = %q, want empty", runtime.GOOS, got)
+	if got := linuxUserServiceHint(); got != "" {
+		t.Errorf("linuxUserServiceHint() on %s = %q, want empty", runtime.GOOS, got)
 	}
 }
 
-// On linux the hint fires only under WSL, so its emptiness is
-// environment-dependent and not assertable. What IS assertable: when it
-// does fire, it must carry the actionable command, because the whole
-// point is to tell the user the one privileged write thlibo will not do
-// for them.
-func TestWSLHintShapeOnLinux(t *testing.T) {
+// The hint has to name the consequence, not just the fault. A user who
+// reads "systemctl --user failed" has no reason to connect that to
+// "compression silently stopped working" — which is exactly what
+// happens, because install.Install swallows the systemctl error by
+// design and thlibo then fails open on every hook forever.
+func TestUserServiceHintExplainsTheSilentFailure(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("linux-only")
 	}
-	hint := wslAPEInteropHint()
+	hint := linuxUserServiceHint()
 	if hint == "" {
-		t.Skip("not running under WSL with WSLInterop active")
+		// A working user session is the healthy case: nothing to say.
+		// Assert that this really is why it is empty, so a hint that
+		// broke outright can't hide behind this skip.
+		if !userBusPresent() {
+			t.Fatal("hint is empty but there is no user bus; the warning did not fire when it should have")
+		}
+		t.Skip("systemd user session is healthy on this host")
 	}
 	for _, want := range []string{
-		"WSL detected",
-		"/proc/sys/fs/binfmt_misc/WSLInterop",
-		"/etc/wsl.conf",
+		"inferd will not autostart",
+		"falls open",
+		"inferd",
 	} {
 		if !strings.Contains(hint, want) {
-			t.Errorf("hint is missing %q:\n%s", want, hint)
+			t.Errorf("hint is missing %q — the user needs the consequence, not just the symptom:\n%s", want, hint)
 		}
+	}
+	// Whatever the cause, the hint must leave the user with something to
+	// run. An advisory with no command is a dead end.
+	if !strings.Contains(hint, "systemctl") && !strings.Contains(hint, "inferd &") {
+		t.Errorf("hint offers no actionable command:\n%s", hint)
+	}
+}
+
+// --skip-inferd means the user is managing the daemon themselves, so
+// warning them that it won't autostart is noise.
+//
+// Both the dry-run and the real path are checked because they are
+// separate call sites: an earlier draft gated only the real one, so
+// `--dry-run --skip-inferd` warned about a daemon the install it was
+// previewing would not have warned about. A plan must not disagree with
+// the install it describes.
+//
+// Runs everywhere: off linux the hint is empty regardless, so the
+// assertion holds either way and the test earns no platform skip.
+func TestSkipInferdSuppressesTheAutostartWarning(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		argv []string
+	}{
+		{"real install", []string{"--skip-inferd"}},
+		{"dry run", []string{"--dry-run", "--skip-inferd"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setHome(t, t.TempDir())
+			argv := append(tc.argv,
+				"--processors-dir", filepath.Join(t.TempDir(), "processors"),
+				"--hook-dir", filepath.Join(t.TempDir(), "hooks"),
+				"--settings", filepath.Join(t.TempDir(), "claude", "settings.json"),
+			)
+
+			code, out, errOut := capture(t, func() int { return Run(argv) })
+			if code != 0 {
+				t.Fatalf("exit = %d, want 0\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+			}
+			if strings.Contains(out, "will not autostart") {
+				t.Errorf("--skip-inferd still warned about autostart:\n%s", out)
+			}
+		})
+	}
+}
+
+// userBusPresent is the systemd-user reachability probe, and the reason
+// the hint can distinguish "no systemd at all" from "systemd but no user
+// bus".
+//
+// The load-bearing case is "address set but socket missing", and it is
+// not hypothetical: measured on WSL Ubuntu 26.04, where
+// DBUS_SESSION_BUS_ADDRESS is exported as unix:path=/run/user/1000/bus
+// while user@1000.service has failed and that socket does not exist. An
+// earlier draft of this probe returned true whenever the variable was
+// set, which reported healthy on precisely the host the hint exists for.
+func TestUserBusPresentStatsTheAddressItIsGiven(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux-only: the probe is only consulted on linux")
+	}
+
+	present := filepath.Join(t.TempDir(), "bus")
+	if err := os.WriteFile(present, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		addr string // DBUS_SESSION_BUS_ADDRESS; "" means unset
+		xdg  string // XDG_RUNTIME_DIR; "" means unset
+		want bool
+	}{
+		{"address names a socket that exists", "unix:path=" + present, "", true},
+		{"address names a socket that does not exist", "unix:path=/nonexistent/bus", "", false},
+		// The real 26.04 shape: several comma-separated keys, path among
+		// them. Parsing must not depend on path= being first.
+		{"address with extra keys", "unix:path=" + present + ",guid=abc123", "", true},
+		{"multiple addresses, first unix wins", "unix:path=" + present + ";tcp:host=127.0.0.1", "", true},
+		// Not a checkable filesystem path: warning on these would be a
+		// false positive on a working host, so they pass.
+		{"abstract socket is unverifiable and trusted", "unix:abstract=/tmp/dbus-xyz", "", true},
+		{"tcp transport is unverifiable and trusted", "tcp:host=127.0.0.1,port=1234", "", true},
+		// Falling back to $XDG_RUNTIME_DIR/bus when no address is set.
+		{"no address, xdg has a bus", "", filepath.Dir(present), true},
+		{"no address, xdg has no bus", "", t.TempDir(), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("DBUS_SESSION_BUS_ADDRESS", tc.addr)
+			t.Setenv("XDG_RUNTIME_DIR", tc.xdg)
+			if got := userBusPresent(); got != tc.want {
+				t.Errorf("userBusPresent() with addr=%q xdg=%q = %v, want %v",
+					tc.addr, tc.xdg, got, tc.want)
+			}
+		})
 	}
 }
 

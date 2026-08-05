@@ -175,10 +175,7 @@ func Run(argv []string) int {
 	}
 	if dryRun {
 		fmt.Println("  (dry-run: no changes applied)")
-		if hint := wslAPEInteropHint(); hint != "" {
-			fmt.Println()
-			fmt.Println(hint)
-		}
+		printAutostartHint(skipInferd)
 		return 0
 	}
 
@@ -471,13 +468,28 @@ func Run(argv []string) int {
 		fmt.Println("    other verbose tool output is compressed after it runs.")
 	}
 
-	if hint := wslAPEInteropHint(); hint != "" {
-		fmt.Println()
-		fmt.Println(hint)
-	}
+	printAutostartHint(skipInferd)
 
 	fmt.Println("thlibo install complete.")
 	return 0
+}
+
+// printAutostartHint emits the autostart warning, if there is one, just
+// ahead of the closing line — the whole point being that an install can
+// read as complete while the daemon is never going to start. Shared by
+// the dry-run and real paths so a plan and the install it describes
+// cannot disagree about whether the warning applies.
+//
+// Suppressed under --skip-inferd: there, an unstarted daemon is what the
+// user asked for, so the warning would be noise.
+func printAutostartHint(skipInferd bool) {
+	if skipInferd {
+		return
+	}
+	if hint := linuxUserServiceHint(); hint != "" {
+		fmt.Println()
+		fmt.Println(hint)
+	}
 }
 
 // hasTimeoutBinary reports whether a `timeout`/`gtimeout` binary is on
@@ -536,50 +548,129 @@ func reportInferdInstall(ir install.InferdInstallResult) {
 	}
 }
 
-// wslAPEInteropHint returns a non-empty advisory string when we detect
-// that we are running under WSL with the WSLInterop binfmt_misc handler
-// active. The llamafile engine is an APE / Cosmopolitan-Libc binary —
-// polyglot MZ + ELF — and WSL's binfmt_misc handler matches on the MZ
-// header at offset 0, so it grabs the engine and tries to launch it
-// through the Windows host instead of running it as a native ELF. The
-// daemon then dies with `error: APE is running on WIN32 inside WSL`.
+// linuxUserServiceHint returns a non-empty advisory when we are
+// installing on Linux without a working systemd user session.
 //
-// Returns empty on non-WSL and on WSL hosts where the handler has
-// already been disabled. The hint is informational only — `thlibo
-// install` does not (and should not) attempt the privileged write to
-// /proc/sys/fs/binfmt_misc/WSLInterop on the user's behalf.
-func wslAPEInteropHint() string {
+// This is the one Linux-specific failure the installer cannot fix and
+// must not hide. inferd autostarts via a systemd *user* unit, and
+// install.Install deliberately swallows `systemctl --user` errors so a
+// systemd-less host still gets the unit file on disk for a later
+// session. The cost of that choice is silence: the unit is written,
+// nothing ever starts it, the daemon never listens, and thlibo's
+// fail-open path (invariant #2) then makes every hook a permanent
+// passthrough — compression quietly does nothing and no error is ever
+// printed. The user has no way to tell that from "working."
+//
+// Two distinct causes, because the remedies differ:
+//
+//   - no systemd at all (container, sysvinit, musl distro) — the unit
+//     is inert; inferd has to be started by hand or by another
+//     supervisor.
+//   - systemd running but no per-user bus — `systemctl --user` cannot
+//     connect, so enable/start silently did nothing. Measured on WSL
+//     Ubuntu 26.04, where user@$UID.service fails and /run/user/$UID/bus
+//     is absent while the system manager reports "running".
+//
+// Detection is filesystem-only and never shells out: the installer
+// already ran systemctl and got no usable signal from it.
+func linuxUserServiceHint() string {
 	if runtime.GOOS != "linux" {
 		return ""
 	}
-	if _, err := os.Stat("/proc/sys/fs/binfmt_misc/WSLInterop"); err != nil {
-		return ""
+	// /run/systemd/system is systemd's own "am I the init system?"
+	// marker — the check systemd documents for exactly this question.
+	if _, err := os.Stat("/run/systemd/system"); err != nil {
+		return strings.Join([]string{
+			"  systemd not detected — inferd will not autostart:",
+			"    inferd's autostart is a systemd user unit, and nothing on this",
+			"    host will read one, so the daemon never starts and every hook",
+			"    falls open (passes output through uncompressed, silently).",
+			"",
+			"    Start inferd yourself, or supervise it however this host",
+			"    manages services:",
+			"",
+			"      inferd &",
+			"",
+			"    Then check it is listening:",
+			"",
+			"      inferdctl doctor",
+		}, "\n")
 	}
-	// Heuristic for WSL: /proc/version mentions "microsoft" or
-	// "WSL". Avoids false positives on bare-metal Linux that
-	// happens to have a WSLInterop entry from some other source.
-	v, err := os.ReadFile("/proc/version") // #nosec G304 -- /proc path, not user input
-	if err != nil {
-		return ""
-	}
-	lower := strings.ToLower(string(v))
-	if !strings.Contains(lower, "microsoft") && !strings.Contains(lower, "wsl") {
+	if userBusPresent() {
 		return ""
 	}
 	return strings.Join([]string{
-		"  WSL detected — one extra step before the daemon can run:",
-		"    The llamafile engine is a polyglot APE/Cosmopolitan binary",
-		"    (MZ header + ELF body) and WSL's binfmt_misc handler will",
-		"    intercept it as a Windows executable. Disable the handler",
-		"    (one-time per boot):",
+		"  no systemd user session — inferd will not autostart:",
+		"    `systemctl --user` cannot reach a per-user bus on this host, so",
+		"    enabling the unit did nothing. The daemon never starts and every",
+		"    hook falls open (passes output through uncompressed, silently).",
 		"",
-		"      sudo sh -c 'echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop'",
+		"    Diagnose the user manager:",
 		"",
-		"    Or permanently in /etc/wsl.conf:",
+		"      systemctl status user@$(id -u).service",
+		"      journalctl --user -xe",
 		"",
-		"      [interop]",
-		"      enabled = false",
+		"    If units run while you are logged in but stop afterwards, enable",
+		"    lingering instead:",
 		"",
-		"    See https://wsl.dev/technical-documentation/interop/",
+		"      loginctl enable-linger $USER",
+		"",
+		"    Until then, start the daemon by hand with `inferd &`.",
 	}, "\n")
+}
+
+// userBusPresent reports whether a per-user D-Bus socket exists — the
+// transport `systemctl --user` requires.
+//
+// $DBUS_SESSION_BUS_ADDRESS is resolved to a path and that path is
+// stat'd, never trusted for merely being set. Measured on WSL Ubuntu
+// 26.04: the variable is exported as unix:path=/run/user/1000/bus while
+// that socket does not exist, because the session leader sets it before
+// (and independently of) the user manager coming up. Treating a set
+// variable as proof of a bus reports healthy on exactly the host this
+// hint exists to warn about.
+//
+// Only unix socket paths are checkable. An abstract-namespace or tcp
+// address has no filesystem entry, so those are taken at face value —
+// the caller's alternative is a false warning on a working host.
+//
+// Both os.Stat calls below read paths out of the invoking user's own
+// environment. gosec flags that as tainted (G703), but the paths are
+// only ever stat'd — never opened, written, or joined with anything
+// attacker-supplied — and the sole observable effect is whether an
+// advisory prints. A user who edits their own $DBUS_SESSION_BUS_ADDRESS
+// can suppress their own hint; there is nothing else to reach.
+func userBusPresent() bool {
+	if addr := os.Getenv("DBUS_SESSION_BUS_ADDRESS"); addr != "" {
+		path, ok := unixSocketPath(addr)
+		if !ok {
+			return true // not a checkable unix path; assume the host knows
+		}
+		_, err := os.Stat(path) // #nosec G703 -- stat-only existence check; see above
+		return err == nil
+	}
+	dir := os.Getenv("XDG_RUNTIME_DIR")
+	if dir == "" {
+		dir = fmt.Sprintf("/run/user/%d", os.Getuid())
+	}
+	_, err := os.Stat(filepath.Join(dir, "bus")) // #nosec G703 -- stat-only; see above
+	return err == nil
+}
+
+// unixSocketPath extracts the filesystem path from a D-Bus address,
+// reporting false when the address names no such path. The format is
+// semicolon-separated addresses of `transport:key=value,key=value`; we
+// want the first `unix:` entry's `path=`.
+func unixSocketPath(addr string) (string, bool) {
+	for _, one := range strings.Split(addr, ";") {
+		if !strings.HasPrefix(one, "unix:") {
+			continue
+		}
+		for _, kv := range strings.Split(strings.TrimPrefix(one, "unix:"), ",") {
+			if v, ok := strings.CutPrefix(kv, "path="); ok && v != "" {
+				return v, true
+			}
+		}
+	}
+	return "", false
 }

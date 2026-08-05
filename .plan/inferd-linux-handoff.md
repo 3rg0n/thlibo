@@ -197,6 +197,15 @@ so WSL grabs them and tries to run them as Windows binaries.
 and prints a one-time advisory after install. The fix itself is
 manual on the user's part (we don't have sudo).
 
+> **Removed as of v0.11.5.** ADR 0005 moved inference to inferd,
+> which ships a normal ELF — there is no APE binary left to hijack,
+> so the hint could only ever advise a user to disable WSL interop
+> for no benefit. Its slot in the installer now holds
+> `linuxUserServiceHint()`, which warns about a *live* Linux
+> failure: no systemd user session means `systemctl --user` cannot
+> start the unit, so the daemon never comes up and every hook
+> fails open silently. Measured on WSL Ubuntu 26.04.
+
 **inferd inherits this for free** because it doesn't ship an APE
 binary — `inferd-engine` will be a normal ELF compiled against
 vendored `llama.cpp`, no Cosmopolitan, no `MZ` header. WSL won't
