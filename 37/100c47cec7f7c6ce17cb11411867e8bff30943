@@ -1,0 +1,25 @@
+.github/workflows/fuzz.yml
+  s_5811b7f24eccc0::t_2b1f37ae5f3c30 36,40-45,47
+  s_5811b7f24eccc0::t_502a73a9b7847f 167-169
+  s_5811b7f24eccc0::t_086ae2b1b2e447 64-104,107,109-113
+  s_5811b7f24eccc0::t_6fbfa9295cc118 184-189
+  s_5811b7f24eccc0::t_af1c2ba966114e 190-199
+CLAUDE.md
+  s_5811b7f24eccc0::t_54f09b27f7f6f0 199-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "37100c47cec7f7c6ce17cb11411867e8bff30943",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    }
+  }
+}
