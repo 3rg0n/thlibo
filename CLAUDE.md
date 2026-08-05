@@ -6,14 +6,18 @@ agents that need architectural context in a single shot.
 
 ## Status
 
-v0.11.4 (current). Single binary shipped (`thlibo`); inference runs in
+v0.11.5 (current). Single binary shipped (`thlibo`); inference runs in
 a separate sidecar, **`inferd`** (its own repo, github.com/3rg0n/inferd),
 which `thlibo install` probe-or-installs. `thlibo install` is zero-touch
 on all three OSes (incl. Windows arm64): it copies inferd's `backends/`
 libs beside the daemon, pins the latest *stable* (non-`-rc`) inferd, runs
 the per-user installer (LaunchAgent / systemd-user / Startup-shortcut),
 and probes the daemon for readiness before reporting success
-(fresh-install fixes, #47). `thlibo upgrade` rename-then-replaces its own
+(fresh-install fixes, #47). On Linux it warns when there is no systemd
+user session, because that is the one case it cannot fix and must not
+hide: `install.Install` swallows `systemctl --user` errors by design, so
+the unit lands on disk, nothing starts it, and fail-open then makes every
+hook a silent permanent passthrough (#117). `thlibo upgrade` rename-then-replaces its own
 binary so it works while running (#52). Four AI clients: Claude Code
 hooks (Bash + PowerShell + Read + Write/Edit); Codex PostToolUse hook
 (canonical `[features] hooks` flag + `/hooks` trust reminder, #57);
