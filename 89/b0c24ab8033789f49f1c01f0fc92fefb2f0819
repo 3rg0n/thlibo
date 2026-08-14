@@ -1,0 +1,29 @@
+internal/adapters/codex/codex.go
+  s_5811b7f24eccc0::t_09570f61e5f701 62-295
+internal/adapters/codex/representation_test.go
+  s_5811b7f24eccc0::t_178f6410c60718 1-295
+CHANGELOG.md
+  s_5811b7f24eccc0::t_e9e62b88e841c9 10-15
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_74c63d1739e890 151-156
+  s_5811b7f24eccc0::t_dc3c1caf2bf487 384-391,394-395,400-411
+  s_5811b7f24eccc0::t_13650e911bd150 147-150,157-159
+CLAUDE.md
+  s_5811b7f24eccc0::t_eaf24328607d81 268-279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "89b0c24ab8033789f49f1c01f0fc92fefb2f0819",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
