@@ -59,6 +59,240 @@ func WriteHookScript(path string) error {
 // previously-installed thlibo entry (so a reinstall is idempotent).
 const hookMarker = "thlibo-rewrite-codex.sh"
 
+// Representation is one of Codex's two ways of declaring hooks in a
+// config layer. Codex accepts either and warns when one layer contains
+// both ("loading hooks from both … prefer a single representation for
+// this layer"), so thlibo must pick exactly one per layer.
+type Representation int
+
+const (
+	// RepInline is inline [[hooks.*]] tables in config.toml. thlibo's
+	// default, and what git-ai/taco write.
+	RepInline Representation = iota
+	// RepHooksJSON is a sibling hooks.json.
+	RepHooksJSON
+)
+
+func (r Representation) String() string {
+	if r == RepHooksJSON {
+		return "hooks.json"
+	}
+	return "inline config.toml"
+}
+
+// InstallHook writes thlibo's PostToolUse/^Bash$ hook into whichever
+// representation the config layer already uses, and reports which one it
+// picked.
+//
+// #170 fixed the case where thlibo wrote hooks.json into a layer whose
+// other tools were inline. The mirror case is just as real: writing
+// inline unconditionally puts thlibo's hook in config.toml even when the
+// layer's hooks live in hooks.json, which recreates the same warning from
+// the other side. So detect first:
+//
+//   - layer already has inline [[hooks.*]] tables, or has no hooks at all
+//     → inline (the default; matches git-ai, whose installer writes inline
+//     unless its codex_hooks_format knob says otherwise).
+//   - layer has NO inline hooks but a hooks.json holding another tool's
+//     entries → hooks.json, because that file is the layer's chosen
+//     representation and thlibo is the newcomer.
+//
+// Callers must skip RemoveStaleHooksJSON when this returns RepHooksJSON —
+// the entry it would strip is the one we just wrote.
+func InstallHook(configPath, hooksJSONPath, hookPath string) (Representation, error) {
+	rep := DetectRepresentation(configPath, hooksJSONPath)
+	if rep == RepHooksJSON {
+		return rep, MergeHooksJSONHook(hooksJSONPath, hookPath)
+	}
+	return rep, MergeConfigTOMLHook(configPath, hookPath)
+}
+
+// DetectRepresentation reports which representation the config layer
+// already uses. Inline is the default: it's what thlibo writes when the
+// layer has inline hooks, when it has no hooks at all, and whenever the
+// evidence is unreadable (a malformed hooks.json is not evidence of
+// anything, and inline is the safe direction — it never edits a file
+// thlibo doesn't own).
+func DetectRepresentation(configPath, hooksJSONPath string) Representation {
+	cfg, err := readFileOrEmpty(configPath)
+	if err == nil && configHasInlineHooks(cfg) {
+		return RepInline
+	}
+	if hooksJSONHasForeignHooks(hooksJSONPath) {
+		return RepHooksJSON
+	}
+	return RepInline
+}
+
+// configHasInlineHooks reports whether config.toml declares any inline
+// hook, i.e. contains a [hooks…] / [[hooks…]] section header other than
+// the [hooks.state] bookkeeping table.
+//
+// Excluding [hooks.state] is load-bearing, not tidiness: Codex records
+// per-hook trust there keyed by the defining file, so a layer whose hooks
+// live *entirely* in hooks.json still grows
+// [hooks.state.'…/hooks.json:post_tool_use:0:0'] in config.toml as soon
+// as the user trusts one. Counting that as an inline hook would report
+// "inline" for exactly the hooks.json-only layer this detection exists to
+// find.
+func configHasInlineHooks(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		t := strings.TrimSpace(line)
+		if !strings.HasPrefix(t, "[") {
+			continue
+		}
+		// Strip the header brackets ("[[hooks.X]]" → "hooks.X").
+		t = strings.TrimPrefix(t, "[[")
+		t = strings.TrimPrefix(t, "[")
+		if i := strings.IndexAny(t, "]"); i >= 0 {
+			t = t[:i]
+		}
+		t = strings.TrimSpace(t)
+		if t != "hooks" && !strings.HasPrefix(t, "hooks.") {
+			continue
+		}
+		if t == "hooks.state" || strings.HasPrefix(t, "hooks.state.") {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// hooksJSONHasForeignHooks reports whether hooksJSONPath holds at least
+// one hook entry that isn't thlibo's own. thlibo's own entry doesn't
+// count: a leftover from a pre-#170 install is what RemoveStaleHooksJSON
+// exists to clean up, and treating it as evidence would pin thlibo to
+// hooks.json forever.
+func hooksJSONHasForeignHooks(hooksJSONPath string) bool {
+	buf, err := os.ReadFile(hooksJSONPath) // #nosec G304 -- installer-chosen path, not user input.
+	if err != nil || len(buf) == 0 {
+		return false
+	}
+	var root map[string]any
+	if err := json.Unmarshal(buf, &root); err != nil {
+		return false
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, groups := range hooks {
+		arr, ok := groups.([]any)
+		if !ok {
+			continue
+		}
+		for _, g := range arr {
+			obj, ok := g.(map[string]any)
+			if !ok {
+				continue
+			}
+			inner, ok := obj["hooks"].([]any)
+			if !ok {
+				// A flat entry (no nested hooks[]) still declares a hook.
+				if cmd, ok := obj["command"].(string); ok && !isThliboCommand(cmd) {
+					return true
+				}
+				continue
+			}
+			for _, h := range inner {
+				ho, ok := h.(map[string]any)
+				if !ok {
+					continue
+				}
+				if cmd, _ := ho["command"].(string); !isThliboCommand(cmd) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func isThliboCommand(cmd string) bool {
+	return strings.Contains(normalisePath(cmd), hookMarker)
+}
+
+// MergeHooksJSONHook adds thlibo's PostToolUse/^Bash$ hook to a Codex
+// hooks.json, preserving every other key and every other tool's entries.
+// The written shape is the one RemoveStaleHooksJSON understands:
+//
+//	{"hooks":{"PostToolUse":[
+//	   {"matcher":"^Bash$","hooks":[{"type":"command","command":"<path>"}]}]}}
+//
+// Idempotent (a prior thlibo entry, recognised by the script marker, is
+// updated in place). Refuses to touch a malformed file rather than risk
+// clobbering user data — the caller's fallback is the inline path.
+func MergeHooksJSONHook(hooksPath, hookPath string) error {
+	hookPath = normalisePath(hookPath)
+
+	var root map[string]any
+	buf, err := os.ReadFile(hooksPath) // #nosec G304 -- installer-chosen path, not user input.
+	switch {
+	case err == nil && len(buf) > 0:
+		if err := json.Unmarshal(buf, &root); err != nil {
+			return fmt.Errorf("codex: parse %s: %w", hooksPath, err)
+		}
+	case err == nil, os.IsNotExist(err):
+		root = map[string]any{}
+	default:
+		return fmt.Errorf("codex: read %s: %w", hooksPath, err)
+	}
+	if root == nil {
+		root = map[string]any{}
+	}
+
+	hooks, _ := root["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+		root["hooks"] = hooks
+	}
+	post, _ := hooks["PostToolUse"].([]any)
+
+	// Update a prior thlibo entry in place so reinstalls don't accumulate.
+	for _, g := range post {
+		obj, ok := g.(map[string]any)
+		if !ok {
+			continue
+		}
+		inner, _ := obj["hooks"].([]any)
+		for i, h := range inner {
+			ho, ok := h.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, _ := ho["command"].(string); isThliboCommand(cmd) {
+				ho["command"] = hookPath
+				ho["type"] = "command"
+				inner[i] = ho
+				return writeJSON(hooksPath, root)
+			}
+		}
+	}
+
+	post = append(post, map[string]any{
+		"matcher": "^Bash$",
+		"hooks":   []any{map[string]any{"type": "command", "command": hookPath}},
+	})
+	hooks["PostToolUse"] = post
+	return writeJSON(hooksPath, root)
+}
+
+func writeJSON(path string, root map[string]any) error {
+	encoded, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("codex: marshal %s: %w", path, err)
+	}
+	encoded = append(encoded, '\n')
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("codex: create hooks dir: %w", err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		return fmt.Errorf("codex: write %s: %w", path, err)
+	}
+	return nil
+}
+
 // MergeConfigTOMLHook appends thlibo's PostToolUse/^Bash$ hook INLINE
 // into the user's config.toml, if not already present.
 //

@@ -265,7 +265,18 @@ registry would let the model select `shorthand` for tool output (ADR
   PowerShell, Read, and Write/Edit tools. Settings merger. /caselog
   skill.
 - **`internal/adapters/codex/`** — PostToolUse hook using
-  `decision: block` + `reason` to substitute the tool result.
+  `decision: block` + `reason` to substitute the tool result. Codex accepts
+  hooks in **two** representations and warns when one config layer holds
+  both, so `InstallHook` detects which the layer already uses and matches
+  it: inline `[[hooks.PostToolUse]]` in `config.toml` by default (git-ai
+  and taco write inline), or `hooks.json` when that is where the layer's
+  other hooks live. Writing inline unconditionally is what caused #170 in
+  mirror — and detection must **exclude `[hooks.state]`**, since Codex
+  records per-hook trust there keyed by the *defining file*, so a
+  hooks.json-only layer grows a `[hooks.state.'…/hooks.json:…']` table in
+  `config.toml` as soon as the user trusts one. Count that as an inline
+  hook and the detection reports "inline" for exactly the layer it exists
+  to find. `[features] hooks = true` goes in `config.toml` either way.
 - **`internal/adapters/cursor/`** — `preToolUse` hooks (Shell +
   Read) using `updated_input` to rewrite the command / `file_path`.
   Non-destructive `~/.cursor/hooks.json` merge; bash-wraps the command

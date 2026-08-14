@@ -144,7 +144,19 @@ func Run(argv []string) int {
 		if cp == "" && home != "" {
 			cp = filepath.Join(home, ".codex", "config.toml")
 		}
-		fmt.Printf("  codex hooks:    %s (inline)\n", cp)
+		// Which representation gets written depends on what the layer
+		// already uses, so report the detected one rather than assuming
+		// inline (see codex.InstallHook).
+		if cp != "" {
+			hj := filepath.Join(filepath.Dir(cp), "hooks.json")
+			if codex.DetectRepresentation(cp, hj) == codex.RepHooksJSON {
+				fmt.Printf("  codex hooks:    %s (hooks.json — this layer's representation)\n", hj)
+			} else {
+				fmt.Printf("  codex hooks:    %s (inline)\n", cp)
+			}
+		} else {
+			fmt.Printf("  codex hooks:    %s\n", cp)
+		}
 	} else {
 		fmt.Println("  codex hooks:    (skipped; use --codex to install)")
 	}
@@ -369,23 +381,35 @@ func Run(argv []string) int {
 			fmt.Fprintln(os.Stderr, "install: codex hook:", err)
 			return 9
 		}
-		if err := codex.MergeConfigTOMLHook(cfgPath, codexHookPath); err != nil {
-			fmt.Fprintln(os.Stderr, "install: codex config.toml hook:", err)
+		// Write the hook into whichever representation this config layer
+		// already uses — inline by default, hooks.json when that's where
+		// the layer's other hooks live. Mixing the two in one layer makes
+		// Codex warn and hide hooks (#170), in both directions.
+		hooksJSON := filepath.Join(filepath.Dir(cfgPath), "hooks.json")
+		rep, err := codex.InstallHook(cfgPath, hooksJSON, codexHookPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "install: codex hook:", err)
 			return 9
 		}
+		// The feature flag lives in config.toml either way — without it
+		// Codex ignores every hook it finds, wherever it's declared.
 		if err := codex.EnableHooksFeatureFlag(cfgPath); err != nil {
 			fmt.Fprintln(os.Stderr, "install: codex config.toml:", err)
 			return 9
 		}
-		// Migration: a pre-#170 install put the hook in a sibling
-		// hooks.json. Leaving it there recreates the mixed-representation
-		// state we just moved off of, so strip any stale thlibo entry
-		// from hooks.json next to the config. Non-fatal.
-		staleHooksJSON := filepath.Join(filepath.Dir(cfgPath), "hooks.json")
-		if err := codex.RemoveStaleHooksJSON(staleHooksJSON); err != nil {
-			fmt.Fprintln(os.Stderr, "install: codex hooks.json cleanup (non-fatal):", err)
+		if rep == codex.RepInline {
+			// Migration: a pre-#170 install put the hook in a sibling
+			// hooks.json. Leaving it there recreates the mixed-representation
+			// state we just moved off of, so strip any stale thlibo entry
+			// from hooks.json next to the config. Non-fatal. Skipped on the
+			// hooks.json path, where that entry is the one we just wrote.
+			if err := codex.RemoveStaleHooksJSON(hooksJSON); err != nil {
+				fmt.Fprintln(os.Stderr, "install: codex hooks.json cleanup (non-fatal):", err)
+			}
+			fmt.Printf("  wrote Codex hook + added inline [[hooks.PostToolUse]] + [features] hooks=true in %s\n", cfgPath)
+		} else {
+			fmt.Printf("  wrote Codex hook + added PostToolUse entry in %s (the representation this layer already uses) + [features] hooks=true in %s\n", hooksJSON, cfgPath)
 		}
-		fmt.Printf("  wrote Codex hook + added inline [[hooks.PostToolUse]] + [features] hooks=true in %s\n", cfgPath)
 		// Codex requires the user to TRUST a command hook before it
 		// runs ("Before a non-managed command hook can run, Codex
 		// requires you to review and trust the exact hook definition"
