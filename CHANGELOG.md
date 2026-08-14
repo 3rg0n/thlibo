@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `thlibo install --codex` now writes its hook into whichever representation the
+  Codex config layer already uses, instead of always inline — so a layer whose
+  hooks live in `hooks.json` no longer ends up with both and the
+  "prefer a single representation for this layer" warning (#170 in mirror).
+
 ## [0.11.5] - 2026-08-05
 
 Continues v0.11.4's hardening rather than adding features. Three of the four
