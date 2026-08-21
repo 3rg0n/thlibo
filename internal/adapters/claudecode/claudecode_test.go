@@ -276,7 +276,13 @@ func TestRemoveHooksTrimsEmptyContainers(t *testing.T) {
 // matchers when both hook paths are provided, and uses a powershell
 // -File invocation for the PowerShell entry so execution-policy
 // lockdowns don't block us.
+//
+// Forced onto the Windows path: since #127 the script a matcher gets is
+// host-dependent, and the powershell -File invocation is the Windows
+// answer. On Unix both exec matchers get the .sh, covered by
+// TestExecMatchersUseOneScriptPerHost.
 func TestMergeSettingsFullBashAndPS1(t *testing.T) {
+	forceWindows(t, true)
 	dir := t.TempDir()
 	sp := filepath.Join(dir, "settings.json")
 	bashHp := filepath.Join(dir, "thlibo-rewrite.sh")

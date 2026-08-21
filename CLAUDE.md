@@ -263,7 +263,23 @@ registry would let the model select `shorthand` for tool output (ADR
 
 - **`internal/adapters/claudecode/`** — PreToolUse hooks for Bash,
   PowerShell, Read, and Write/Edit tools. Settings merger. /caselog
-  skill.
+  skill. **Every matcher gets one hook script chosen by host, never by
+  matcher name** — `.ps1` on Windows, `.sh` elsewhere. The Bash and
+  PowerShell tools both carry the command in `tool_input.command` and the
+  hook reads only that field, so the script's language is independent of
+  the tool's shell. Registering the `.sh` under the Bash matcher on
+  Windows was #127: a bare script path in `command` is resolved through
+  the `.sh` file association, and on a Git-for-Windows box that is
+  `git-bash.exe` — a *GUI terminal launcher*, not an interpreter. The
+  hook opened a window and never fed the tool; fail-open hid it, so that
+  hook had never worked on Windows. The mirror case is real too — off
+  Windows the PowerShell binary is `pwsh` and `-ExecutionPolicy` is
+  Windows-only, so a `.ps1` must never be registered there.
+  `addPreToolUseHook` therefore takes **every** marker in a hook's family
+  (both the `.sh` and `.ps1` names), not just the one being written:
+  markers identify a hook by *file*, so matching only the new name would
+  leave the stale entry firing beside it. `runtimeIsWindows` is a `var`
+  so both host paths are tested on every CI leg.
 - **`internal/adapters/codex/`** — PostToolUse hook using
   `decision: block` + `reason` to substitute the tool result. Codex accepts
   hooks in **two** representations and warns when one config layer holds

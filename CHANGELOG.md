@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Windows: the Claude Code Bash hook opened a Git Bash window instead of
+  running (#127).** `install` registered the Bash matcher as a bare
+  `thlibo-rewrite.sh` path. Windows does not run that through bash — it resolves
+  the `.sh` file association, which on a Git-for-Windows box is `git-bash.exe`,
+  a GUI terminal launcher. So every Bash tool call popped a window titled
+  `/usr/bin/bash --login -i …\thlibo-rewrite.sh`, the hook never fed the tool,
+  and fail-open meant nothing reported it. Hosts with no `.sh` association got
+  the silent half of the same bug, so the Windows Bash hook had never worked.
+  Both exec matchers now get one script chosen per host — the `.ps1` on Windows
+  (which also needs no `jq`, unlike the `.sh`), the `.sh` elsewhere — matching
+  what the Read and Write matchers already did. A stale `.sh` entry is replaced
+  on upgrade rather than left firing beside the new one.
+- **Unix: the PowerShell matcher registered a command that cannot run.** It was
+  wrapped as `powershell -NoProfile -ExecutionPolicy Bypass -File …`, but the
+  binary on Linux/macOS is `pwsh` and `-ExecutionPolicy` is Windows-only. The
+  per-host choice above removes the wrapper there entirely. Found while fixing
+  #127; same root cause, opposite host.
 - `thlibo install --codex` now writes its hook into whichever representation the
   Codex config layer already uses, instead of always inline — so a layer whose
   hooks live in `hooks.json` no longer ends up with both and the
