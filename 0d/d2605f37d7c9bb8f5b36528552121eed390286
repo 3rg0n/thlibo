@@ -1,0 +1,36 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_bfc15cab4679e9 11-23
+internal/processors/structured.go
+  s_5811b7f24eccc0::t_322b8f22acb2c0 64,82-86,92-119,121
+  s_5811b7f24eccc0::t_45eff27727c29a 1-63,65-81,87-91,120,122-242
+internal/processors/structured_test.go
+  s_5811b7f24eccc0::t_6c2f70517179d5 85
+  s_5811b7f24eccc0::t_d3098179ff20ef 8-9
+  s_5811b7f24eccc0::t_68dd3fe6e72099 1-7,10-55,59-84,86-115
+  s_5811b7f24eccc0::t_ab5b0d26f6ecf9 56-58
+CLAUDE.md
+  s_5811b7f24eccc0::t_36728342793123 110-132
+internal/middleware/structured_passthrough_test.go
+  s_5811b7f24eccc0::t_95e225fb0a230a 35-39
+  s_5811b7f24eccc0::t_52a86118d72906 1-4,6-34,40-153,156,158-163
+  s_5811b7f24eccc0::t_b9b6635616a19d 5
+  s_5811b7f24eccc0::t_90b5fb328af593 154-155,157
+internal/middleware/middleware.go
+  s_5811b7f24eccc0::t_6b98a9b9555622 194-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "0dd2605f37d7c9bb8f5b36528552121eed390286",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
