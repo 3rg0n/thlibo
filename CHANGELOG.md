@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.6] - 2026-08-21
+
+Three fixes of one class: a path that failed without saying so. A config file
+read through thlibo came back as a summary of itself with the original bytes
+gone. The Windows Bash hook opened a Git Bash window instead of running, so it
+had never worked on that host. The Codex installer wrote its hook into a
+representation the config layer did not use. Fail-open (invariant #2) hid all
+three — the AI client kept working, so nothing reported the loss. This is the
+first compression-path behaviour change since v0.11.3: a whole JSON, YAML, or
+TOML document now passes through untouched.
+
 ### Fixed
 - **Structured config files were replaced by a summary of themselves (#129).**
   `compress` is the router's declared general fallback and its mandatory output
@@ -42,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Codex config layer already uses, instead of always inline — so a layer whose
   hooks live in `hooks.json` no longer ends up with both and the
   "prefer a single representation for this layer" warning (#170 in mirror).
+
+### Changed
+
+- `golang.org/x/image` 0.44.0 → 0.45.0, `golang.org/x/text` 0.40.0 → 0.41.0.
+  The image bump clears GO-2026-6222 (CVE-2026-46603, memory exhaustion in the
+  VP8L decoder) from the module graph. thlibo imports only `x/image/ccitt`, so
+  the vulnerable decoder was never reachable — this is hygiene, not a live fix.
 
 ## [0.11.5] - 2026-08-05
 
