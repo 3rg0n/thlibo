@@ -1,0 +1,21 @@
+go.mod
+  s_5811b7f24eccc0::t_69d8f5db9c3589 16,36
+go.sum
+  s_5811b7f24eccc0::t_227166413b0525 64-65,72-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "3474f84a84ec496a2c70c57d1e129d25f1ce66b7",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
