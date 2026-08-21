@@ -366,24 +366,41 @@ func MergeSettingsAll(settingsPath string, h MergeHooks) error {
 		return fmt.Errorf("claudecode: read %s: %w", settingsPath, err)
 	}
 
-	if h.BashExecHook != "" {
-		addPreToolUseHook(root, "Bash", h.BashExecHook, hookMarker)
+	// Exec-tool hooks. The Bash and PowerShell tools deliver the
+	// command in the same field (tool_input.command), and the hook
+	// script only reads that field — so ONE script serves both
+	// matchers, and the script's language is independent of the shell
+	// the tool will use. Pick it per host, exactly like Read and Write.
+	//
+	// Registering the .sh under the Bash matcher on Windows is the bug
+	// this pairing fixes (#127). A bare script path in `command` is
+	// resolved through the Windows .sh file association, which on a
+	// Git-for-Windows box is git-bash.exe — a GUI terminal launcher, not
+	// an interpreter. The hook then opened a window running
+	// `bash --login -i <script>` instead of feeding the tool, and
+	// because thlibo fails open the compression silently never ran.
+	// The .ps1 also needs no jq, which the .sh does.
+	if path, _ := pickPlatformHook(h.BashExecHook, h.PS1ExecHook,
+		hookMarker, hookMarkerPS1); path != "" {
+		if h.BashExecHook != "" {
+			addPreToolUseHook(root, "Bash", path, hookMarker, hookMarkerPS1)
+		}
+		if h.PS1ExecHook != "" {
+			addPreToolUseHook(root, "PowerShell", path, hookMarker, hookMarkerPS1)
+		}
 	}
-	if h.PS1ExecHook != "" {
-		addPreToolUseHook(root, "PowerShell", h.PS1ExecHook, hookMarkerPS1)
-	}
-	if path, marker := pickPlatformHook(h.BashReadHook, h.PS1ReadHook,
+	if path, _ := pickPlatformHook(h.BashReadHook, h.PS1ReadHook,
 		hookMarkerRead, hookMarkerReadPS1); path != "" {
-		addPreToolUseHook(root, "Read", path, marker)
+		addPreToolUseHook(root, "Read", path, hookMarkerRead, hookMarkerReadPS1)
 	}
 	// Write hooks register against BOTH Write and Edit matchers —
 	// both tools land bytes on disk, both should round-trip
 	// shorthand the same way. Same physical script, two settings
 	// entries (Claude Code matches by tool name).
-	if path, marker := pickPlatformHook(h.BashWriteHook, h.PS1WriteHook,
+	if path, _ := pickPlatformHook(h.BashWriteHook, h.PS1WriteHook,
 		hookMarkerWrite, hookMarkerWritePS1); path != "" {
-		addPreToolUseHook(root, "Write", path, marker)
-		addPreToolUseHook(root, "Edit", path, marker)
+		addPreToolUseHook(root, "Write", path, hookMarkerWrite, hookMarkerWritePS1)
+		addPreToolUseHook(root, "Edit", path, hookMarkerWrite, hookMarkerWritePS1)
 	}
 
 	encoded, err := json.MarshalIndent(root, "", "  ")
@@ -516,25 +533,30 @@ func removePreToolUseHooks(root map[string]any) bool {
 // substring check so a user-initiated move of the script file still
 // identifies it on the next install/uninstall cycle.
 func isThliboHookCommand(normalisedCmd string) bool {
-	for _, m := range allHookMarkers() {
-		if strings.Contains(normalisedCmd, m) {
-			return true
-		}
-	}
-	return false
+	return hasAnyMarker(normalisedCmd, allHookMarkers())
 }
 
 // addPreToolUseHook mutates root in-place. It walks/creates the
 // nested structure hooks.PreToolUse[?matcher==<matcher>].hooks[] and
 // appends our command entry. If an entry for our hook already
-// exists (recognised by markerSuffix in the command string) it's
+// exists (recognised by any markerSuffix in the command string) it's
 // updated in place instead of duplicated.
+//
+// Callers pass EVERY marker in a hook's family (both the .sh and the
+// .ps1 variant), not just the one being written, because the variant
+// a group holds can change between installs — a host that used to
+// register the Bash exec hook as a .sh now gets the .ps1 (#127). With
+// only the new marker to match on, the stale entry survives alongside
+// the new one and keeps firing. So: the first entry matching any
+// marker is replaced in place (preserving hook order relative to
+// other tools' entries) and any further matches are dropped, leaving
+// exactly one thlibo entry per family per group.
 //
 // Windows note: the command string is normalised to forward slashes
 // so that when Claude Code's Bash tool spawns bash -c "<cmd>", bash
 // doesn't interpret backslashes as shell escapes. Git Bash / MSYS
 // handle `C:/path/to/file` correctly.
-func addPreToolUseHook(root map[string]any, matcher, hookPath, markerSuffix string) {
+func addPreToolUseHook(root map[string]any, matcher, hookPath string, markerSuffixes ...string) {
 	cmdString := buildHookCommand(matcher, hookPath)
 
 	hooks := asObject(root, "hooks")
@@ -563,35 +585,58 @@ func addPreToolUseHook(root map[string]any, matcher, hookPath, markerSuffix stri
 
 	// Look for our existing entry. Recognise by marker suffix so a
 	// rename of the script (e.g. user moved it to a shared dir)
-	// still updates the same slot.
-	for i, h := range groupHooks {
+	// still updates the same slot. The stored command is normalised
+	// too, so a legacy \-path entry written by an older thlibo version
+	// gets upgraded in place rather than left alongside a new /-path
+	// entry.
+	entry := map[string]any{"type": "command", "command": cmdString}
+	kept := make([]any, 0, len(groupHooks))
+	replaced := false
+	for _, h := range groupHooks {
 		obj, ok := h.(map[string]any)
 		if !ok {
+			kept = append(kept, h)
 			continue
 		}
 		cmd, _ := obj["command"].(string)
-		// Normalise the stored command too so a legacy \-path entry
-		// written by an older thlibo version gets upgraded in place
-		// rather than left alongside a new /-path entry.
-		if strings.Contains(normalisePath(cmd), markerSuffix) {
-			groupHooks[i] = map[string]any{"type": "command", "command": cmdString}
-			group["hooks"] = groupHooks
-			return
+		if !hasAnyMarker(normalisePath(cmd), markerSuffixes) {
+			kept = append(kept, h)
+			continue
+		}
+		if !replaced {
+			kept = append(kept, entry)
+			replaced = true
+		}
+		// Any further entry of ours in this group is stale — drop it.
+	}
+	if !replaced {
+		kept = append(kept, entry)
+	}
+	group["hooks"] = kept
+}
+
+// hasAnyMarker reports whether a (normalised, forward-slash) command
+// string contains any of the given hook-filename markers.
+func hasAnyMarker(normalisedCmd string, markers []string) bool {
+	for _, m := range markers {
+		if m != "" && strings.Contains(normalisedCmd, m) {
+			return true
 		}
 	}
-
-	groupHooks = append(groupHooks, map[string]any{"type": "command", "command": cmdString})
-	group["hooks"] = groupHooks
+	return false
 }
 
 // buildHookCommand returns the `command` string for a PreToolUse
-// entry. Bash hooks are invoked as the raw script path (Claude Code
-// runs them via `bash -c`). PowerShell hooks are invoked via
-// `powershell -NoProfile -ExecutionPolicy Bypass -File <path>` so
-// systems where the signed-script policy would block direct
-// execution still work, AND so Claude Code's bash-based hook runner
-// on Windows doesn't try to exec the .ps1 directly (which fails
-// with "syntax error near unexpected token").
+// entry. A .sh hook is invoked as the raw script path, which relies on
+// its shebang — correct on Unix, and NOT correct on Windows, where a
+// bare path goes through the .sh file association instead. That is why
+// no caller registers a .sh on Windows any more; MergeSettingsAll
+// picks the .ps1 for every matcher there (#127). PowerShell hooks are
+// invoked via `powershell -NoProfile -ExecutionPolicy Bypass -File
+// <path>` so systems where the signed-script policy would block direct
+// execution still work, AND so a bash-based hook runner doesn't try to
+// exec the .ps1 directly (which fails with "syntax error near
+// unexpected token").
 //
 // Wrap based on the script TYPE, not the matcher name. The previous
 // version only wrapped for matcher == "PowerShell", which left Read
