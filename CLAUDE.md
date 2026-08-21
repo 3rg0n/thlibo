@@ -107,6 +107,29 @@ E4B model served by a sidecar:
    alphabetical, and line-shape filters are refused entirely on input
    that sniffs binary. Rootedness is derived from the pattern in
    `validate()`, never declared — don't add a priority field.
+
+   Two local gates sit between the fast path and the routing call, and
+   both exist because reaching the router is not free — the bytes leave
+   the process for a decision that can be made here. `BinaryLooking`
+   refuses containers (#97). `StructuredDocument` refuses a whole
+   JSON/YAML/TOML document (#129): `compress` is the router's declared
+   general fallback and its mandatory output is a group-by-signature
+   summary, so a config file routed there came back as a description of
+   itself with the original bytes discarded — and an agent that reads a
+   config that way then edits it corrupts the file. **Order is
+   load-bearing: both run *after* `MatchFastPath`,** because `har-filter`
+   and `ndjson-filter` legitimately take JSON and a whole-document parse
+   must not shadow a filter whose `match` already fired.
+
+   The risk in `StructuredDocument` runs one way. A false negative
+   changes nothing — the input reaches the router as before. A false
+   positive makes thlibo a silent no-op for that input, the #106 failure
+   class, so each detector demands positive evidence of config shape.
+   That is why YAML needs *nesting* (a run of `LEVEL: message` log lines
+   parses as a mapping) and why TOML rejects bare-word values (`compress`'s
+   own `sig=`/`level=` output is otherwise `key=value`-shaped, which the
+   first draft of the guard misclassified). `structured_test.go` asserts
+   no false positive across every fixture in `internal/processors/testdata/`.
 5. **Thinking mode is owned by the processor prompt, not inferd.**
    Gemma 4's `<|channel>thought` block is stripped by the
    `internal/processors` thinking filter (`thinking.go`) before output
