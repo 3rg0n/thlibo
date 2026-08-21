@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Structured config files were replaced by a summary of themselves (#129).**
+  `compress` is the router's declared general fallback and its mandatory output
+  shape is a group-by-signature summary, so a JSON/YAML/TOML config with no
+  dedicated filter landed there and came back as `sig=` / `level=` / `count=`
+  lines. The original bytes were gone. An agent that read a config that way and
+  then edited it corrupted the file. Measured on `~/.cursor/hooks.json`: 2610
+  bytes in, 962 out, and the output was not JSON. `~/.claude/settings.json`,
+  `~/.codex/config.toml`, every `package.json`, and this repo's own
+  `.github/workflows/ci.yml` (11282 bytes in, 3216 out) were all affected. The
+  middleware now passes a whole structured document through untouched. The check
+  runs after the fast-path match, so `har-filter` and `ndjson-filter` — which
+  legitimately take JSON — still win. The Read hook was never affected: it
+  already gates on a log-shaped extension allowlist.
 - **Windows: the Claude Code Bash hook opened a Git Bash window instead of
   running (#127).** `install` registered the Bash matcher as a bare
   `thlibo-rewrite.sh` path. Windows does not run that through bash — it resolves

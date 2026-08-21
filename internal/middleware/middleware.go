@@ -191,6 +191,18 @@ func (p *Pipeline) decide(ctx context.Context, raw string) (string, telemetry.In
 		return raw, telemetry.Invocation{Path: telemetry.PathPassthrough, Outcome: telemetry.OutcomePassthrough}
 	}
 
+	// No fast-path match on a whole structured document -> passthrough
+	// (#129). `compress` is the router's declared general fallback, and its
+	// mandatory output shape is a group-by-signature summary, so a config
+	// file routed there comes back as a description of itself with the
+	// original bytes discarded. An agent that reads a config this way and
+	// then edits it corrupts the file. Deliberately placed after
+	// MatchFastPath: har-filter and ndjson-filter legitimately take JSON,
+	// and this must not shadow a filter whose `match` regex already fired.
+	if processors.StructuredDocument(raw) {
+		return raw, telemetry.Invocation{Path: telemetry.PathPassthrough, Outcome: telemetry.OutcomePassthrough}
+	}
+
 	// B5/B6/B7: routing call.
 	decision, err := p.Router.Ask(ctx, p.Registry, raw)
 	if err != nil {
