@@ -1,0 +1,42 @@
+internal/adapters/claudecode/claudecode.go
+  s_5811b7f24eccc0::t_0d4922282a2299 369-375,377-382,384-390,394
+  s_5811b7f24eccc0::t_0c7129b6294f7e 383,392
+  s_5811b7f24eccc0::t_0b32d29e0901c6 536
+  s_5811b7f24eccc0::t_fe7c4a5929d668 588-595,598,602-608,610,612-616,618-626
+  s_5811b7f24eccc0::t_d0c383191f5ade 630-633,635-639
+  s_5811b7f24eccc0::t_11d38227d3e80c 400,402-403
+  s_5811b7f24eccc0::t_d4391c050dc8b9 542,545-547,549-554,559
+  s_5811b7f24eccc0::t_4420edc3a6fe76 376,548,634
+internal/adapters/claudecode/claudecode_test.go
+  s_5811b7f24eccc0::t_91eb91eec19a9f 279,281-283,285
+  s_5811b7f24eccc0::t_4420edc3a6fe76 280
+CHANGELOG.md
+  s_5811b7f24eccc0::t_64fae866bbcf1b 11,13-26
+  s_5811b7f24eccc0::t_4420edc3a6fe76 12,27
+internal/adapters/claudecode/windowshook_test.go
+  s_5811b7f24eccc0::t_bc5a7f2fa0b8f6 1-58,60-148,152,154,158-161,163-173,175-228
+  s_5811b7f24eccc0::t_4420edc3a6fe76 59,162,174
+  s_5811b7f24eccc0::t_70f2fd353ffab5 149-151,153,155-157
+internal/adapters/claudecode/platform.go
+  s_5811b7f24eccc0::t_4420edc3a6fe76 7
+  s_5811b7f24eccc0::t_85a726093c30bb 5-6,8-9,11
+CLAUDE.md
+  s_5811b7f24eccc0::t_3163b03a4428e6 266-270,272-282
+  s_5811b7f24eccc0::t_4420edc3a6fe76 271
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "91f7f3ae8ace70c2bf32c747bc2553ce9f331880",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
