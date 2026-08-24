@@ -1,0 +1,59 @@
+internal/adapters/codex/hook.ps1
+  s_5811b7f24eccc0::t_fcf3ac1abba41e 28-38
+  s_5811b7f24eccc0::t_b97b9767ea5d18 1-27,39-51,59-106
+  s_5811b7f24eccc0::t_32cc00394dc7b3 52-58
+cmd/thlibo/installcmd/install.go
+  s_5811b7f24eccc0::t_8297ee8d5c5e54 428-439
+  s_5811b7f24eccc0::t_49f8bff8831c82 379-384
+CHANGELOG.md
+  s_5811b7f24eccc0::t_4e9b923bf27bfc 31-38
+  s_5811b7f24eccc0::t_b009a2fcae4134 10-30,39-49
+internal/adapters/codex/windowshook_test.go
+  s_5811b7f24eccc0::t_afcc18ebad940f 190-229
+  s_5811b7f24eccc0::t_fe80a0e8c079ee 64-76
+  s_5811b7f24eccc0::t_75558c5f97c9bf 1-63,77-189,230-315
+README.md
+  s_5811b7f24eccc0::t_1526c3bfe56171 271-284
+internal/adapters/codex/platform.go
+  s_5811b7f24eccc0::t_623f2ddcbe51ab 1-27
+internal/adapters/codex/representation_test.go
+  s_5811b7f24eccc0::t_0b1afc117429e4 203
+  s_5811b7f24eccc0::t_0519cd3570ba0f 27
+  s_5811b7f24eccc0::t_192df3a6bdd985 180
+  s_5811b7f24eccc0::t_3ca42acc883ac1 225
+CLAUDE.md
+  s_5811b7f24eccc0::t_e4276f701ff69a 325-340
+internal/adapters/codex/codex.go
+  s_5811b7f24eccc0::t_2a164141ccd0b2 462-475
+  s_5811b7f24eccc0::t_cc69a0f6adee0e 375,382-401,404-406,410-412,415,417-421,424,434-437,441,447-461,476-492
+  s_5811b7f24eccc0::t_10bc590e85a503 42-45,48-62,67,77-109
+  s_5811b7f24eccc0::t_c5f4fcd6e51679 558
+  s_5811b7f24eccc0::t_ecd2b7e3718017 519,521
+  s_5811b7f24eccc0::t_d5f806f10cc89c 695-696,703-706
+  s_5811b7f24eccc0::t_ec6992c3f34660 314-316,326
+  s_5811b7f24eccc0::t_25f28fa99bbd17 276
+  s_5811b7f24eccc0::t_04c03cbb8a3697 407-409
+  s_5811b7f24eccc0::t_2e8d97cabf2416 262
+  s_5811b7f24eccc0::t_2d885f7205788b 17-19
+  s_5811b7f24eccc0::t_65bb1dc523ce2a 402-403,413-414
+  s_5811b7f24eccc0::t_e21a2c33ff5f4f 493
+cmd/thlibo/installcmd/install_test.go
+  s_5811b7f24eccc0::t_cd177c00580203 752-754,756
+  s_5811b7f24eccc0::t_a1421b8a6cd7bd 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "82555e9e8f4a352f082279ef0682101d42801a51",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
