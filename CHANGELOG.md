@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`install` and `upgrade` misread inferd's version, so both stopped a healthy
+  daemon and overwrote its binary every time (#132).** `readBinaryVersion`
+  returned the last whitespace token of the whole `--version` output. That was
+  the version only while inferd printed one line. inferd 0.8.0 prints two —
+  `inferd-daemon 0.8.0`, then a `build profile:` line — so the fingerprint was
+  `available)`, which parsed to `[0,0,0,0]` and compared older than the
+  `v0.4.0` minimum. Both of `InstallInferd`'s early-return gates read that
+  value, so a current daemon was judged too old on every install, on every OS.
+
+  The outcome differed by host and only one of them was visible. On Windows
+  `stopInferd()` runs `sc.exe stop inferd-daemon`, which is a no-op for a
+  daemon started from the Startup shortcut `thlibo install` itself creates, so
+  the daemon kept running, its binary stayed locked, and install reported
+  `inferd install failed` — the symptom that got this filed during the v0.11.6
+  cut. On Linux and macOS the stop **succeeds**, so a working daemon was
+  stopped, its binary replaced, and it was restarted, with a full release
+  download each time and no error shown.
+
+  Two changes. `readBinaryVersion` now scans for the first token that parses as
+  a version instead of taking the last one, so a daemon that adds output cannot
+  move the answer. And `versionIsOlder` returns false for anything that is not
+  a comparable version, not just for the empty string — under-flagging rather
+  than upgrading a binary it could not fingerprint, which is what its doc
+  comment already promised. `install` now also reports the real version:
+  `inferd 0.8.0 already running; using existing daemon`.
 - **Every PowerShell hook read the tool envelope in the wrong encoding, so
   non-ASCII characters were corrupted in commands, file paths and file
   content (#134).** PowerShell 5.1 — the `powershell` these hooks are

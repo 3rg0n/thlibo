@@ -553,11 +553,15 @@ func startInstalledInferd(binPath string, r *InferdInstallResult) error {
 // versionIsOlder reports whether got < want. Both arguments may carry
 // a leading 'v' or none. Each is parsed as up to four dot-separated
 // numeric components; any non-numeric suffix on a component (e.g. a
-// "-rc1" trailer) is dropped before comparison. Empty `got` returns
-// false — we'd rather under-flag than spuriously upgrade a binary the
-// caller couldn't fingerprint.
+// "-rc1" trailer) is dropped before comparison.
+//
+// A `got` that is not a comparable version — empty, or anything
+// looksLikeVersion rejects — returns false. We'd rather under-flag than
+// spuriously upgrade a binary the caller couldn't fingerprint: a
+// caller that treats garbage as "maximally old" stops a healthy daemon
+// and overwrites its binary on every install (#132).
 func versionIsOlder(got, want string) bool {
-	if strings.TrimSpace(got) == "" {
+	if !looksLikeVersion(got) {
 		return false
 	}
 	g := parseSemverTuple(got)
@@ -574,30 +578,60 @@ func versionIsOlder(got, want string) bool {
 }
 
 // parseSemverTuple turns "v0.1.13" / "0.1.13" / "0.1.13-rc1" into
-// [0,1,13,0]. Components that fail to parse become zero so a malformed
-// string doesn't accidentally compare older than a valid one.
+// [0,1,13,0]. Components that fail to parse become zero. Callers that
+// compare must gate on looksLikeVersion first — a tuple of zeros is
+// indistinguishable from a real "0.0.0", so on its own it makes garbage
+// compare older than everything (#132).
 func parseSemverTuple(s string) [4]int {
 	var out [4]int
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "v")
 	parts := strings.SplitN(s, ".", 4)
 	for i := 0; i < len(out) && i < len(parts); i++ {
-		p := parts[i]
-		// Strip any "-rc1" / "+build" trailer.
-		if cut := strings.IndexAny(p, "-+"); cut >= 0 {
-			p = p[:cut]
-		}
-		n := 0
-		for _, c := range p {
-			if c < '0' || c > '9' {
-				n = 0
-				break
-			}
-			n = n*10 + int(c-'0')
-		}
+		n, _ := parseSemverComponent(parts[i])
 		out[i] = n
 	}
 	return out
+}
+
+// parseSemverComponent parses one dot-separated component, dropping any
+// "-rc1" / "+build" trailer. ok is false when what remains is not a
+// non-empty run of digits.
+func parseSemverComponent(p string) (int, bool) {
+	if cut := strings.IndexAny(p, "-+"); cut >= 0 {
+		p = p[:cut]
+	}
+	if p == "" {
+		return 0, false
+	}
+	n := 0
+	for _, c := range p {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
+}
+
+// looksLikeVersion reports whether s is a version string this package can
+// compare: an optional leading 'v', then two to four dot-separated
+// numeric components, the last of which may carry a "-rc1" / "+build"
+// trailer. Two components are the floor so a lone number or a date
+// ("2026-08-21" → "2026") can't pass as a version.
+func looksLikeVersion(s string) bool {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "v")
+	parts := strings.SplitN(s, ".", 4)
+	if len(parts) < 2 {
+		return false
+	}
+	for _, p := range parts {
+		if _, ok := parseSemverComponent(p); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // stopInferd asks the platform's service manager to stop the running
@@ -633,13 +667,27 @@ func readBinaryVersion(binPath string) string {
 	if err != nil {
 		return ""
 	}
-	// Format is "inferd-daemon 0.1.12" — just return the trailing
-	// token so callers can compare or display it.
-	parts := strings.Fields(strings.TrimSpace(string(out)))
-	if len(parts) == 0 {
-		return ""
+	return parseVersionOutput(string(out))
+}
+
+// parseVersionOutput picks the version out of a --version dump: the
+// first whitespace-separated token that looksLikeVersion accepts.
+// Returns empty when there is none.
+//
+// It scans rather than taking the trailing token, because the trailing
+// token is only the version when the daemon prints exactly one line.
+// inferd 0.8.0 prints two — "inferd-daemon 0.8.0" then a "build profile:"
+// line — so the old trailing-token read returned "available)", which
+// parsed as [0,0,0,0] and made every install stop a healthy daemon and
+// overwrite its binary (#132). A daemon that adds output must not move
+// the answer.
+func parseVersionOutput(out string) string {
+	for _, tok := range strings.Fields(out) {
+		if looksLikeVersion(tok) {
+			return tok
+		}
 	}
-	return parts[len(parts)-1]
+	return ""
 }
 
 // runInferdInstaller invokes inferd's bundled platform installer.
