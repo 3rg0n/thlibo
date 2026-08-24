@@ -1,0 +1,44 @@
+CHANGELOG.md
+  s_5811b7f24eccc0::t_6444df4ade0ccb 11-38
+README.md
+  s_5811b7f24eccc0::t_e01477dd192815 367-373
+internal/adapters/cursor/cursor.go
+  s_5811b7f24eccc0::t_0c829fc399352c 178-293
+internal/adapters/cursor/remove_test.go
+  s_5811b7f24eccc0::t_8bbc68a8d43b6b 1-209
+internal/adapters/codex/codex.go
+  s_5811b7f24eccc0::t_2fb9b21ee2bcf9 720-726
+  s_5811b7f24eccc0::t_282b592813bb48 764
+  s_5811b7f24eccc0::t_33d82916e91cd2 598-719,727-763,765-802,805,811-812,814-815
+  s_5811b7f24eccc0::t_4dabdb89062e95 803-804,806-810,813
+cmd/thlibo/uninstallcmd/uninstall.go
+  s_5811b7f24eccc0::t_4c6a5c580e7249 55-59
+  s_5811b7f24eccc0::t_d9d20b936a5b30 192
+  s_5811b7f24eccc0::t_7cf49da29c77b2 110-126,132-133
+  s_5811b7f24eccc0::t_d3261a6369c558 32,34
+  s_5811b7f24eccc0::t_3cda20b0d06afe 197
+  s_5811b7f24eccc0::t_d7997bf3a88df9 2-11
+  s_5811b7f24eccc0::t_a20d45be59b388 183-191,193-196,198-202
+  s_5811b7f24eccc0::t_3eace5eeec1821 71-84,88
+cmd/thlibo/uninstallcmd/uninstall_test.go
+  s_5811b7f24eccc0::t_be4ecc78c36825 7-9
+  s_5811b7f24eccc0::t_aeb3e2b04b9e19 117-278
+internal/adapters/codex/remove_test.go
+  s_5811b7f24eccc0::t_c74500d27326d8 1-349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "324c64acca3b6824927963b522be3187e08c3e90",
+  "prompts": {},
+  "sessions": {
+    "s_5811b7f24eccc0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5ac7310-ca40-41b4-86cf-fc36cc2e2474",
+        "model": "claude-opus-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
