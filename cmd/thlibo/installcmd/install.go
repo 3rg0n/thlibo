@@ -376,7 +376,12 @@ func Run(argv []string) int {
 			}
 			cfgPath = filepath.Join(home, ".codex", "config.toml")
 		}
-		codexHookPath := filepath.Join(hookDir, "thlibo-rewrite-codex.sh")
+		// Host picks the script: .ps1 on Windows, .sh elsewhere. A bare
+		// .sh path in a hook command is resolved through the .sh file
+		// association on Windows, which on a Git-for-Windows box launches
+		// git-bash.exe instead of interpreting the script (#127 for Claude
+		// Code, #126 here).
+		codexHookPath := filepath.Join(hookDir, codex.HookFileName())
 		if err := codex.WriteHookScript(codexHookPath); err != nil {
 			fmt.Fprintln(os.Stderr, "install: codex hook:", err)
 			return 9
@@ -420,6 +425,18 @@ func Run(argv []string) int {
 		fmt.Println("  ACTION REQUIRED — trust the hook so Codex will run it:")
 		fmt.Println("    Run `/hooks` inside Codex, review the thlibo PostToolUse hook, and approve it.")
 		fmt.Println("    Until trusted, Codex installs the hook but won't execute it (compression stays off).")
+		// A clean install plus a `/hooks` approval reads as "compression is
+		// on", and on Windows that is currently false: Codex does not
+		// deliver PostToolUse to a trusted hook for its shell results, so
+		// the hook never runs and fail-open hides it (#126, upstream
+		// openai/codex#38850). Say so rather than let the success output
+		// imply otherwise.
+		if runtime.GOOS == "windows" {
+			fmt.Println("  WARNING: on Windows, Codex does not currently deliver PostToolUse to the")
+			fmt.Println("    hook for its shell results, so compression stays off even once trusted.")
+			fmt.Println("    Tracked upstream: github.com/openai/codex/issues/38850 (thlibo #126).")
+			fmt.Println("    The hook itself is installed and correct; nothing to do here but wait.")
+		}
 	}
 
 	if installCursor {

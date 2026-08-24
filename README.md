@@ -268,7 +268,20 @@ representations (#170); any stale thlibo `hooks.json` entry from an older
 install is removed. Codex gates command hooks behind a **trust step**:
 after install, run `/hooks` inside Codex, review the thlibo hook, and
 approve it — until you do, Codex sees the hook but won't run it
-(compression stays off). The installer prints this reminder.
+(compression stays off). The installer prints this reminder. The hook
+script is chosen by host: `thlibo-rewrite-codex.ps1` on Windows,
+`thlibo-rewrite-codex.sh` elsewhere. An upgrade rewrites a stale entry in
+place, so re-approve the hook in `/hooks` afterwards — its definition
+changed, and Codex keys trust to the exact definition.
+
+**On Windows, Codex does not run the hook yet, and that is upstream.**
+Codex does not deliver `PostToolUse` to a trusted hook for its own shell
+results there, so compression stays off even after `/hooks` approval —
+install success is not evidence that compression is active. Tracked at
+[openai/codex#38850](https://github.com/openai/codex/issues/38850)
+(thlibo [#126](https://github.com/3rg0n/thlibo/issues/126)); the
+installer warns about it. Nothing in thlibo can fix delivery. For
+Windows compression today, use the Claude Code, Cursor, or Copilot hooks.
 
 With `--copilot`, thlibo writes `~/.copilot/hooks/thlibo.json` plus four
 hook scripts (a Bash + PowerShell pair for each event). Copilot reads

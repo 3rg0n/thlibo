@@ -322,6 +322,22 @@ registry would let the model select `shorthand` for tool output (ADR
   `config.toml` as soon as the user trusts one. Count that as an inline
   hook and the detection reports "inline" for exactly the layer it exists
   to find. `[features] hooks = true` goes in `config.toml` either way.
+  **The hook script is chosen by host** — `.ps1` on Windows, `.sh`
+  elsewhere (`HookFileName`, #126) — for #127's reason: a bare `.sh` path
+  in a `command` resolves through the `.sh` file association, which on a
+  Git-for-Windows box is `git-bash.exe`, a GUI terminal launcher. The
+  `.ps1` is registered wrapped in `powershell -NoProfile -ExecutionPolicy
+  Bypass -File`, so `isThliboCommand` must match the *script name* inside
+  the command, and it checks **both** markers: an upgrade that matched only
+  the new name would append the `.ps1` beside a still-firing `.sh` (#128).
+  So `MergeConfigTOMLHook` **rewrites** a stale `command =` line in place
+  instead of appending, and it scopes the match to `command =` assignments
+  — a whole-file substring match would read the inert
+  `[hooks.state.'…thlibo-rewrite-codex.sh:…']` trust record as an installed
+  hook and make install a silent no-op. **Delivery on Windows is broken
+  upstream** (openai/codex#38850): Codex never fires a trusted PostToolUse
+  for its shell results there, so the installer warns rather than let a
+  clean install read as "compression active". Nothing here can fix it.
 - **`internal/adapters/cursor/`** — `preToolUse` hooks (Shell +
   Read) using `updated_input` to rewrite the command / `file_path`.
   Non-destructive `~/.cursor/hooks.json` merge; bash-wraps the command

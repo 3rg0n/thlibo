@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/3rg0n/thlibo/internal/adapters/codex"
 	"github.com/3rg0n/thlibo/internal/install"
 )
 
@@ -748,9 +749,11 @@ func TestInstallClientHooksWriteTheirFiles(t *testing.T) {
 		}
 	}
 
-	// Per-client hook scripts land in the hook dir.
+	// Per-client hook scripts land in the hook dir. The Codex script is
+	// host-dependent (.ps1 on Windows, #126), so ask the adapter which
+	// name to expect rather than pinning the bash one.
 	for _, name := range []string{
-		"thlibo-rewrite-codex.sh",
+		codex.HookFileName(),
 		"thlibo-rewrite-cursor.sh",
 		"thlibo-read-cursor.sh",
 	} {

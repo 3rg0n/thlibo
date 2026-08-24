@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The Codex hook on Windows was a Bash script, so it never ran (#126).**
+  `install --codex` registered `thlibo-rewrite-codex.sh` on every host. A bare
+  `.sh` path in a Codex `command` is resolved through the `.sh` file
+  association, and on a Git-for-Windows box that is `git-bash.exe` — a GUI
+  terminal launcher, not an interpreter. Same defect class as #127 for Claude
+  Code, and fail-open hid it the same way. The adapter now ships a native
+  `thlibo-rewrite-codex.ps1` and picks the script by host, registering the
+  `.ps1` wrapped in `powershell -NoProfile -ExecutionPolicy Bypass -File`.
+  An upgrade **rewrites** the stale `command =` line in place rather than
+  appending beside it, because markers identify a hook by file and a second
+  entry would leave the broken hook firing too (#128). Re-approve the hook in
+  `/hooks` after an upgrade — its definition changed, and Codex keys trust to
+  the exact definition.
+- **A leftover Codex trust record could make `install --codex` a silent
+  no-op.** The inline path recognised a prior install by searching the whole
+  `config.toml` for the script name. Codex keys its `[hooks.state]` trust table
+  by the *defining file*, so a `[hooks.state.'…thlibo-rewrite-codex.sh:…']`
+  record left behind after the hook itself was gone matched, and install
+  reported success while writing nothing. The match is now scoped to
+  `command =` assignments.
+- **An in-place edit of a CRLF `config.toml` left a stray carriage return.**
+  The inline TOML editor splits the file on `\n`, so a rewritten line lost its
+  trailing `\r` and the file gained a line holding nothing but a carriage
+  return — invalid whitespace to a strict TOML parser, i.e. thlibo corrupting
+  the config it was editing. Windows configs are commonly CRLF. Both in-place
+  paths now put the `\r` back: the new hook-command rewrite, and
+  `EnableHooksFeatureFlag`'s existing flip of a `hooks = false` line, which had
+  the same defect and could corrupt a config on its own.
+
+### Changed
+- **`install --codex` warns on Windows that Codex will not run the hook.**
+  Codex does not deliver `PostToolUse` to a trusted hook for its own shell
+  results on Windows, so compression stays off there even after `/hooks`
+  approval. That is upstream ([openai/codex#38850]) and nothing in thlibo can
+  fix delivery. Without the warning, a clean install plus a trust approval
+  reads as "compression is active", which on that host is false.
+
+[openai/codex#38850]: https://github.com/openai/codex/issues/38850
+
 ## [0.11.6] - 2026-08-21
 
 Three fixes of one class: a path that failed without saying so. A config file

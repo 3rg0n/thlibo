@@ -14,7 +14,9 @@
 //
 // The package installs three things:
 //
-//  1. The hook script (thlibo-rewrite-codex.sh) to the user's hook dir.
+//  1. The hook script for this host — thlibo-rewrite-codex.ps1 on
+//     Windows, thlibo-rewrite-codex.sh elsewhere (see HookFileName) —
+//     to the user's hook dir.
 //  2. An inline [[hooks.PostToolUse]] (matcher "^Bash$") block appended
 //     to ~/.codex/config.toml pointing at the hook (#170). Written
 //     inline — not to a separate hooks.json — because Codex warns and
@@ -37,15 +39,32 @@ import (
 //go:embed hook.sh
 var hookScript []byte
 
-// HookScript returns the embedded Codex hook script bytes.
+//go:embed hook.ps1
+var hookScriptPS1 []byte
+
+// HookScript returns the embedded bash Codex hook script bytes.
 func HookScript() []byte { return hookScript }
 
-// WriteHookScript writes the hook script to path (0o700, owner-only).
+// HookScriptPS1 returns the embedded PowerShell Codex hook script bytes.
+func HookScriptPS1() []byte { return hookScriptPS1 }
+
+// HookScriptFor returns the script body that belongs at path, chosen by
+// its extension rather than by the host. The installer names the file
+// through HookFileName, so the two always agree; keying off the path
+// keeps a test able to write either variant.
+func HookScriptFor(path string) []byte {
+	if strings.HasSuffix(strings.ToLower(path), ".ps1") {
+		return hookScriptPS1
+	}
+	return hookScript
+}
+
+// WriteHookScript writes the hook script for path (0o700, owner-only).
 func WriteHookScript(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("codex: create hook dir: %w", err)
 	}
-	if err := os.WriteFile(path, hookScript, 0o600); err != nil {
+	if err := os.WriteFile(path, HookScriptFor(path), 0o600); err != nil {
 		return fmt.Errorf("codex: write hook: %w", err)
 	}
 	// #nosec G302 -- owner-execute required; group/other remain 0.
@@ -55,9 +74,39 @@ func WriteHookScript(path string) error {
 	return nil
 }
 
-// hookMarker is the filename substring we use to recognise a
-// previously-installed thlibo entry (so a reinstall is idempotent).
-const hookMarker = "thlibo-rewrite-codex.sh"
+// The markers are the filename substrings we use to recognise a
+// previously-installed thlibo entry, so a reinstall is idempotent.
+//
+// Both names are always checked, never just the one being installed.
+// Markers identify a hook by FILE, so a Windows upgrade that matched
+// only the new .ps1 name would leave the old .sh entry declared beside
+// it and Codex would keep firing both — the #128 lesson.
+const (
+	hookMarkerSh  = "thlibo-rewrite-codex.sh"
+	hookMarkerPS1 = "thlibo-rewrite-codex.ps1"
+)
+
+// containsThliboMarker reports whether s names either hook script.
+func containsThliboMarker(s string) bool {
+	s = normalisePath(s)
+	return strings.Contains(s, hookMarkerSh) || strings.Contains(s, hookMarkerPS1)
+}
+
+// buildHookCommand returns the `command` string for a hook entry.
+//
+// A .sh hook is invoked as the bare script path and relies on its
+// shebang. A .ps1 is invoked through `powershell -NoProfile
+// -ExecutionPolicy Bypass -File <path>` so a signed-script policy can't
+// block it, matching what the claudecode adapter writes. Codex parses
+// the command string into an argv — git-ai's own inline hook passes
+// arguments the same way.
+func buildHookCommand(hookPath string) string {
+	hookPath = normalisePath(hookPath)
+	if strings.HasSuffix(strings.ToLower(hookPath), ".ps1") {
+		return `powershell -NoProfile -ExecutionPolicy Bypass -File "` + hookPath + `"`
+	}
+	return hookPath
+}
 
 // Representation is one of Codex's two ways of declaring hooks in a
 // config layer. Codex accepts either and warns when one layer contains
@@ -210,7 +259,7 @@ func hooksJSONHasForeignHooks(hooksJSONPath string) bool {
 }
 
 func isThliboCommand(cmd string) bool {
-	return strings.Contains(normalisePath(cmd), hookMarker)
+	return containsThliboMarker(cmd)
 }
 
 // MergeHooksJSONHook adds thlibo's PostToolUse/^Bash$ hook to a Codex
@@ -224,7 +273,7 @@ func isThliboCommand(cmd string) bool {
 // updated in place). Refuses to touch a malformed file rather than risk
 // clobbering user data — the caller's fallback is the inline path.
 func MergeHooksJSONHook(hooksPath, hookPath string) error {
-	hookPath = normalisePath(hookPath)
+	command := buildHookCommand(hookPath)
 
 	var root map[string]any
 	buf, err := os.ReadFile(hooksPath) // #nosec G304 -- installer-chosen path, not user input.
@@ -262,7 +311,9 @@ func MergeHooksJSONHook(hooksPath, hookPath string) error {
 				continue
 			}
 			if cmd, _ := ho["command"].(string); isThliboCommand(cmd) {
-				ho["command"] = hookPath
+				// In place, and to the command for THIS host: an entry
+				// naming the other variant is stale, not a duplicate.
+				ho["command"] = command
 				ho["type"] = "command"
 				inner[i] = ho
 				return writeJSON(hooksPath, root)
@@ -272,7 +323,7 @@ func MergeHooksJSONHook(hooksPath, hookPath string) error {
 
 	post = append(post, map[string]any{
 		"matcher": "^Bash$",
-		"hooks":   []any{map[string]any{"type": "command", "command": hookPath}},
+		"hooks":   []any{map[string]any{"type": "command", "command": command}},
 	})
 	hooks["PostToolUse"] = post
 	return writeJSON(hooksPath, root)
@@ -321,32 +372,56 @@ func writeJSON(path string, root map[string]any) error {
 // no-op. Non-destructive: we only ever append; existing content is
 // untouched.
 func MergeConfigTOMLHook(configPath, hookPath string) error {
-	hookPath = normalisePath(hookPath)
+	command := buildHookCommand(hookPath)
 
 	existing, err := readFileOrEmpty(configPath)
 	if err != nil {
 		return err
 	}
 
-	// Idempotent: a prior thlibo hook (recognised by the script marker)
-	// means nothing to do — leave the file byte-for-byte unchanged.
-	if strings.Contains(normalisePath(existing), hookMarker) {
+	cmdLine := "command = " + tomlLiteral(command)
+
+	// A prior thlibo hook is recognised by the script marker on a
+	// `command =` assignment, and there are two cases. An entry naming
+	// THIS host's script is already right: leave the file byte-for-byte
+	// unchanged. An entry naming the other variant is stale, and gets
+	// rewritten in place rather than appended beside — markers identify a
+	// hook by FILE, so appending would leave the broken hook declared and
+	// firing next to the new one (#128).
+	//
+	// Scoping the match to `command =` lines is also what keeps an inert
+	// [hooks.state.'…thlibo-rewrite-codex.sh:post_tool_use:0:0'] record
+	// from reading as an installed hook: Codex keys that trust table by
+	// the defining file and leaves the entry behind after the hook goes,
+	// and a whole-file substring match would then make install a silent
+	// no-op. We rewrite every matching line, since the append path below
+	// only ever writes one.
+	lines := strings.Split(existing, "\n")
+	rewrote, correct := false, false
+	for i, line := range lines {
+		body, cr := splitCR(line)
+		t := strings.TrimSpace(body)
+		if !isTOMLCommandAssignment(t) || !containsThliboMarker(t) {
+			continue
+		}
+		// Unescape before normalising, not after: normalisePath would turn
+		// a `\"` escape into `/"` and the comparison would never match.
+		if strings.Contains(normalisePath(unescapeTOMLQuotes(t)), command) {
+			correct = true
+			continue
+		}
+		indent := body[:len(body)-len(strings.TrimLeft(body, " \t"))]
+		lines[i] = indent + cmdLine + cr
+		rewrote = true
+	}
+	switch {
+	case rewrote:
+		return writeConfigTOML(configPath, strings.Join(lines, "\n"))
+	case correct:
 		return nil
 	}
 
-	// TOML single-quoted (literal) string: no escapes are processed, so
-	// a Windows path's backslashes are safe. A literal string cannot
-	// contain a single quote; our install paths never do, but guard by
-	// falling back to a double-quoted string with backslashes escaped if
-	// one somehow appears.
-	var cmdLit string
-	if strings.Contains(hookPath, "'") {
-		cmdLit = `"` + strings.ReplaceAll(hookPath, `\`, `\\`) + `"`
-	} else {
-		cmdLit = "'" + hookPath + "'"
-	}
-
-	block := "\n[[hooks.PostToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PostToolUse.hooks]]\ntype = \"command\"\ncommand = " + cmdLit + "\n"
+	block := "\n[[hooks.PostToolUse]]\nmatcher = \"^Bash$\"\n\n[[hooks.PostToolUse.hooks]]\ntype = \"command\"\n" + cmdLine + "\n"
 
 	// Ensure a newline boundary before the appended block so we don't
 	// glue onto a trailing partial line.
@@ -356,13 +431,64 @@ func MergeConfigTOMLHook(configPath, hookPath string) error {
 	}
 	out += block
 
+	return writeConfigTOML(configPath, out)
+}
+
+func writeConfigTOML(configPath, content string) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
 		return fmt.Errorf("codex: create config dir: %w", err)
 	}
-	if err := os.WriteFile(configPath, []byte(out), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("codex: write %s: %w", configPath, err)
 	}
 	return nil
+}
+
+// tomlLiteral quotes a command as a TOML single-quoted (literal) string:
+// no escapes are processed, so a Windows path's backslashes and the
+// double quotes around a .ps1 path are both safe. A literal string cannot
+// contain a single quote; our install paths never do, but guard by
+// falling back to a basic string with backslashes and quotes escaped if
+// one somehow appears.
+func tomlLiteral(s string) string {
+	if !strings.Contains(s, "'") {
+		return "'" + s + "'"
+	}
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
+}
+
+// splitCR separates a line's content from a trailing carriage return, so
+// an in-place rewrite can put it back.
+//
+// A config.toml on Windows is often CRLF, and we split the file on "\n".
+// Writing the new line without the "\r" leaves a line holding nothing but
+// a carriage return, which a strict TOML parser rejects as invalid
+// whitespace — thlibo would have corrupted the user's config.
+func splitCR(line string) (body, cr string) {
+	if strings.HasSuffix(line, "\r") {
+		return strings.TrimSuffix(line, "\r"), "\r"
+	}
+	return line, ""
+}
+
+// isTOMLCommandAssignment reports whether a trimmed line assigns the
+// `command` key. It matches the assignment, not a substring, so a key
+// like `command_args` doesn't trip it.
+func isTOMLCommandAssignment(trimmed string) bool {
+	rest, ok := strings.CutPrefix(trimmed, "command")
+	if !ok {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimLeft(rest, " \t"), "=")
+}
+
+// unescapeTOMLQuotes undoes basic-string quote escaping so a command that
+// Codex re-serialised (`"powershell … -File \"C:/…\""`) still compares
+// equal to the one we would write as a literal string.
+func unescapeTOMLQuotes(s string) string {
+	return strings.ReplaceAll(s, `\"`, `"`)
 }
 
 // RemoveStaleHooksJSON removes a previously-installed thlibo PostToolUse
@@ -390,9 +516,9 @@ func RemoveStaleHooksJSON(hooksPath string) error {
 	if len(buf) == 0 {
 		return nil
 	}
-	// Fast path: if our marker isn't even in the file, nothing to do —
+	// Fast path: if neither marker is in the file, nothing to do —
 	// avoids rewriting (and reformatting) a file we don't own.
-	if !strings.Contains(normalisePath(string(buf)), hookMarker) {
+	if !containsThliboMarker(string(buf)) {
 		return nil
 	}
 
@@ -429,7 +555,7 @@ func RemoveStaleHooksJSON(hooksPath string) error {
 				continue
 			}
 			cmd, _ := ho["command"].(string)
-			if strings.Contains(normalisePath(cmd), hookMarker) {
+			if containsThliboMarker(cmd) {
 				continue // drop our stale entry
 			}
 			keptInner = append(keptInner, h)
@@ -566,16 +692,18 @@ func ensureCodexHooksTrue(content string) (string, bool, error) {
 		// [features] exists — look for the canonical key or the alias.
 		// If either is already enabled, we're done (don't duplicate).
 		for j := featuresStart + 1; j < featuresEnd; j++ {
-			t := strings.TrimSpace(lines[j])
+			body, cr := splitCR(lines[j])
+			t := strings.TrimSpace(body)
 			if key, ok := hooksFlagKey(t); ok {
 				if hooksFlagEnabled(t) {
 					return content, false, nil
 				}
 				// Key present but not true — set the canonical key true
 				// in place, preserving the line's original indentation
-				// (and which key name the user already had).
-				indent := lines[j][:len(lines[j])-len(strings.TrimLeft(lines[j], " \t"))]
-				lines[j] = indent + key + " = true"
+				// (and which key name the user already had). The trailing
+				// "\r" goes back too; see splitCR.
+				indent := body[:len(body)-len(strings.TrimLeft(body, " \t"))]
+				lines[j] = indent + key + " = true" + cr
 				return strings.Join(lines, "\n"), true, nil
 			}
 		}
