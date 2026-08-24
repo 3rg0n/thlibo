@@ -66,13 +66,20 @@ func TestEmbeddedPS1HookShape(t *testing.T) {
 	// "?" and the model reads mangled output. Measured on this repo's own
 	// `go test -v`: `2048 windows × 256 dims` arrived as `2048 windows ?
 	// 256 dims`.
+	// [Console]::OutputEncoding is the third leg and not cosmetic: it also
+	// decodes a child process's stdout, so without it `thlibo compress`'s
+	// UTF-8 answer comes back through the OEM code page (#134).
 	for _, want := range []string{
 		"$OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+		"try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false) } catch { }",
 		"OpenStandardInput()",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("ps1 hook missing UTF-8 handling %q", want)
 		}
+	}
+	if strings.Contains(s, "[Console]::In.ReadToEnd()") {
+		t.Error("ps1 hook reads stdin via [Console]::In, which decodes with the OEM code page")
 	}
 }
 

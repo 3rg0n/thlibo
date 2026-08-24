@@ -30,6 +30,9 @@ $ErrorActionPreference = 'SilentlyContinue'
 # replaces every non-ASCII character with "?". Measured: `2048 windows ×
 # 256 dims` reached `thlibo compress` as `2048 windows ? 256 dims`, and
 # the model then read the mangled text. Set UTF-8 in both directions.
+# [Console]::OutputEncoding is the second half and not cosmetic — it also
+# decodes a child process's stdout, so without it `thlibo compress`'s
+# UTF-8 answer comes back through the OEM code page (#134).
 # [Console]::OutputEncoding calls SetConsoleOutputCP, which throws when
 # no console is attached, so it degrades on its own rather than taking
 # the hook down.

@@ -12,6 +12,19 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
+# UTF-8 on every encoding this hook touches. PowerShell 5.1 defaults all
+# three to a non-UTF-8 code page while the envelope is UTF-8:
+# [Console]::InputEncoding decodes stdin (the OEM page, IBM437 on a default
+# box), [Console]::OutputEncoding decodes a child process's stdout (same
+# page), and $OutputEncoding encodes what we pipe to a child (ASCII). A
+# file_path holding an accented character would otherwise be corrupted
+# before Test-Path ever sees it, and the case directory `thlibo case`
+# returns would be corrupted on the way back. Assigning
+# [Console]::OutputEncoding calls SetConsoleOutputCP, which throws when no
+# console is attached, so it degrades on its own (#134).
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false) } catch { }
+
 # Kill switch — same ergonomics as the Bash/PowerShell Exec hooks.
 $disabled = $env:THLIBO_DISABLED
 if ($disabled -eq '1' -or $disabled -eq 'true' -or $disabled -eq 'on' -or $disabled -eq 'yes') {
@@ -21,7 +34,10 @@ if ($disabled -eq '1' -or $disabled -eq 'true' -or $disabled -eq 'on' -or $disab
 $thlibo = Get-Command thlibo -ErrorAction SilentlyContinue
 if (-not $thlibo) { exit 0 }
 
-$raw = [Console]::In.ReadToEnd()
+# Explicit UTF-8 reader; [Console]::In would use the OEM page (#134).
+$stdinReader = [System.IO.StreamReader]::new(
+    [Console]::OpenStandardInput(), [System.Text.UTF8Encoding]::new($false))
+$raw = $stdinReader.ReadToEnd()
 if (-not $raw) { exit 0 }
 
 try { $obj = $raw | ConvertFrom-Json } catch { exit 0 }

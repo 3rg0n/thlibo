@@ -362,6 +362,28 @@ registry would let the model select `shorthand` for tool output (ADR
   Code, compression rides the preToolUse wrap since its postToolUse
   can't replace output. `--copilot` covers both; no `--vscode` flag.
 
+**Every `.ps1` hook must set UTF-8 on all three encodings, and this is a
+correctness requirement, not tidiness (#134).** PowerShell 5.1 — the
+`powershell` the hooks are registered under — defaults each one to a
+non-UTF-8 code page while the envelope is UTF-8: `[Console]::InputEncoding`
+decodes stdin (the OEM page, IBM437 on a default box),
+`[Console]::OutputEncoding` decodes a **child process's stdout**, and
+`$OutputEncoding` encodes what the hook **pipes to** a child (ASCII). Missing
+any of the three corrupts a hook that carries non-ASCII, and three of the six
+hooks rewrite tool *input* — so the corrupted command, path, or file content
+is the one that runs or lands on disk. Measured before the fix:
+`git log --grep=café` reached the Bash tool as `git log --grep=caf└⌐`, a Read
+path with an accent failed `Test-Path` and the hook became a silent no-op, and
+`Naïve résumé façade` was written to disk as `naive r??sum?? fa??ade`.
+Fail-open cannot help — a corrupted-but-valid command is indistinguishable
+from a correct one. So read stdin through an explicit UTF-8 `StreamReader`
+over `[Console]::OpenStandardInput()`, never `[Console]::In`, and set both
+encoding variables. Keep the `try`/`catch` around the
+`[Console]::OutputEncoding` assignment: it calls `SetConsoleOutputCP`, which
+throws with no console attached. `encoding_test.go` in each adapter asserts
+the lines are present in the embedded bytes, because a dropped line is silent
+on any test input that happens to be ASCII.
+
 ## Build, test, scan
 
 ```
