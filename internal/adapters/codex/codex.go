@@ -595,6 +595,224 @@ func RemoveStaleHooksJSON(hooksPath string) error {
 	return nil
 }
 
+// RemoveHooks undoes InstallHook: it strips thlibo's PostToolUse hook
+// from BOTH representations and deletes both hook scripts from hookDir.
+//
+// Both representations, unconditionally, because InstallHook picks one per
+// layer by detection (#170) — so uninstall cannot know which one a given
+// machine got without repeating the detection against a config the user
+// may since have changed. Removing our entry from each is idempotent and
+// touches nothing else.
+//
+// Both script names, for #128's reason: markers identify a hook by FILE,
+// and a machine that has been through both a .sh-era and a .ps1-era
+// install can hold either name on disk.
+//
+// [features] hooks = true is deliberately LEFT SET. Codex ignores every
+// hook in the layer without it, and git-ai / taco write their hooks into
+// the same layer — clearing it on our way out would silently disable
+// theirs.
+//
+// Every step is best-effort and independent: a failure on one is recorded
+// and the rest still run, so a read-only config.toml can't leave the hook
+// scripts on disk.
+func RemoveHooks(configPath, hooksJSONPath, hookDir string) error {
+	var firstErr error
+	record := func(err error) {
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	record(RemoveConfigTOMLHook(configPath))
+	record(RemoveStaleHooksJSON(hooksJSONPath))
+	if hookDir != "" {
+		for _, name := range []string{hookMarkerSh, hookMarkerPS1} {
+			if err := os.Remove(filepath.Join(hookDir, name)); err != nil && !os.IsNotExist(err) {
+				record(err)
+			}
+		}
+	}
+	if firstErr != nil {
+		return fmt.Errorf("codex: remove hooks: %w", firstErr)
+	}
+	return nil
+}
+
+// RemoveConfigTOMLHook removes thlibo's inline [[hooks.PostToolUse]] hook
+// from config.toml, plus the [hooks.state] trust record Codex keys by our
+// script path (which would otherwise outlive the file it names).
+//
+// No-ops when the file is absent, when no thlibo marker appears in it, or
+// when the marker appears only in a shape this function doesn't recognise
+// — in that last case the file is left byte-for-byte alone rather than
+// rewritten on a guess. Every other tool's hooks, and every unrelated key,
+// comment, and CRLF line ending, survive verbatim.
+func RemoveConfigTOMLHook(configPath string) error {
+	existing, err := readFileOrEmpty(configPath)
+	if err != nil {
+		return err
+	}
+	if existing == "" {
+		return nil
+	}
+	// Fast path: no marker anywhere means nothing of ours is declared, so
+	// don't rewrite (and reformat) a file we don't own.
+	if !containsThliboMarker(existing) {
+		return nil
+	}
+	updated, changed := removeInlineHookBlocks(existing)
+	if !changed {
+		return nil
+	}
+	return writeConfigTOML(configPath, updated)
+}
+
+// tomlSection is one [header] block: the header line plus every line up
+// to (not including) the next header. The first section is the preamble
+// before any header and has an empty name; it is never dropped.
+type tomlSection struct {
+	name  string // "hooks.PostToolUse" for "[[hooks.PostToolUse]]"
+	lines []string
+}
+
+// splitTOMLSections divides content into sections, preserving every line
+// exactly — Join("\n") over all sections' lines reproduces the input.
+func splitTOMLSections(content string) []tomlSection {
+	secs := []tomlSection{{}}
+	for _, line := range strings.Split(content, "\n") {
+		if name, ok := tomlSectionName(line); ok {
+			secs = append(secs, tomlSection{name: name})
+		}
+		secs[len(secs)-1].lines = append(secs[len(secs)-1].lines, line)
+	}
+	return secs
+}
+
+// tomlSectionName reads a section header's dotted key path, or reports
+// false for any other line.
+//
+// It requires the line to both start with "[" and end with "]" so an
+// array element on its own line inside a multi-line value can't read as a
+// header. Quoted path segments are kept as written, because Codex's
+// [hooks.state] keys are single-quoted paths.
+func tomlSectionName(line string) (string, bool) {
+	body, _ := splitCR(line)
+	t := strings.TrimSpace(body)
+	if !strings.HasPrefix(t, "[") || !strings.HasSuffix(t, "]") {
+		return "", false
+	}
+	t = strings.TrimSuffix(strings.TrimPrefix(t, "[["), "]]")
+	t = strings.TrimSuffix(strings.TrimPrefix(t, "["), "]")
+	t = strings.TrimSpace(t)
+	if t == "" {
+		return "", false
+	}
+	return t, true
+}
+
+// isHooksTable reports whether name is a hook-declaring table — [hooks],
+// [[hooks.PostToolUse]], [[hooks.PostToolUse.hooks]] — and not the
+// [hooks.state] trust bookkeeping.
+func isHooksTable(name string) bool {
+	if name != "hooks" && !strings.HasPrefix(name, "hooks.") {
+		return false
+	}
+	return !isHooksStateTable(name)
+}
+
+// isHooksStateTable reports whether name is Codex's per-hook trust
+// bookkeeping, whose keys are the defining file's path.
+func isHooksStateTable(name string) bool {
+	return name == "hooks.state" || strings.HasPrefix(name, "hooks.state.")
+}
+
+// sectionHasThliboCommand reports whether a section body assigns `command`
+// to one of our hook scripts. Scoped to the assignment for the same reason
+// MergeConfigTOMLHook is: a [hooks.state] key naming the script is not a
+// declared hook.
+func sectionHasThliboCommand(lines []string) bool {
+	for _, line := range lines {
+		body, _ := splitCR(line)
+		t := strings.TrimSpace(body)
+		if isTOMLCommandAssignment(t) && containsThliboMarker(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// removeInlineHookBlocks drops every section that declares a thlibo hook,
+// every [hooks.state] record naming one of our scripts, and any
+// [[hooks.Event]] group left with no hooks under it.
+//
+// The emptied-group rule matters because thlibo writes a two-table block:
+// the [[hooks.PostToolUse]] that carries `matcher` and the
+// [[hooks.PostToolUse.hooks]] that carries `command`. Removing only the
+// second leaves a matcher with nothing to run. The rule fires only when
+// the group had children and we dropped all of them, so a group thlibo
+// shares with another tool keeps both the group and that tool's hook.
+func removeInlineHookBlocks(content string) (string, bool) {
+	secs := splitTOMLSections(content)
+	drop := make([]bool, len(secs))
+	changed := false
+
+	for i, s := range secs {
+		if s.name == "" {
+			continue
+		}
+		ours := (isHooksTable(s.name) && sectionHasThliboCommand(s.lines)) ||
+			(isHooksStateTable(s.name) && containsThliboMarker(s.name))
+		if ours {
+			drop[i] = true
+			changed = true
+		}
+	}
+	if !changed {
+		return content, false
+	}
+
+	for i, s := range secs {
+		if drop[i] || !isHooksTable(s.name) {
+			continue
+		}
+		children, allDropped := 0, true
+		for j := i + 1; j < len(secs); j++ {
+			if !strings.HasPrefix(secs[j].name, s.name+".") {
+				break
+			}
+			children++
+			if !drop[j] {
+				allDropped = false
+			}
+		}
+		if children > 0 && allDropped {
+			drop[i] = true
+		}
+	}
+
+	var kept []string
+	for i, s := range secs {
+		if !drop[i] {
+			kept = append(kept, s.lines...)
+		}
+	}
+	return tidyTrailingBlank(strings.Join(kept, "\n")), true
+}
+
+// tidyTrailingBlank collapses the blank lines a removed trailing block
+// leaves behind into a single final newline. It drops whole blank lines
+// only — trailing whitespace on a line the user wrote is left alone.
+func tidyTrailingBlank(s string) string {
+	lines := strings.Split(s, "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
 // EnableHooksFeatureFlag ensures the Codex hooks feature flag is on in
 // the user's config.toml. Without it, Codex silently ignores every hook
 // it finds.
