@@ -19,6 +19,19 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
+# UTF-8 on every encoding this hook touches. PowerShell 5.1 defaults all
+# three to a non-UTF-8 code page while the envelope is UTF-8:
+# [Console]::InputEncoding decodes stdin (the OEM page, IBM437 on a default
+# box), [Console]::OutputEncoding decodes a child process's stdout (same
+# page), and $OutputEncoding encodes what we pipe to a child (ASCII).
+# Without this, an accented character in the command came back from
+# `thlibo rewrite` as two box-drawing characters and Copilot ran that
+# corrupted command via modifiedArgs. Assigning [Console]::OutputEncoding
+# calls SetConsoleOutputCP, which throws when no console is attached, so it
+# degrades on its own rather than taking the hook down (#134).
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false) } catch { }
+
 try {
     $disabled = $env:THLIBO_DISABLED
     if ($disabled -eq '1' -or $disabled -eq 'true' -or $disabled -eq 'on' -or $disabled -eq 'yes') {
@@ -31,7 +44,10 @@ try {
         exit 0
     }
 
-    $raw = [Console]::In.ReadToEnd()
+    # Explicit UTF-8 reader; [Console]::In would use the OEM page (#134).
+    $stdinReader = [System.IO.StreamReader]::new(
+        [Console]::OpenStandardInput(), [System.Text.UTF8Encoding]::new($false))
+    $raw = $stdinReader.ReadToEnd()
     if (-not $raw) { exit 0 }
     $obj = $raw | ConvertFrom-Json
 

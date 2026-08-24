@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Every PowerShell hook read the tool envelope in the wrong encoding, so
+  non-ASCII characters were corrupted in commands, file paths and file
+  content (#134).** PowerShell 5.1 — the `powershell` these hooks are
+  registered under — defaults all three encodings on the hook path to a
+  non-UTF-8 code page while the envelope is UTF-8: `[Console]::InputEncoding`
+  decodes stdin (the OEM page, IBM437 on a default box),
+  `[Console]::OutputEncoding` decodes a child process's stdout, and
+  `$OutputEncoding` encodes what the hook pipes to a child (ASCII). All five
+  remaining PowerShell hooks now set UTF-8 on all three; the Codex hook
+  already did after #126.
+
+  This was not confined to output the model reads. Three of the five rewrite
+  the **input** of a tool that then runs, so a corrupted command or path was
+  the one that executed:
+
+  - Claude Code Bash/PowerShell hook: `git log --grep=café` came back as
+    `git log --grep=caf└⌐`, and Claude Code ran that.
+  - Claude Code Read hook: a path holding a non-ASCII character failed
+    `Test-Path` and the hook exited silently, so the file was never
+    compressed — a permanent no-op on those paths.
+  - Claude Code Write/Edit hook: `The café measured 2048 × 256 dims. Naïve
+    résumé façade.` was rewritten to `CAF measured 2048..256 dims. naive
+    r??sum?? fa??ade.` and written to disk.
+  - Copilot CLI `preToolUse`: same corrupted command, via `modifiedArgs`.
+  - Copilot CLI `postToolUse`: the compressed summary carried `caf??` and
+    `2048 ?? 256`, and the mangling also changed the summary's structure.
+
+  No injection was possible: IBM437 maps `0x00`–`0x7F` to ASCII and UTF-8
+  multi-byte sequences use only bytes `>= 0x80`, so no corrupted byte could
+  become `"` or `\` and break out of the JSON. The failure was corruption,
+  not injection. Fail-open could not help either — a corrupted-but-valid
+  command is indistinguishable from a correct one.
 - **The Codex hook on Windows was a Bash script, so it never ran (#126).**
   `install --codex` registered `thlibo-rewrite-codex.sh` on every host. A bare
   `.sh` path in a Codex `command` is resolved through the `.sh` file

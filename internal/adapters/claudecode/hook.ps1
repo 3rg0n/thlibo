@@ -13,6 +13,20 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
+# UTF-8 on every encoding this hook touches. PowerShell 5.1 -- the
+# `powershell` this hook is registered under -- defaults all three to a
+# non-UTF-8 code page while the envelope is UTF-8: [Console]::InputEncoding
+# decodes stdin (the OEM page, IBM437 on a default box),
+# [Console]::OutputEncoding decodes a child process's stdout (same page),
+# and $OutputEncoding encodes what we pipe to a child (ASCII). Measured
+# before this was set: `thlibo rewrite` returned an accented character in
+# the command as two box-drawing characters, and Claude Code then ran that
+# corrupted command. Assigning [Console]::OutputEncoding calls
+# SetConsoleOutputCP, which throws when no console is attached, so it
+# degrades on its own rather than taking the hook down (#134).
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false) } catch { }
+
 # Per-session kill switch. Users who want to bypass thlibo for one
 # session set $env:THLIBO_DISABLED=1 without needing to uninstall.
 # See THREAT_MODEL.md finding #16.
@@ -28,8 +42,12 @@ if (-not $thlibo) {
     exit 0
 }
 
-# Slurp stdin. PowerShell's $input is a pipeline; read it all.
-$raw = [Console]::In.ReadToEnd()
+# Slurp stdin. PowerShell's $input is a pipeline; read it all. Use an
+# explicit UTF-8 reader rather than [Console]::In, which decodes with
+# [Console]::InputEncoding -- the OEM page (#134).
+$stdinReader = [System.IO.StreamReader]::new(
+    [Console]::OpenStandardInput(), [System.Text.UTF8Encoding]::new($false))
+$raw = $stdinReader.ReadToEnd()
 if (-not $raw) { exit 0 }
 
 try {
