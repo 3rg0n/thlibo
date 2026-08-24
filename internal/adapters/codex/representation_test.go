@@ -24,7 +24,7 @@ func layer(t *testing.T) (string, string, string) {
 	dir := t.TempDir()
 	return filepath.Join(dir, "config.toml"),
 		filepath.Join(dir, "hooks.json"),
-		filepath.Join(dir, hookMarker)
+		filepath.Join(dir, hookMarkerSh)
 }
 
 // TestDetectRepresentationEmptyLayer: nothing installed anywhere → inline,
@@ -177,7 +177,7 @@ func TestInstallHookMirrorCaseLeavesOneRepresentation(t *testing.T) {
 	}
 
 	hjBody, _ := os.ReadFile(hj)
-	if !strings.Contains(normalisePath(string(hjBody)), hookMarker) {
+	if !containsThliboMarker(string(hjBody)) {
 		t.Errorf("hooks.json missing thlibo hook:\n%s", hjBody)
 	}
 	// The other tool's PreToolUse hook survives.
@@ -200,7 +200,7 @@ func TestInstallHookInlineCaseUnchanged(t *testing.T) {
 		t.Fatalf("rep = %v, want inline", rep)
 	}
 	cfgBody, _ := os.ReadFile(cfg)
-	if !strings.Contains(normalisePath(string(cfgBody)), hookMarker) {
+	if !containsThliboMarker(string(cfgBody)) {
 		t.Errorf("config.toml missing inline thlibo hook:\n%s", cfgBody)
 	}
 	if _, err := os.Stat(hj); !os.IsNotExist(err) {
@@ -222,7 +222,7 @@ func TestMergeHooksJSONHookIdempotent(t *testing.T) {
 	}
 
 	buf, _ := os.ReadFile(hj)
-	if n := strings.Count(normalisePath(string(buf)), hookMarker); n != 1 {
+	if n := strings.Count(normalisePath(string(buf)), hookMarkerSh); n != 1 {
 		t.Errorf("thlibo hook appears %d times, want 1:\n%s", n, buf)
 	}
 	if !strings.Contains(string(buf), "other.exe") {
