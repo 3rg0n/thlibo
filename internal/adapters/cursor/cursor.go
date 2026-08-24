@@ -175,6 +175,122 @@ func upsertPreToolUseHook(root map[string]any, matcher, marker, hookPath string)
 	hooks["preToolUse"] = pre
 }
 
+// RemoveHooks undoes MergeHooksJSON + WriteHookScript: it strips thlibo's
+// preToolUse entries from hooksPath and deletes both hook scripts from
+// hookDir.
+//
+// Deleting the scripts without unregistering them is the worse of the two
+// half-jobs, and leaving them registered is the other: Cursor keeps
+// running a hook whose command it still holds, so thlibo would keep
+// rewriting Shell commands and Read paths after uninstall reported
+// complete (#137). Both halves happen here so neither can be forgotten.
+//
+// Each step is independent — a failure on one is recorded and the rest
+// still run.
+func RemoveHooks(hooksPath, hookDir string) error {
+	var firstErr error
+	record := func(err error) {
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	record(removeHooksJSONEntries(hooksPath))
+	if hookDir != "" {
+		for _, name := range []string{shellHookMarker, readHookMarker} {
+			if err := os.Remove(filepath.Join(hookDir, name)); err != nil && !os.IsNotExist(err) {
+				record(err)
+			}
+		}
+	}
+	if firstErr != nil {
+		return fmt.Errorf("cursor: remove hooks: %w", firstErr)
+	}
+	return nil
+}
+
+// removeHooksJSONEntries drops every hook entry naming one of thlibo's
+// scripts, from every event — not just preToolUse, so an entry a past
+// version registered elsewhere goes too.
+//
+// No-ops when the file is absent or holds no thlibo marker. Leaves a
+// malformed file untouched (returning nil) rather than risk clobbering
+// user data: the same call thlibo makes on install refuses to parse it
+// too, so the user's own editor is the right place to fix it.
+//
+// Unrelated keys survive, including Cursor's required top-level "version".
+// That means the file is left as a `{"version": 1}` husk when thlibo's
+// were the only hooks in it. The husk declares nothing and Cursor treats
+// it as no hooks; deleting a file thlibo does not own is the bigger
+// action, so it stays.
+func removeHooksJSONEntries(hooksPath string) error {
+	buf, err := os.ReadFile(hooksPath) // #nosec G304 -- installer-chosen path, not user input.
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("cursor: read %s: %w", hooksPath, err)
+	}
+	if len(buf) == 0 || !containsThliboMarker(string(buf)) {
+		return nil
+	}
+
+	var root map[string]any
+	if err := json.Unmarshal(buf, &root); err != nil {
+		return nil
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	changed := false
+	for event, entries := range hooks {
+		arr, ok := entries.([]any)
+		if !ok {
+			continue
+		}
+		kept := make([]any, 0, len(arr))
+		for _, h := range arr {
+			obj, ok := h.(map[string]any)
+			if ok {
+				if cmd, _ := obj["command"].(string); containsThliboMarker(cmd) {
+					changed = true
+					continue
+				}
+			}
+			kept = append(kept, h)
+		}
+		if len(kept) == 0 {
+			delete(hooks, event)
+			continue
+		}
+		hooks[event] = kept
+	}
+	if !changed {
+		return nil
+	}
+	if len(hooks) == 0 {
+		delete(root, "hooks")
+	}
+
+	encoded, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("cursor: marshal %s: %w", hooksPath, err)
+	}
+	if err := os.WriteFile(hooksPath, encoded, 0o600); err != nil {
+		return fmt.Errorf("cursor: write %s: %w", hooksPath, err)
+	}
+	return nil
+}
+
+// containsThliboMarker reports whether s names either hook script. Both
+// names are always checked: a command string carries only the file, so
+// matching one name would leave the other registered and firing.
+func containsThliboMarker(s string) bool {
+	s = normalisePath(s)
+	return strings.Contains(s, shellHookMarker) || strings.Contains(s, readHookMarker)
+}
+
 // hookCommand builds the hooks.json "command" string for a hook script.
 //
 // Cursor hands this string to the OS to execute. On Unix the script's

@@ -364,11 +364,13 @@ thlibo uninstall            # remove hooks + scripts; leave ~/.thlibo
 thlibo uninstall --purge    # also delete ~/.thlibo (processors + state)
 ```
 
-`uninstall` removes the Claude Code hook entries and thlibo's own
-`~/.copilot/hooks/thlibo.json` (leaving any other tool's hook file
-untouched). It does **not** unpick the inline hook thlibo appended to
-`~/.codex/config.toml` or the Cursor `hooks.json` entry — remove those by
-hand if you installed them.
+`uninstall` unregisters thlibo from every client it can install into —
+Claude Code's `settings.json`, the inline `[[hooks.PostToolUse]]` block in
+`~/.codex/config.toml`, the `preToolUse` entries in `~/.cursor/hooks.json`,
+and thlibo's own `~/.copilot/hooks/thlibo.json` — and deletes the hook
+scripts. Every client is cleaned whatever flags you installed with; no
+flag is needed. Another tool's hooks in the same files are left untouched,
+including Codex's `[features] hooks = true`, which those hooks need.
 
 Inferd is left running because other tools may use it. To remove
 inferd separately, use inferd's own uninstaller — see

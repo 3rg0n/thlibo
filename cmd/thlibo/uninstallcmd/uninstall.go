@@ -1,7 +1,14 @@
 // Package uninstallcmd implements `thlibo uninstall`: the clean
-// reverse of `thlibo install`. Removes the PreToolUse hook entries
-// from Claude Code's settings.json, deletes the hook scripts from
-// ~/.thlibo/hooks/, and unregisters the daemon's autostart unit.
+// reverse of `thlibo install`. Removes thlibo's hook registrations from
+// every client install can write — Claude Code's settings.json, Codex's
+// config.toml, Cursor's hooks.json, Copilot's own hook file — deletes the
+// hook scripts from ~/.thlibo/hooks/, and unregisters the daemon's
+// autostart unit.
+//
+// Every client is cleaned unconditionally, whatever flags install was
+// given. Removing a script while leaving its registration behind is the
+// failure #137 records, and the reverse (unregistering but leaving the
+// script) is only litter — so each adapter's remover does both halves.
 //
 // Files deliberately left alone:
 //
@@ -22,7 +29,9 @@ import (
 	"path/filepath"
 
 	"github.com/3rg0n/thlibo/internal/adapters/claudecode"
+	"github.com/3rg0n/thlibo/internal/adapters/codex"
 	"github.com/3rg0n/thlibo/internal/adapters/copilot"
+	"github.com/3rg0n/thlibo/internal/adapters/cursor"
 	"github.com/3rg0n/thlibo/internal/install"
 )
 
@@ -43,6 +52,11 @@ func Run(argv []string) int {
 		purge         bool
 		skipAutostart bool
 		copilotFlag   bool // accepted for symmetry with `install --copilot` (#75)
+		codexFlag     bool // accepted for symmetry with `install --codex` (#137)
+		cursorFlag    bool // accepted for symmetry with `install --cursor` (#137)
+		codexPath     string
+		cursorPath    string
+		copilotPath   string
 	)
 	fs.BoolVar(&dryRun, "dry-run", false, "report planned actions without applying them")
 	fs.StringVar(&hookDir, "hook-dir", "", "override hook dir (default: ~/.thlibo/hooks)")
@@ -54,10 +68,24 @@ func Run(argv []string) int {
 	// always removes thlibo's own Copilot hook file if present — the flag
 	// just documents intent.
 	fs.BoolVar(&copilotFlag, "copilot", false, "(accepted; uninstall always removes the Copilot hook file if present)")
+	// Same for --codex / --cursor. Uninstall always removes thlibo's own
+	// entries from those configs, so the flags only document intent — but
+	// they must EXIST, or `thlibo uninstall --cursor` (the obvious inverse
+	// of the documented install command) dies at flag parsing with exit 2
+	// and removes nothing (#137).
+	fs.BoolVar(&codexFlag, "codex", false, "(accepted; uninstall always removes thlibo's Codex hook if present)")
+	fs.BoolVar(&cursorFlag, "cursor", false, "(accepted; uninstall always removes thlibo's Cursor hooks if present)")
+	// Path overrides, mirroring install's. --codex-hooks names the
+	// config.toml the inline hook lives in, matching install's meaning of
+	// the same flag. Without these, uninstall cannot reach a
+	// non-default config, so an install driven by them was unremovable.
+	fs.StringVar(&codexPath, "codex-hooks", "", "override Codex config.toml path (default: ~/.codex/config.toml)")
+	fs.StringVar(&cursorPath, "cursor-hooks", "", "override Cursor hooks.json path (default: ~/.cursor/hooks.json)")
+	fs.StringVar(&copilotPath, "copilot-hooks", "", "override Copilot hook file path (default: ~/.copilot/hooks/thlibo.json)")
 	if err := fs.Parse(argv); err != nil {
 		return ExitUsage
 	}
-	_ = copilotFlag
+	_, _, _ = copilotFlag, codexFlag, cursorFlag
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -79,12 +107,30 @@ func Run(argv []string) int {
 	// ~/.claude/skills/caselog/ — installed by `thlibo install`.
 	skillDir := filepath.Join(filepath.Dir(settingsPath), "skills", "caselog")
 	// ~/.copilot/hooks/thlibo.json — installed by `thlibo install --copilot`.
-	copilotHooksJSON := filepath.Join(home, ".copilot", "hooks", "thlibo.json")
+	copilotHooksJSON := copilotPath
+	if copilotHooksJSON == "" {
+		copilotHooksJSON = filepath.Join(home, ".copilot", "hooks", "thlibo.json")
+	}
+	// ~/.codex/config.toml — holds the inline [[hooks.PostToolUse]] block.
+	// The sibling hooks.json is derived from it exactly as install derives
+	// it, so an override reaches both representations.
+	codexConfigTOML := codexPath
+	if codexConfigTOML == "" {
+		codexConfigTOML = filepath.Join(home, ".codex", "config.toml")
+	}
+	codexHooksJSON := filepath.Join(filepath.Dir(codexConfigTOML), "hooks.json")
+	// ~/.cursor/hooks.json — holds the two preToolUse entries.
+	cursorHooksJSON := cursorPath
+	if cursorHooksJSON == "" {
+		cursorHooksJSON = filepath.Join(home, ".cursor", "hooks.json")
+	}
 
 	fmt.Println("thlibo uninstall plan:")
 	fmt.Println("  remove hook entries from:", settingsPath)
 	fmt.Println("  delete hook scripts in:  ", hookDir)
 	fmt.Println("  remove Copilot hook file:", copilotHooksJSON, "(if present)")
+	fmt.Println("  remove Codex hook from:  ", codexConfigTOML, "(if present)")
+	fmt.Println("  remove Cursor hooks from:", cursorHooksJSON, "(if present)")
 	if purge {
 		fmt.Println("  purge ~/.thlibo:          yes (processors, models, logs)")
 	} else {
@@ -132,6 +178,26 @@ func Run(argv []string) int {
 		fmt.Fprintln(os.Stderr, "uninstall: remove Copilot hooks (non-fatal):", err)
 	} else {
 		fmt.Println("  removed Copilot hooks (if installed)")
+	}
+
+	// 2a″. Remove the Codex and Cursor hooks — the config entries AND the
+	// hook scripts, which each adapter owns the names of.
+	//
+	// Both run unconditionally, for the reason #137 was filed: uninstall
+	// used to touch neither, so it deleted the six Claude Code scripts,
+	// printed "complete", and left thlibo rewriting every Codex tool result
+	// and every Cursor Shell command — with the binary still on PATH, those
+	// hooks kept working. Skipping them behind a flag would keep that shape
+	// for anyone who forgets the flag. Non-fatal, like every other step.
+	if err := codex.RemoveHooks(codexConfigTOML, codexHooksJSON, hookDir); err != nil {
+		fmt.Fprintln(os.Stderr, "uninstall: remove Codex hook (non-fatal):", err)
+	} else {
+		fmt.Println("  removed Codex hook (if installed); left [features] hooks = true for other tools")
+	}
+	if err := cursor.RemoveHooks(cursorHooksJSON, hookDir); err != nil {
+		fmt.Fprintln(os.Stderr, "uninstall: remove Cursor hooks (non-fatal):", err)
+	} else {
+		fmt.Println("  removed Cursor hooks (if installed)")
 	}
 
 	// 2b. Remove the /caselog skill directory. RemoveAll is a

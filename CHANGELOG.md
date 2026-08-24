@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`uninstall` left the Codex and Cursor hooks registered, so thlibo kept
+  intercepting tool calls after it reported complete (#137).** `uninstall`
+  imported the Claude Code and Copilot adapters only. It never touched
+  `~/.codex/config.toml` or `~/.cursor/hooks.json`, and its script-delete loop
+  listed the six Claude Code hook filenames and none of the four Codex/Cursor
+  ones. So both configs kept their entries, both entries kept pointing at
+  scripts that were still on disk, and the scripts resolve `thlibo` from PATH —
+  which `uninstall` does not remove. Compression stayed on in both clients.
+  `--purge` produced the other half of the problem: it deleted `~/.thlibo`, so
+  the surviving entries then named files that no longer existed.
+
+  `codex.RemoveHooks` and `cursor.RemoveHooks` now do both halves — unregister
+  and delete the script — and `uninstall` calls them unconditionally, whatever
+  flags the install used. Removing a script while leaving its registration is
+  the failure above, so neither adapter exposes one without the other. What
+  survives is deliberate: another tool's hooks in the same files, and Codex's
+  `[features] hooks = true`, without which Codex ignores every hook in that
+  layer including git-ai's and taco's. The Codex remover works on whole
+  sections, so it takes thlibo's `matcher` half along with its `command` half
+  rather than leaving a matcher with nothing to run, drops the `[hooks.state]`
+  trust record that names the deleted script, preserves CRLF line endings, and
+  leaves a config holding no thlibo entry byte-for-byte unchanged.
+
+  `uninstall` also gained `--codex`, `--cursor` and the `--codex-hooks`,
+  `--cursor-hooks`, `--copilot-hooks` path overrides that `install` already
+  had. `thlibo uninstall --cursor` used to fail at flag parsing with exit 2 and
+  remove nothing, and an install driven to a non-default config path had no
+  matching uninstall.
 - **`install` and `upgrade` misread inferd's version, so both stopped a healthy
   daemon and overwrote its binary every time (#132).** `readBinaryVersion`
   returned the last whitespace token of the whole `--version` output. That was
