@@ -1,0 +1,115 @@
+# Checks that .signpost/ still describes this repository. Writes nothing.
+#
+# Adapted from `signpost init github` (signpost v0.2.0). The stock workflow
+# has a push job that rebuilds the bundle and pushes it to main; main is
+# branch-protected here (PR + required checks), so that push would be
+# rejected. Instead the bundle is rebuilt by hand in a PR (see CLAUDE.md,
+# "Build, test, scan") and this workflow only verifies it:
+#
+#   pr     — on pull requests. Compares the bundle's content as of the
+#            commit the bundle records (-as-of-bundle). A PR that breaks
+#            the bundle fails; one that only moves the commit does not.
+#   stale  — on push to main. Strict verify: red means the code has moved
+#            past the bundle and it is time to rebuild. Not a required
+#            check, so it never blocks a merge.
+#
+# Both pass -no-history, matching the build: a squash merge lands code and
+# bundle in one commit, and only a structure-only bundle verifies after it.
+name: signpost
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signpost-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned: the bundle's bytes depend on the signpost version, so a floating
+  # version would make verify fail on a day nothing in this repo changed.
+  # Bump it together with a rebuild of .signpost/.
+  SIGNPOST_VERSION: v0.2.0
+
+jobs:
+  pr:
+    name: the bundle still describes this tree
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install signpost
+        run: |
+          set -euo pipefail
+          # Fetched directly and checked against the release's checksums.txt
+          # before anything is unpacked, rather than `curl | sh`.
+          name="signpost_${SIGNPOST_VERSION}_linux_amd64"
+          asset="${name}.tar.gz"
+          base="https://github.com/3rg0n/signpost/releases/download/${SIGNPOST_VERSION}"
+          mkdir -p "${RUNNER_TEMP}/bin" "${RUNNER_TEMP}/dl"
+          cd "${RUNNER_TEMP}/dl"
+          curl -fsSL -O "${base}/${asset}"
+          curl -fsSL -O "${base}/checksums.txt"
+          grep " [*]\{0,1\}${asset}\$" checksums.txt >expected.txt
+          sha256sum -c expected.txt
+          tar -xzf "${asset}" -C "${RUNNER_TEMP}/bin" --strip-components=1 "${name}/signpost"
+          echo "${RUNNER_TEMP}/bin" >>"${GITHUB_PATH}"
+
+      # Skips only when the *base* branch has no bundle yet (the PR that
+      # adds it); a PR that deletes the bundle still fails.
+      - name: Verify the bundle
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          if ! git rev-parse --verify --quiet "refs/remotes/origin/${BASE}" >/dev/null; then
+            echo "cannot resolve origin/${BASE}; the checkout is wrong, not the bundle" >&2
+            exit 1
+          fi
+          if ! git cat-file -e "origin/${BASE}:.signpost/manifest.json" 2>/dev/null; then
+            echo "no bundle on ${BASE} yet, so there is nothing to compare against."
+            exit 0
+          fi
+          signpost verify -no-history -as-of-bundle .
+
+  stale:
+    name: the bundle is current on main
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install signpost
+        run: |
+          set -euo pipefail
+          # Fetched directly and checked against the release's checksums.txt
+          # before anything is unpacked, rather than `curl | sh`.
+          name="signpost_${SIGNPOST_VERSION}_linux_amd64"
+          asset="${name}.tar.gz"
+          base="https://github.com/3rg0n/signpost/releases/download/${SIGNPOST_VERSION}"
+          mkdir -p "${RUNNER_TEMP}/bin" "${RUNNER_TEMP}/dl"
+          cd "${RUNNER_TEMP}/dl"
+          curl -fsSL -O "${base}/${asset}"
+          curl -fsSL -O "${base}/checksums.txt"
+          grep " [*]\{0,1\}${asset}\$" checksums.txt >expected.txt
+          sha256sum -c expected.txt
+          tar -xzf "${asset}" -C "${RUNNER_TEMP}/bin" --strip-components=1 "${name}/signpost"
+          echo "${RUNNER_TEMP}/bin" >>"${GITHUB_PATH}"
+
+      - name: Verify strictly
+        run: |
+          set -euo pipefail
+          if ! signpost verify -no-history .; then
+            echo "::error ::.signpost/ is stale — rebuild with 'signpost build -no-history .' (signpost ${SIGNPOST_VERSION}) and commit it in a PR"
+            exit 1
+          fi
