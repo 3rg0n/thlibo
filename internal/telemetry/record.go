@@ -83,22 +83,22 @@ func (r *otelRecorder) recordMetrics(ctx context.Context, inv Invocation) {
 func (r *otelRecorder) recordEvent(ctx context.Context, inv Invocation) {
 	var rec otellog.Record
 	rec.SetEventName(EventName)
-	rec.SetBody(otellog.StringValue(EventName))
-	attrs := []otellog.KeyValue{
-		otellog.String("path", inv.Path),
-		otellog.String("outcome", inv.Outcome),
-		otellog.Int("bytes_in", inv.BytesIn),
-		otellog.Int("bytes_out", inv.BytesOut),
-		otellog.Int64("duration_ms", inv.Duration.Milliseconds()),
+	rec.SetBody(attribute.StringValue(EventName))
+	attrs := []attribute.KeyValue{
+		attribute.String("path", inv.Path),
+		attribute.String("outcome", inv.Outcome),
+		attribute.Int("bytes_in", inv.BytesIn),
+		attribute.Int("bytes_out", inv.BytesOut),
+		attribute.Int64("duration_ms", inv.Duration.Milliseconds()),
 	}
 	if inv.Processor != "" {
-		attrs = append(attrs, otellog.String("processor", inv.Processor))
+		attrs = append(attrs, attribute.String("processor", inv.Processor))
 	}
 	if inv.Kind != "" {
-		attrs = append(attrs, otellog.String("kind", inv.Kind))
+		attrs = append(attrs, attribute.String("kind", inv.Kind))
 	}
 	if inv.Fallback != "" {
-		attrs = append(attrs, otellog.String("reason", inv.Fallback))
+		attrs = append(attrs, attribute.String("reason", inv.Fallback))
 	}
 	rec.AddAttributes(attrs...)
 	r.logger.Emit(ctx, rec)
