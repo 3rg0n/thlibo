@@ -976,3 +976,9 @@ func hooksFlagEnabled(line string) bool {
 	}
 	return strings.TrimSpace(after) == "true"
 }
+
+// DefaultConfigPath is the user-level config.toml that install writes the
+// hook into and uninstall removes it from; --codex-hooks overrides it.
+func DefaultConfigPath(home string) string {
+	return filepath.Join(home, ".codex", "config.toml")
+}

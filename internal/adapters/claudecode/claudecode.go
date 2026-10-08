@@ -345,6 +345,20 @@ type MergeHooks struct {
 	PS1WriteHook  string
 }
 
+// HookPaths names the six Claude Code hook scripts inside hookDir. It is
+// the one place those filenames are spelled: install writes and registers
+// them, uninstall deletes them, and the two must never disagree.
+func HookPaths(hookDir string) MergeHooks {
+	return MergeHooks{
+		BashExecHook:  filepath.Join(hookDir, "thlibo-rewrite.sh"),
+		PS1ExecHook:   filepath.Join(hookDir, "thlibo-rewrite.ps1"),
+		BashReadHook:  filepath.Join(hookDir, "thlibo-read.sh"),
+		PS1ReadHook:   filepath.Join(hookDir, "thlibo-read.ps1"),
+		BashWriteHook: filepath.Join(hookDir, "thlibo-write.sh"),
+		PS1WriteHook:  filepath.Join(hookDir, "thlibo-write.ps1"),
+	}
+}
+
 // MergeSettingsAll loads settingsPath, registers each hook the
 // caller provided, and writes the file back. Idempotent across
 // reinstalls. Preserves every unrelated key and every unrelated

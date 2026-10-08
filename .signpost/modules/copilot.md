@@ -1,11 +1,11 @@
 ---
 type: Module
 title: internal/adapters/copilot
-description: "7 go files; 12 exported symbols; entrypoint #!."
+description: "7 go files; 13 exported symbols; entrypoint #!."
 tags: [entrypoint]
 attributes:
   - { name: entrypoints, value: "#!" }
-  - { name: exported, value: "12" }
+  - { name: exported, value: "13" }
   - { name: files, value: "7" }
   - { name: package, value: copilot }
 edges:
@@ -14,7 +14,7 @@ edges:
 # internal/adapters/copilot
 
 <!-- signpost:managed:summary -->
-7 go files; 12 exported symbols; entrypoint #!.
+7 go files; 13 exported symbols; entrypoint #!.
 <!-- /signpost:managed:summary -->
 
 ## Structure
@@ -29,7 +29,7 @@ edges:
 - `internal/adapters/copilot/hook-pre.ps1`
 - `internal/adapters/copilot/hook-pre.sh`
 
-- **Exports** (12): `HookTimeoutSec`, `PostHookPS1`, `PostHookPS1Name`, `PostHookSh`, `PostHookShName`, `PreHookPS1`, `PreHookPS1Name`, `PreHookSh`, `PreHookShName`, `RemoveHooks`, `WriteHookScripts`, `WriteHooksJSON`
+- **Exports** (13): `DefaultHooksPath`, `HookTimeoutSec`, `PostHookPS1`, `PostHookPS1Name`, `PostHookSh`, `PostHookShName`, `PreHookPS1`, `PreHookPS1Name`, `PreHookSh`, `PreHookShName`, `RemoveHooks`, `WriteHookScripts`, `WriteHooksJSON`
 
 - **Imports**: [internal/adapters/hookpath](./hookpath.md) ×1
 <!-- /signpost:managed:structure -->

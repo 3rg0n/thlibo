@@ -1,11 +1,11 @@
 ---
 type: Module
 title: internal/adapters/claudecode
-description: "12 go files; 25 exported symbols; entrypoint #!."
+description: "12 go files; 26 exported symbols; entrypoint #!."
 tags: [entrypoint]
 attributes:
   - { name: entrypoints, value: "#!" }
-  - { name: exported, value: "25" }
+  - { name: exported, value: "26" }
   - { name: files, value: "12" }
   - { name: package, value: claudecode }
 edges:
@@ -14,7 +14,7 @@ edges:
 # internal/adapters/claudecode
 
 <!-- signpost:managed:summary -->
-12 go files; 25 exported symbols; entrypoint #!.
+12 go files; 26 exported symbols; entrypoint #!.
 <!-- /signpost:managed:summary -->
 
 ## Structure
@@ -34,7 +34,7 @@ edges:
 - `internal/adapters/claudecode/skill.go`
 - `internal/adapters/claudecode/windowshook_test.go`
 
-- **Exports** (25): `CaselogSkill`, `HookEntry`, `HookReadScript`, `HookReadScriptPS1`, `HookScript`, `HookScriptPS1`, `InstallCaselogSkill`, `MergeHooks`, `MergeSettings`, `MergeSettingsAll`, `MergeSettingsFull`, `MergeSettingsWithRead`, `RemoveHooks`, `WriteHookReadScript`, `WriteHookReadScriptPS1`, `WriteHookScript`, `WriteHookScriptPS1`, `WriteHookWriteScript`, `WriteHookWriteScriptPS1`, `WriteResult`, `WriteResult.String`, `WriteResultConflict`, `WriteResultCreated`, `WriteResultUnchanged`, `WriteResultUpdated`
+- **Exports** (26): `CaselogSkill`, `HookEntry`, `HookPaths`, `HookReadScript`, `HookReadScriptPS1`, `HookScript`, `HookScriptPS1`, `InstallCaselogSkill`, `MergeHooks`, `MergeSettings`, `MergeSettingsAll`, `MergeSettingsFull`, `MergeSettingsWithRead`, `RemoveHooks`, `WriteHookReadScript`, `WriteHookReadScriptPS1`, `WriteHookScript`, `WriteHookScriptPS1`, `WriteHookWriteScript`, `WriteHookWriteScriptPS1`, `WriteResult`, `WriteResult.String`, `WriteResultConflict`, `WriteResultCreated`, `WriteResultUnchanged`, `WriteResultUpdated`
 
 - **Imports**: [internal/adapters/hookpath](./hookpath.md) ×1
 <!-- /signpost:managed:structure -->

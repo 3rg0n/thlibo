@@ -352,3 +352,9 @@ func findBashWindows() string {
 	}
 	return ""
 }
+
+// DefaultHooksPath is the user-level hooks.json, which Cursor loads without
+// a workspace-trust prompt; --cursor-hooks overrides it.
+func DefaultHooksPath(home string) string {
+	return filepath.Join(home, ".cursor", "hooks.json")
+}
