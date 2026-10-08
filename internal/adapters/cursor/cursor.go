@@ -33,6 +33,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
 
 //go:embed hook.sh
@@ -95,8 +97,8 @@ const (
 // and updates them in place; refuses to overwrite malformed JSON so
 // corruption is never silent.
 func MergeHooksJSON(hooksPath, shellHookPath, readHookPath string) error {
-	shellHookPath = normalisePath(shellHookPath)
-	readHookPath = normalisePath(readHookPath)
+	shellHookPath = hookpath.Normalise(shellHookPath)
+	readHookPath = hookpath.Normalise(readHookPath)
 
 	var root map[string]any
 	buf, err := os.ReadFile(hooksPath) // #nosec G304 -- hooksPath is chosen by the installer, not user input.
@@ -162,7 +164,7 @@ func upsertPreToolUseHook(root map[string]any, matcher, marker, hookPath string)
 			continue
 		}
 		cmd, _ := obj["command"].(string)
-		if strings.Contains(normalisePath(cmd), marker) {
+		if strings.Contains(hookpath.Normalise(cmd), marker) {
 			obj["command"] = command
 			obj["matcher"] = matcher
 			pre[i] = obj
@@ -287,7 +289,7 @@ func removeHooksJSONEntries(hooksPath string) error {
 // names are always checked: a command string carries only the file, so
 // matching one name would leave the other registered and firing.
 func containsThliboMarker(s string) bool {
-	s = normalisePath(s)
+	s = hookpath.Normalise(s)
 	return strings.Contains(s, shellHookMarker) || strings.Contains(s, readHookMarker)
 }
 
@@ -301,7 +303,7 @@ func containsThliboMarker(s string) bool {
 // `"<bash>" "<hook>"` (quoted for the spaces in "Program Files"), the
 // same shape other Windows Cursor hooks (e.g. taco) use.
 func hookCommand(hookPath string) string {
-	hookPath = normalisePath(hookPath)
+	hookPath = hookpath.Normalise(hookPath)
 	if runtime.GOOS != "windows" {
 		return hookPath
 	}
@@ -312,7 +314,7 @@ func hookCommand(hookPath string) string {
 		// PATH-resolvable bash (if any) still pick it up.
 		return hookPath
 	}
-	return `"` + normalisePath(bash) + `" "` + hookPath + `"`
+	return `"` + hookpath.Normalise(bash) + `" "` + hookPath + `"`
 }
 
 // findBashWindows returns a bash.exe path on Windows, or "" if none is
@@ -343,7 +345,7 @@ func findBashWindows() string {
 	// it would fail at runtime — better to return "" (bare path, install
 	// stays non-fatal) than wire a bash that can't run the hook.
 	if p, err := exec.LookPath("bash"); err == nil {
-		lower := strings.ToLower(normalisePath(p))
+		lower := strings.ToLower(hookpath.Normalise(p))
 		if !strings.Contains(lower, "/system32/") && !strings.Contains(lower, "/windows/") {
 			return p
 		}
@@ -351,12 +353,3 @@ func findBashWindows() string {
 	return ""
 }
 
-// normalisePath converts backslashes to forward slashes so bash -c
-// doesn't eat them on Windows. Same fix the claudecode/codex adapters
-// apply to their hook paths.
-func normalisePath(p string) string {
-	if !strings.ContainsRune(p, '\\') {
-		return p
-	}
-	return strings.ReplaceAll(p, "\\", "/")
-}
