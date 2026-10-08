@@ -3,6 +3,7 @@ package processors
 import (
 	"encoding/json"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -90,7 +91,7 @@ func compressJSON(lines []string) []string {
 	}
 
 	if skipped > 0 {
-		out = append(out, "(skipped "+goTestItoa(skipped)+" test(s))")
+		out = append(out, "(skipped "+strconv.Itoa(skipped)+" test(s))")
 	}
 	out = append(out, pkgResults...)
 	return out
@@ -202,7 +203,7 @@ func compressText(lines []string) []string {
 	out = append(out, buf...)
 
 	if skipped > 0 {
-		out = append(out, "(skipped "+goTestItoa(skipped)+" test(s))")
+		out = append(out, "(skipped "+strconv.Itoa(skipped)+" test(s))")
 	}
 	return out
 }
@@ -230,18 +231,4 @@ func goTestFilter(raw []byte) []byte {
 		return nil
 	}
 	return []byte(strings.Join(result, "\n") + "\n")
-}
-
-func goTestItoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
 }
