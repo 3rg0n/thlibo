@@ -12,6 +12,28 @@ import (
 	"strings"
 )
 
+// thlibo: decompression-bomb guards (THREAT_MODEL #32). A PDF is
+// attacker-controlled input — any file an agent Reads — and deflate expands
+// up to ~1000:1, so the 64 MiB input cap bounds nothing about decoded size.
+//
+// maxDecodedStreamSize caps one stream's decoded output. It is derived from
+// maxImagePixels rather than picked: the largest stream this package otherwise
+// accepts is an image at the pixel cap in 8-bit CMYK, and a lower cap would
+// refuse images that DecodeImageStream deliberately allows.
+//
+// maxDecodedDocumentSize caps the sum across every stream one Reader decodes.
+// The per-stream cap alone does not bound memory: resolved objects are cached
+// for the Reader's lifetime, so many streams each just under the cap would all
+// stay live.
+const (
+	maxDecodedStreamSize   = 4 * maxImagePixels // 320 MiB
+	maxDecodedDocumentSize = 1 << 30            // 1 GiB
+)
+
+// ErrStreamTooLarge is returned when decoding a stream would exceed
+// maxDecodedStreamSize, or the Reader's maxDecodedDocumentSize budget.
+var ErrStreamTooLarge = errors.New("pdf: decoded stream exceeds size limit")
+
 // compressedRef records an object stored inside an ObjStm.
 type compressedRef struct {
 	StreamObj int // object number of the containing ObjStm
@@ -25,6 +47,9 @@ type Reader struct {
 	compressed map[int]compressedRef // object number → ObjStm ref (type 2)
 	trailer    Dict
 	cache      map[int]any
+	// decoded is the running total of filter output across all streams,
+	// charged against maxDecodedDocumentSize.
+	decoded int64
 
 	// xrefSeen records the /Prev offsets already visited while walking the
 	// xref chain.
@@ -430,26 +455,40 @@ func (r *Reader) readStreamData(lex *Lexer, d Dict) ([]byte, []byte, error) {
 		}
 	}
 
-	// Apply filters in order.
+	// Apply filters in order, each bounded by what is left of the
+	// document's decode budget.
 	data := raw
 	for i, f := range filters {
 		var parms Dict
 		if i < len(parmsList) {
 			parms = parmsList[i]
 		}
+		limit := min(maxDecodedStreamSize, maxDecodedDocumentSize-r.decoded)
+		if limit <= 0 {
+			return nil, nil, fmt.Errorf("filter %s: %w", f, ErrStreamTooLarge)
+		}
 		var err error
-		data, err = applyFilter(data, f, parms)
+		data, err = applyFilterLimit(data, f, parms, limit)
 		if err != nil {
 			return nil, nil, fmt.Errorf("filter %s: %w", f, err)
 		}
+		r.decoded += int64(len(data))
 	}
 	return data, raw, nil
 }
 
+// applyFilter decodes one filter stage under the per-stream cap only. It
+// serves callers outside a Reader's stream walk (inline images); a Reader's
+// own streams go through readStreamData, which also charges the document
+// budget.
 func applyFilter(data []byte, filter Name, parms Dict) ([]byte, error) {
+	return applyFilterLimit(data, filter, parms, maxDecodedStreamSize)
+}
+
+func applyFilterLimit(data []byte, filter Name, parms Dict, limit int64) ([]byte, error) {
 	switch filter {
 	case "FlateDecode":
-		decoded, err := decompress(data)
+		decoded, err := decompress(data, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -460,7 +499,7 @@ func applyFilter(data []byte, filter Name, parms Dict) ([]byte, error) {
 
 	case "LZWDecode":
 		r := lzw.NewReader(bytes.NewReader(data), lzw.MSB, 8)
-		decoded, err := io.ReadAll(r)
+		decoded, err := readAllLimit(r, limit)
 		_ = r.Close() // reader over a []byte: Close cannot fail usefully
 		if err != nil {
 			return nil, fmt.Errorf("lzw: %w", err)
@@ -475,6 +514,11 @@ func applyFilter(data []byte, filter Name, parms Dict) ([]byte, error) {
 		s := data
 		if idx := bytes.Index(s, []byte("~>")); idx >= 0 {
 			s = s[:idx]
+		}
+		// 4*len is the worst case (each `z` is one byte for four zeros), and
+		// it is allocated up front, so it is what has to fit the limit.
+		if int64(len(s))*4 > limit {
+			return nil, ErrStreamTooLarge
 		}
 		dst := make([]byte, 4*len(s))
 		n, _, err := ascii85.Decode(dst, s, true)
@@ -492,13 +536,25 @@ func applyFilter(data []byte, filter Name, parms Dict) ([]byte, error) {
 	}
 }
 
-func decompress(data []byte) ([]byte, error) {
+// readAllLimit is io.ReadAll that refuses to produce more than limit bytes.
+// It reads one byte past the limit so that output of exactly limit bytes is
+// accepted and anything longer is refused, rather than silently truncated —
+// a truncated content stream would parse as a shorter, wrong page.
+func readAllLimit(r io.Reader, limit int64) ([]byte, error) {
+	out, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if int64(len(out)) > limit {
+		return nil, ErrStreamTooLarge
+	}
+	return out, err
+}
+
+func decompress(data []byte, limit int64) ([]byte, error) {
 	zr, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("zlib init: %w", err)
 	}
 	defer zr.Close()
-	out, err := io.ReadAll(zr)
+	out, err := readAllLimit(zr, limit)
 	// Some producers terminate the stream with a deflate sync-flush
 	// (00 00 FF FF) and omit the final block + Adler-32 checksum; zlib reports
 	// the missing tail as ErrUnexpectedEOF. The bytes decoded before the cut

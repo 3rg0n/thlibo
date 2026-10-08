@@ -67,7 +67,9 @@ Risk = likelihood × impact after agentic-factor modifiers (+1 likelihood for no
 Findings **#29–#31** were raised after this table was written and are
 tabulated in the 2026-08-04 addendum, against surfaces
 (`internal/pdf/`, `cordon-filter`, the CI scanner gate) that did not
-exist at snapshot time. All three are mitigated. The table stays
+exist at snapshot time. All three are mitigated. Finding **#32**
+(decoded size of PDF streams) is tabulated the same way, in the
+2026-10-07 addendum, and is also mitigated. The table stays
 authoritative for finding state, so a reader counting findings must
 count both.
 
@@ -690,3 +692,49 @@ that also has a hostile local user), and the exposure is the same class
 as existing finding #24 (no `SO_PEERCRED` on thlibo's side of the wire;
 IPC identity is socket permissions). Naming it rather than fixing it,
 consistent with how #24 is carried.
+
+## Addendum — 2026-10-07: decoded size of PDF streams
+
+Found in a code-smell review of `internal/pdf/` and remediated in the same
+change; risk-table row #32.
+
+| # | ASI Threat | Layer | Title | Severity | L | I | Risk | Agentic Factors | Framework |
+|---|---|---|---|---|---|---|---|---|---|
+| 32 | T20, T12 | L3 | `FlateDecode` and `LZWDecode` in `internal/pdf/reader.go` decoded with an uncapped `io.ReadAll`, so a small stream could inflate to gigabytes; out-of-memory is a **fatal** runtime error that `RunNative`'s `recover()` cannot catch, so the process exits with the tool output unwritten | **high** | 2 | 3 | **6** | A2A | CWE-409 |
+
+### #32 — a decompression bomb is the same failure class as #29
+
+Deflate expands up to roughly 1000:1, so the middleware's 64 MiB input cap
+says nothing about decoded size: a PDF well under it could ask for tens of
+gigabytes. Like #29's stack overflow, exhausting the heap is not a panic —
+the fail-open contract (ADR 0006) depends on the process surviving to write
+the original bytes, and here it does not.
+
+Two bounds, both in `reader.go`:
+
+- **Per stream, `maxDecodedStreamSize` (320 MiB).** Derived from
+  `maxImagePixels` rather than chosen: the largest stream this package
+  otherwise accepts is an image at the pixel cap in 8-bit CMYK, so a lower
+  cap would refuse images `DecodeImageStream` deliberately allows. Flate and
+  LZW read through a limit one byte past the cap, so output *at* the cap is
+  accepted and anything longer is refused with `ErrStreamTooLarge` — never
+  truncated, because a truncated content stream parses as a shorter, wrong
+  page. ASCII85 allocates its worst case (`4×` input) up front, so that
+  allocation is what is checked.
+- **Per document, `maxDecodedDocumentSize` (1 GiB).** The per-stream cap
+  alone does not bound memory: a `Reader` caches every object it resolves,
+  so many streams each just under the cap would all stay live. Every filter
+  stage `readStreamData` runs is charged against the Reader's running total,
+  and each stage is capped at what is left.
+
+ASCIIHex (output at most half its input) and the PNG/TIFF predictors (output
+no larger than input) cannot expand, and need no bound. `RunLengthDecode` is
+not implemented and falls through as-is, which also cannot expand.
+
+**What a refused stream does.** The same as any undecodable stream: `Resolve`
+returns nil. A refused page content stream yields no text for that page and
+the remaining pages still extract — the document degrades rather than the
+process dying. Regression tests: `TestFilterOutputIsBounded` (each filter at
+and one byte over the limit, including a sync-flushed Flate bomb, which takes
+`decompress`'s `ErrUnexpectedEOF` tolerance path) and
+`TestDocumentDecodeBudget`.
