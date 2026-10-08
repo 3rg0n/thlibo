@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
 
 // TestEmbeddedHookShape guards the bash script against regressions.
@@ -189,7 +191,7 @@ func TestMergeHooksJSONUpgradeFromShellOnly(t *testing.T) {
   "version": 1,
   "hooks": {
     "preToolUse": [
-      { "matcher": "Shell", "command": "` + normalisePath(shellHook) + `" }
+      { "matcher": "Shell", "command": "` + hookpath.Normalise(shellHook) + `" }
     ]
   }
 }`
@@ -526,7 +528,7 @@ func TestReadHookInvalidJSONEscapes(t *testing.T) {
 	_ = os.WriteFile(realPath, []byte("%PDF-1.4\n"), 0o644) // pdf skips size gate
 	// The escaped form Cursor sends (invalid JSON): backslash-space,
 	// backslash-paren.
-	escaped := strings.NewReplacer(" ", `\ `, "(", `\(`, ")", `\)`).Replace(normalisePath(realPath))
+	escaped := strings.NewReplacer(" ", `\ `, "(", `\(`, ")", `\)`).Replace(hookpath.Normalise(realPath))
 	stdin := `{"tool_name":"Read","tool_input":{"file_path":"` + escaped + `"}}`
 	caseDir := filepath.Join(dir, "case")
 	out, code := runReadHook(t, stdin, caseDir, 0)
@@ -637,7 +639,7 @@ func TestReadHookRewritesLargeLog(t *testing.T) {
 	big := filepath.Join(dir, "app.log")
 	_ = os.WriteFile(big, make([]byte, 40*1024), 0o644) // > 32 KiB size gate
 	caseDir := filepath.Join(dir, "case")
-	stdin := `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`
+	stdin := `{"tool_name":"Read","tool_input":{"file_path":"` + hookpath.Normalise(big) + `"}}`
 	out, code := runReadHook(t, stdin, caseDir, 0)
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0", code)
@@ -673,11 +675,11 @@ func TestReadHookPassthrough(t *testing.T) {
 		caseExit int
 	}{
 		{"non-Read tool", `{"tool_name":"Shell","tool_input":{"command":"ls"}}`, "", 0},
-		{"unsupported extension", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(src) + `"}}`, "", 0},
-		{"small file under size gate", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(small) + `"}}`, "", 0},
-		{"low-value case (exit 6)", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`, filepath.Join(dir, "c6"), 6},
-		{"timeout (exit 124)", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`, filepath.Join(dir, "c124"), 124},
-		{"missing file", `{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(filepath.Join(dir, "nope.log")) + `"}}`, "", 0},
+		{"unsupported extension", `{"tool_name":"Read","tool_input":{"file_path":"` + hookpath.Normalise(src) + `"}}`, "", 0},
+		{"small file under size gate", `{"tool_name":"Read","tool_input":{"file_path":"` + hookpath.Normalise(small) + `"}}`, "", 0},
+		{"low-value case (exit 6)", `{"tool_name":"Read","tool_input":{"file_path":"` + hookpath.Normalise(big) + `"}}`, filepath.Join(dir, "c6"), 6},
+		{"timeout (exit 124)", `{"tool_name":"Read","tool_input":{"file_path":"` + hookpath.Normalise(big) + `"}}`, filepath.Join(dir, "c124"), 124},
+		{"missing file", `{"tool_name":"Read","tool_input":{"file_path":"` + hookpath.Normalise(filepath.Join(dir, "nope.log")) + `"}}`, "", 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -742,7 +744,7 @@ func TestReadHookNoTimeoutBinaryPassthrough(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(realBash, hookPath)
-	cmd.Stdin = strings.NewReader(`{"tool_name":"Read","tool_input":{"file_path":"` + normalisePath(big) + `"}}`)
+	cmd.Stdin = strings.NewReader(`{"tool_name":"Read","tool_input":{"file_path":"` + hookpath.Normalise(big) + `"}}`)
 	// PATH = ONLY our fake bindir. bash itself is invoked by absolute
 	// path, so it still runs; but `command -v timeout/gtimeout` inside
 	// the hook find nothing -> passthrough.
