@@ -412,7 +412,10 @@ stock workflow does. `.github/workflows/signpost.yml` only *checks* it:
 on a PR it verifies the bundle against the commit it records, and on
 `main` it fails when the code has moved past the bundle. When that goes
 red, rebuild with the version pinned in the workflow and commit the
-result in a PR. Always pass `-no-history`: squash-merging lands code
+result in a PR. Use that version's **release binary**, not
+`go install …@vX`: a source build reports itself as `signpost/dev`,
+which lands in `log.md`/`manifest.json` and fails the byte-for-byte
+check against CI's release build. Always pass `-no-history`: squash-merging lands code
 and bundle in one commit, and a structure-only bundle is the one that
 still verifies after that.
 
