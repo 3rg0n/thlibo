@@ -30,6 +30,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
 
 //go:embed hook.sh
@@ -649,7 +651,7 @@ func hasAnyMarker(normalisedCmd string, markers []string) bool {
 // else (.sh, no extension) runs as-is.
 func buildHookCommand(matcher, hookPath string) string {
 	_ = matcher // retained for signature compatibility / future use
-	hookPath = normalisePath(hookPath)
+	hookPath = hookpath.Normalise(hookPath)
 	if strings.HasSuffix(strings.ToLower(hookPath), ".ps1") {
 		return `powershell -NoProfile -ExecutionPolicy Bypass -File "` + hookPath + `"`
 	}
@@ -693,17 +695,4 @@ func (a *arr) items() []any {
 func (a *arr) append(x any) {
 	v, _ := a.owner[a.key].([]any)
 	a.owner[a.key] = append(v, x)
-}
-
-// normalisePath converts a Windows-style path to forward slashes.
-// On non-Windows, it's a no-op. We don't rewrite the drive letter;
-// Git Bash accepts both `C:/...` and `/c/...`, and Claude Code's
-// Bash tool resolves `C:/...` correctly.
-func normalisePath(p string) string {
-	// Simple, allocation-free for the common case where no change
-	// is needed.
-	if !strings.ContainsRune(p, '\\') {
-		return p
-	}
-	return strings.ReplaceAll(p, "\\", "/")
 }
