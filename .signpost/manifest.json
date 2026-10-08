@@ -1,6 +1,6 @@
 {
   "okf_version": "0.2",
-  "generator": "signpost/dev",
+  "generator": "signpost/v0.2.0",
   "counts": {
     "nodes": 121,
     "edges": 211,
