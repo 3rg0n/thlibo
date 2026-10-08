@@ -1,10 +1,10 @@
 ---
 type: Document
 title: CLAUDE.md
-description: "Stated constraints, 57 rules read from CLAUDE.md."
+description: "Stated constraints, 58 rules read from CLAUDE.md."
 tags: [agent-rules, constraint]
 attributes:
-  - { name: rules, value: "57" }
+  - { name: rules, value: "58" }
   - { name: sections, value: "62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command, 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / Adapters, 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / Architectural invariants (load-bearing — do not blur), 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / Build, test, scan, 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / Processors, 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / Repository map, 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / Talking to inferd, 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / Two Claude sessions?, 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / What this project is, 62); GitHub Copilot CLI hooks (`preToolUse` `modifiedArgs` command / When adding code, CLAUDE.md, CLAUDE.md / Status" }
 edges:
   - { kind: documents, to: ../modules/cargo-filter.md, confidence: extracted, source: CLAUDE.md }
@@ -55,7 +55,7 @@ edges:
 # CLAUDE.md
 
 <!-- signpost:managed:summary -->
-Stated constraints, 57 rules read from CLAUDE.md.
+Stated constraints, 58 rules read from CLAUDE.md.
 <!-- /signpost:managed:summary -->
 
 ## Structure

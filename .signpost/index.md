@@ -162,7 +162,7 @@ What the shape of this repository says. Each line is a result — where one read
 - [ADR 0015: native go pdf extraction](./references/adr-0015-native-go-pdf-extraction.md) — Architecture decision (Accepted), 47 rules read from 0015-native-go-pdf-extraction.md.
 - [ADR 0016: native go cordon filter](./references/adr-0016-native-go-cordon-filter.md) — Architecture decision (Accepted), 36 rules read from 0016-native-go-cordon-filter.md.
 - [AGENTS.md](./references/agents-md.md) — Stated constraints, 9 rules read from AGENTS.md.
-- [CLAUDE.md](./references/claude-md.md) — Stated constraints, 57 rules read from CLAUDE.md.
+- [CLAUDE.md](./references/claude-md.md) — Stated constraints, 58 rules read from CLAUDE.md.
 - [README.md](./references/readme-md.md) — Architecture decision, 7 rules read from README.md.
 
 ### External dependencies

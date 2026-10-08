@@ -274,7 +274,7 @@ cadence). The surface is `internal/inferd`:
 - `addr.go` — socket resolution per `protocol-v2.md` §1.1
   (`\\.\pipe\inferd` / `inferd.sock`, XDG→$HOME→/tmp).
 - `dial_unix.go` / `dial_windows.go` — UDS / named-pipe dialers
-  (no TCP — inferd binds no network listener, ADR 0022).
+  (no TCP — inferd binds no network listener, inferd's ADR 0022).
 
 If you need to change how thlibo *reaches* or *frames* inference,
 that's here; if you need to change inference behaviour (model,
@@ -397,12 +397,14 @@ on any test input that happens to be ASCII.
 ```
 go build ./...                 # build all
 go build -ldflags "-X github.com/3rg0n/thlibo/internal/version.Tag=v0.X.Y" -o thlibo ./cmd/thlibo
-go test ./...                  # full suite
+go test ./... -timeout 120s    # full suite (CI's timeout)
+go test ./internal/middleware/ -run TestName   # one test
+PYTHONUTF8=1 python scripts/run_processor_tests.py   # python processor unit tests (CI runs these too)
 go test ./internal/middleware/... -run TokenSavings   # the savings benchmark
 go test ./internal/processors/ -run '^$' -bench . -benchmem   # filter perf
 go vet ./...                   # required before commit
 staticcheck ./...              # required — blocks CI
-gosec ./...                    # required — blocks CI
+gosec ./cmd/... ./internal/... ./processors/...   # required — blocks CI (CI's scope)
 signpost build -no-history .   # rebuild .signpost/ (pinned version: see signpost.yml)
 ```
 
@@ -418,6 +420,11 @@ which lands in `log.md`/`manifest.json` and fails the byte-for-byte
 check against CI's release build. Always pass `-no-history`: squash-merging lands code
 and bundle in one commit, and a structure-only bundle is the one that
 still verifies after that.
+
+`python3` must be on PATH for the full suite: without it,
+`TestScriptBuiltinsC6` and the savings test in `internal/middleware`
+**skip** rather than fail, so a green local run may not have exercised
+them.
 
 The version tag is injected via `-ldflags -X …/internal/version.Tag`;
 an un-injected build reports `dev` and skips the background
