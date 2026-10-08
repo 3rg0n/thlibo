@@ -325,12 +325,7 @@ func orderedJSONString(jsonStr string, rec map[string]any, count int) (string, e
 
 func ndjsonFilter(raw []byte) []byte {
 	// Normalize line endings and split (Python splitlines semantics).
-	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	lines := strings.Split(text, "\n")
-	// Drop trailing empty element from split (matches Python splitlines()).
-	if n := len(lines); n > 0 && lines[n-1] == "" {
-		lines = lines[:n-1]
-	}
+	lines := splitLines(raw)
 
 	// Group by (level, msg, method, statusClass, pathShape). The extra
 	// HTTP fields keep access-log records distinct so route/status

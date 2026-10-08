@@ -1,12 +1,12 @@
 ---
 type: Module
 title: internal/processors
-description: 45 go files; 49 exported symbols; entrypoint init.
+description: 46 go files; 49 exported symbols; entrypoint init.
 tags: [entrypoint]
 attributes:
   - { name: entrypoints, value: init }
   - { name: exported, value: "49" }
-  - { name: files, value: "45" }
+  - { name: files, value: "46" }
   - { name: package, value: processors }
 edges:
   - { kind: imports, to: ./inferd.md, confidence: extracted, weight: 2, source: internal/processors/bench_test.go }
@@ -18,13 +18,13 @@ edges:
 # internal/processors
 
 <!-- signpost:managed:summary -->
-45 go files; 49 exported symbols; entrypoint init.
+46 go files; 49 exported symbols; entrypoint init.
 <!-- /signpost:managed:summary -->
 
 ## Structure
 
 <!-- signpost:managed:structure -->
-45 files:
+46 files:
 - `internal/processors/bench_test.go`
 - `internal/processors/budget_norace_test.go`
 - `internal/processors/budget_race_test.go`
@@ -60,12 +60,12 @@ edges:
 - `internal/processors/filter_stacktrace_test.go`
 - `internal/processors/filter_trivy.go`
 - `internal/processors/filter_trivy_test.go`
+- `internal/processors/lines.go`
 - `internal/processors/native.go`
 - `internal/processors/native_test.go`
 - `internal/processors/registry.go`
 - `internal/processors/registry_test.go`
-- `internal/processors/signature_test.go`
-- and 5 more
+- and 6 more
 
 - **Exports** (49): `BinaryLooking`, `Build`, `BuildFromDisk`, `BuildFromSources`, `Descriptor`, `Descriptor.EntryCommand`, `Descriptor.MatchIsSignature`, `Descriptor.MatchesFastPath`, `Descriptor.RouterEligible`, `Descriptor.RoutingBlurb`, `Dispatcher`, `Dispatcher.Run`, `Dispatcher.RunChain`, `EntryFingerprint`, `ErrEntrySwapped`, `FsReader`, `Kind`, `KindNative`, `KindPrompt`, `KindScript`, `LowValueSentinel`, `NativeCtxFilter`, `NativeFilter`, `Origin`, `OriginBuiltin`, `OriginSource`, `OriginSource.String`, `OriginUser`, `ParseMarkdown`, `ParseYAML`, `PromptRunner`, `RegisterNative`, `RegisterNativeCtx`, `Registry`, `Registry.Get`, `Registry.Len`, `Registry.MatchCommand`, `Registry.MatchCommandLine`, `Registry.MatchFastPath`, `Registry.Names`, `Registry.RoutableNames`, `RunNative`, `RunNativeCtx`, `ShadowWarning`, `ShadowWarning.Error`, `Source`, `Strip`, `StructuredDocument`, `WriteInput`
 

@@ -8,6 +8,8 @@ attributes:
   - { name: exported, value: "17" }
   - { name: files, value: "8" }
   - { name: package, value: codex }
+edges:
+  - { kind: imports, to: ./hookpath.md, confidence: extracted, weight: 3, source: internal/adapters/codex/codex.go }
 ---
 # internal/adapters/codex
 
@@ -29,6 +31,8 @@ attributes:
 - `internal/adapters/codex/windowshook_test.go`
 
 - **Exports** (17): `DetectRepresentation`, `EnableHooksFeatureFlag`, `HookFileName`, `HookScript`, `HookScriptFor`, `HookScriptPS1`, `InstallHook`, `MergeConfigTOMLHook`, `MergeHooksJSONHook`, `RemoveConfigTOMLHook`, `RemoveHooks`, `RemoveStaleHooksJSON`, `RepHooksJSON`, `RepInline`, `Representation`, `Representation.String`, `WriteHookScript`
+
+- **Imports**: [internal/adapters/hookpath](./hookpath.md) ×3
 <!-- /signpost:managed:structure -->
 
 ## Notes

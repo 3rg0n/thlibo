@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
 
 // write is a test helper: create path with content, failing the test on
@@ -107,7 +109,7 @@ func TestDetectRepresentationOnlyThliboInHooksJSON(t *testing.T) {
 	cfg, hj, hook := layer(t)
 	write(t, cfg, "model = \"gpt-5\"\n")
 	write(t, hj, `{"hooks":{"PostToolUse":[{"matcher":"^Bash$","hooks":[
-	  {"type":"command","command":"`+normalisePath(hook)+`"}]}]}}`)
+	  {"type":"command","command":"`+hookpath.Normalise(hook)+`"}]}]}}`)
 	if got := DetectRepresentation(cfg, hj); got != RepInline {
 		t.Errorf("stale thlibo-only hooks.json: got %v, want inline (migrate)", got)
 	}
@@ -222,7 +224,7 @@ func TestMergeHooksJSONHookIdempotent(t *testing.T) {
 	}
 
 	buf, _ := os.ReadFile(hj)
-	if n := strings.Count(normalisePath(string(buf)), hookMarkerSh); n != 1 {
+	if n := strings.Count(hookpath.Normalise(string(buf)), hookMarkerSh); n != 1 {
 		t.Errorf("thlibo hook appears %d times, want 1:\n%s", n, buf)
 	}
 	if !strings.Contains(string(buf), "other.exe") {

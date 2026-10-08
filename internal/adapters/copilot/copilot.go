@@ -46,7 +46,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
 
 //go:embed hook-pre.sh
@@ -179,8 +180,8 @@ const shellMatcher = "bash|shell|powershell"
 func hookEntry(bashPath, ps1Path, matcher string) map[string]any {
 	e := map[string]any{
 		"type":       "command",
-		"bash":       normalisePath(bashPath),
-		"powershell": normalisePath(ps1Path),
+		"bash":       hookpath.Normalise(bashPath),
+		"powershell": hookpath.Normalise(ps1Path),
 		"timeoutSec": HookTimeoutSec,
 	}
 	if matcher != "" {
@@ -207,15 +208,4 @@ func RemoveHooks(hooksJSONPath, hookDir string) error {
 		return fmt.Errorf("copilot: remove hooks: %w", firstErr)
 	}
 	return nil
-}
-
-// normalisePath converts backslashes to forward slashes. The "bash"
-// command runs the script through bash, which eats backslashes as
-// escapes; forward slashes are valid for both bash and PowerShell on
-// Windows. Same fix the other adapters apply to hook paths.
-func normalisePath(p string) string {
-	if !strings.ContainsRune(p, '\\') {
-		return p
-	}
-	return strings.ReplaceAll(p, "\\", "/")
 }
