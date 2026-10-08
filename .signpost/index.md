@@ -2,7 +2,7 @@
 okf_version: "0.2"
 type: Index
 title: Repository map
-description: "Structural map of this repository: 121 concepts, 211 relationships."
+description: "Structural map of this repository: 122 concepts, 217 relationships."
 ---
 # Repository map
 
@@ -17,8 +17,8 @@ Start here. What the shape of this repository says, then a line per page naming 
 
 The places a wrong assumption propagates furthest, so the places to read first.
 
-- [AGENTS.md](./references/agents-md.md) — 44 relationships (0 in, 44 out)
-- [CLAUDE.md](./references/claude-md.md) — 44 relationships (0 in, 44 out)
+- [AGENTS.md](./references/agents-md.md) — 45 relationships (0 in, 45 out)
+- [CLAUDE.md](./references/claude-md.md) — 45 relationships (0 in, 45 out)
 - [internal/telemetry](./modules/telemetry.md) — 18 relationships (5 in, 13 out)
 - [cmd/thlibo](./modules/thlibo.md) — 14 relationships (2 in, 12 out)
 - [internal/middleware](./modules/middleware.md) — 12 relationships (6 in, 6 out)
@@ -99,6 +99,7 @@ What the shape of this repository says. Each line is a result — where one read
 - [internal/execpolicy](./modules/execpolicy.md) — 2 go files; 8 exported symbols.
 - [processors/git-filter](./modules/git-filter.md) — 1 python file; 2 exported symbols; entrypoint __main__; package processors.git-filter.run.
 - [processors/go-test-filter](./modules/go-test-filter.md) — 1 python file; 16 exported symbols; entrypoint __main__; package processors.go-test-filter.run.
+- [internal/adapters/hookpath](./modules/hookpath.md) — 1 go file; 1 exported symbol.
 - [internal/inferd](./modules/inferd.md) — 9 go files; 29 exported symbols.
 - [internal/install](./modules/install.md) — 22 go files; 17 exported symbols.
 - [cmd/thlibo/installcmd](./modules/installcmd.md) — 2 go files; 1 exported symbol.
@@ -111,7 +112,7 @@ What the shape of this repository says. Each line is a result — where one read
 - [processors/pdf-to-md](./modules/pdf-to-md.md) — 1 python file; 11 exported symbols; entrypoint __main__; package processors.pdf-to-md.run.
 - [internal/pdfocr](./modules/pdfocr.md) — 3 go files; 3 exported symbols.
 - [processors](./modules/processors-1j5jcrl.md) — 1 go file; 1 exported symbol; package builtins.
-- [internal/processors](./modules/processors-1lzwtfn.md) — 45 go files; 49 exported symbols; entrypoint init.
+- [internal/processors](./modules/processors-1lzwtfn.md) — 46 go files; 49 exported symbols; entrypoint init.
 - [internal/promptsan](./modules/promptsan.md) — 2 go files; 2 exported symbols.
 - [processors/pytest-filter](./modules/pytest-filter.md) — 1 python file; 11 exported symbols; entrypoint __main__; package processors.pytest-filter.run.
 - [cmd/thlibo/rewritecmd](./modules/rewritecmd.md) — 2 go files; 6 exported symbols.

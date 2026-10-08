@@ -8,6 +8,8 @@ attributes:
   - { name: exported, value: "12" }
   - { name: files, value: "7" }
   - { name: package, value: copilot }
+edges:
+  - { kind: imports, to: ./hookpath.md, confidence: extracted, weight: 1, source: internal/adapters/copilot/copilot.go }
 ---
 # internal/adapters/copilot
 
@@ -28,6 +30,8 @@ attributes:
 - `internal/adapters/copilot/hook-pre.sh`
 
 - **Exports** (12): `HookTimeoutSec`, `PostHookPS1`, `PostHookPS1Name`, `PostHookSh`, `PostHookShName`, `PreHookPS1`, `PreHookPS1Name`, `PreHookSh`, `PreHookShName`, `RemoveHooks`, `WriteHookScripts`, `WriteHooksJSON`
+
+- **Imports**: [internal/adapters/hookpath](./hookpath.md) ×1
 <!-- /signpost:managed:structure -->
 
 ## Notes

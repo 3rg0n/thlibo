@@ -2,13 +2,13 @@
   "okf_version": "0.2",
   "generator": "signpost/v0.2.0",
   "counts": {
-    "nodes": 121,
-    "edges": 211,
+    "nodes": 122,
+    "edges": 217,
     "clusters": 39
   },
   "confidence": {
     "ambiguous": 0,
-    "extracted": 211,
+    "extracted": 217,
     "inferred": 0
   },
   "pages": [
@@ -29,6 +29,7 @@
     "modules/execpolicy.md",
     "modules/git-filter.md",
     "modules/go-test-filter.md",
+    "modules/hookpath.md",
     "modules/inferd.md",
     "modules/install.md",
     "modules/installcmd.md",

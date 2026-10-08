@@ -8,6 +8,8 @@ attributes:
   - { name: exported, value: "6" }
   - { name: files, value: "5" }
   - { name: package, value: cursor }
+edges:
+  - { kind: imports, to: ./hookpath.md, confidence: extracted, weight: 2, source: internal/adapters/cursor/cursor.go }
 ---
 # internal/adapters/cursor
 
@@ -26,6 +28,8 @@ attributes:
 - `internal/adapters/cursor/remove_test.go`
 
 - **Exports** (6): `HookScript`, `MergeHooksJSON`, `ReadHookScript`, `RemoveHooks`, `WriteHookScript`, `WriteReadHookScript`
+
+- **Imports**: [internal/adapters/hookpath](./hookpath.md) ×2
 <!-- /signpost:managed:structure -->
 
 ## Notes
