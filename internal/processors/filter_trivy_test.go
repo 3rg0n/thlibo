@@ -1,6 +1,7 @@
 package processors
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -71,5 +72,32 @@ func TestTrivyFilterParity(t *testing.T) {
 				t.Errorf("trivy-filter parity mismatch on %q:\n go:\n%s\n py:\n%s", name, got, want)
 			}
 		})
+	}
+}
+
+// TestTrivyContinuationRowIsDeterministic: a continuation row that fills two
+// columns (here a new CVE *and* wrapped title text) has to be merged column by
+// column in header order, as run.py does by iterating its insertion-ordered
+// dict. The Go port ranged over a map, whose order is randomised, so the
+// same input produced different findings run to run — the title fragment
+// landed on whichever CVE the iteration happened to reach first. Want is
+// run.py's output for this input.
+func TestTrivyContinuationRowIsDeterministic(t *testing.T) {
+	in := `┌─────────┬────────────────┬──────────┬───────────────────┬───────────────┬──────────────────────┐
+│ Library │ Vulnerability  │ Severity │ Installed Version │ Fixed Version │        Title         │
+├─────────┼────────────────┼──────────┼───────────────────┼───────────────┼──────────────────────┤
+│ django  │ CVE-2019-14234 │ HIGH     │ 2.2.1             │ 2.2.4         │ SQL injection in     │
+│         │ CVE-2019-19844 │          │                   │               │ JSONField            │
+└─────────┴────────────────┴──────────┴───────────────────┴───────────────┴──────────────────────┘
+` + strings.Repeat("padding line so the input clears the byte-win guard\n", 40)
+	want := "H\tdjango@2.2.1\tCVE-2019-14234\t2.2.4\tSQL injection in\n" +
+		"H\tdjango@2.2.1\tCVE-2019-19844\t-\tJSONField\n"
+
+	// Map order is re-randomised per range statement, so a handful of runs
+	// catches the old behaviour with near certainty.
+	for i := 0; i < 50; i++ {
+		if got := string(trivyFilter([]byte(in))); got != want {
+			t.Fatalf("run %d:\ngot  %q\nwant %q", i, got, want)
+		}
 	}
 }
