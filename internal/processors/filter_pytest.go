@@ -15,7 +15,6 @@ import (
 func init() { RegisterNative("pytest-filter", pytestFilter) }
 
 var (
-	pytestAnsiRE       = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 	sectionRE          = regexp.MustCompile(`^=+ (.+?) =+\s*$`)
 	collectedRE        = regexp.MustCompile(`^collected (\d+) items?`)
 	progressLineRE     = regexp.MustCompile(`^[\w./_-]+\.py [.FEsxXp]+\s+\[\s*\d+%\s*\]\s*$`)
@@ -30,10 +29,6 @@ var keepSections = map[string]bool{
 }
 
 const warningsSection = "warnings summary"
-
-func stripANSI(s string) string {
-	return pytestAnsiRE.ReplaceAllString(s, "")
-}
 
 // sectionMap maps section start-line indices to section names.
 type sectionMap struct {
