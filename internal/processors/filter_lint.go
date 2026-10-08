@@ -182,6 +182,16 @@ var (
 	verboseHint  = regexp.MustCompile(`(?m)^\s*(?:warning|error|note|help)(?:\[[\w:]+\])?:\s+\S|^\s*-->\s+\S+:\d+:\d+\s*$|^\s*\d+\s*\|\s|^\s+(?:\d+):(?:\d+)\s+(?:error|warning)\s|^\s*[A-Z]{1,3}\d{2,4}(?:\s+\[\*\])?\s+\S`)
 )
 
+// verboseParserState holds shared state for the verbose parser loop to avoid
+// closure captures and make adding new formats a local change.
+type verboseParserState struct {
+	lines      []string
+	n          int
+	findings   []*finding
+	i          int
+	eslintFile string
+}
+
 func isVerbose(raw string) bool { return verboseHint.MatchString(raw) }
 
 func grpNamed(re *regexp.Regexp, s string) map[string]string {
@@ -199,160 +209,208 @@ func isContextLine(nxt string) bool {
 		strings.HasPrefix(ls, "|") || strings.HasPrefix(ls, "=") || strings.HasPrefix(ls, "...")
 }
 
-func parseVerbose(raw string) []*finding {
-	lines := splitLinesNoTrailing(raw)
-	var findings []*finding
-	n := len(lines)
-	eslintFile := ""
-	i := 0
-	for i < n {
-		line := lines[i]
-		stripped := strings.TrimRight(line, " \t\r\n\v\f")
-
-		// 1. rustc/clippy/ruff multi-line block.
-		if gd := grpNamed(rustcOpener, stripped); gd != nil && i+1 < n && rustcLoc.MatchString(lines[i+1]) {
-			sev := strings.ToLower(gd["sev"])
-			msg := strings.TrimSpace(gd["msg"])
-			code := gd["code"]
-			rule := ""
-			if rt := grpNamed(rustcRuleTl, msg); rt != nil {
-				rule = rt["rule"]
-				loc := rustcRuleTl.FindStringIndex(msg)
-				msg = strings.TrimRight(msg[:loc[0]], " \t")
-			} else if code != "" {
-				rule = code
-			}
-			loc := grpNamed(rustcLoc, lines[i+1])
-			ln, _ := strconv.Atoi(loc["line"])
-			col, _ := strconv.Atoi(loc["col"])
-
-			j := i + 2
-			help := ""
-			for j < n {
-				nxt := lines[j]
-				if strings.TrimSpace(nxt) == "" {
-					j++
-					continue
-				}
-				if hm := grpNamed(rustcHelp, nxt); hm != nil && help == "" {
-					help = strings.TrimSpace(hm["msg"])
-					j++
-					continue
-				}
-				if nm := grpNamed(rustcNote, nxt); nm != nil && rule == "" {
-					rule = nm["rule"]
-					j++
-					continue
-				}
-				if isContextLine(nxt) {
-					j++
-					continue
-				}
-				if grpNamed(rustcOpener, nxt) != nil && j+1 < n && rustcLoc.MatchString(lines[j+1]) {
-					break
-				}
-				if terseParse(strings.TrimRight(nxt, " \t\r\n\v\f")) != nil {
-					break
-				}
-				j++
-			}
-			if rule == "" {
-				rule = "-W" + sev
-			}
-			findings = append(findings, &finding{
-				kind: "verbose-rustc", sev: normSev(sev), file: loc["file"],
-				line: ln, col: col, rule: rule, msg: msg, help: help,
-			})
-			i = j
-			continue
+// parseRustcVerbose handles rustc/clippy multi-line blocks starting at ps.i.
+// Returns true if a block was parsed (ps.i is updated), false otherwise.
+func (ps *verboseParserState) parseRustcVerbose() bool {
+	if ps.i >= ps.n {
+		return false
+	}
+	stripped := strings.TrimRight(ps.lines[ps.i], " \t\r\n\v\f")
+	if gd := grpNamed(rustcOpener, stripped); gd != nil && ps.i+1 < ps.n && rustcLoc.MatchString(ps.lines[ps.i+1]) {
+		sev := strings.ToLower(gd["sev"])
+		msg := strings.TrimSpace(gd["msg"])
+		code := gd["code"]
+		rule := ""
+		if rt := grpNamed(rustcRuleTl, msg); rt != nil {
+			rule = rt["rule"]
+			loc := rustcRuleTl.FindStringIndex(msg)
+			msg = strings.TrimRight(msg[:loc[0]], " \t")
+		} else if code != "" {
+			rule = code
 		}
+		loc := grpNamed(rustcLoc, ps.lines[ps.i+1])
+		ln, _ := strconv.Atoi(loc["line"])
+		col, _ := strconv.Atoi(loc["col"])
 
-		// 1b. ruff verbose.
-		if rm := grpNamed(ruffOpener, stripped); rm != nil && i+1 < n && rustcLoc.MatchString(lines[i+1]) {
-			rule := rm["rule"]
-			msg := strings.TrimSpace(rm["msg"])
-			loc := grpNamed(rustcLoc, lines[i+1])
-			ln, _ := strconv.Atoi(loc["line"])
-			col, _ := strconv.Atoi(loc["col"])
-			j := i + 2
-			help := ""
-			for j < n {
-				nxt := lines[j]
-				if strings.TrimSpace(nxt) == "" {
-					j++
-					continue
-				}
-				if hm := grpNamed(rustcHelp, nxt); hm != nil && help == "" {
-					help = strings.TrimSpace(hm["msg"])
-					j++
-					continue
-				}
-				if isContextLine(nxt) {
-					j++
-					continue
-				}
-				if grpNamed(ruffOpener, nxt) != nil && j+1 < n && rustcLoc.MatchString(lines[j+1]) {
-					break
-				}
-				if grpNamed(rustcOpener, nxt) != nil && j+1 < n && rustcLoc.MatchString(lines[j+1]) {
-					break
-				}
-				if terseParse(strings.TrimRight(nxt, " \t\r\n\v\f")) != nil {
-					break
-				}
+		j := ps.i + 2
+		help := ""
+		for j < ps.n {
+			nxt := ps.lines[j]
+			if strings.TrimSpace(nxt) == "" {
 				j++
+				continue
 			}
-			findings = append(findings, &finding{
-				kind: "verbose-ruff", sev: "warning", file: loc["file"],
-				line: ln, col: col, rule: rule, msg: msg, help: help,
-			})
-			i = j
-			continue
-		}
-
-		// 2. gcc verbose: terse opener + source lines.
-		if f := terseParse(stripped); f != nil {
-			j := i + 1
-			help := ""
-			for j < n {
-				nxt := lines[j]
-				if gccSourceRE.MatchString(nxt) || gccCaretRE.MatchString(nxt) || strings.TrimSpace(nxt) == "" {
-					j++
-					continue
-				}
-				if hm := grpNamed(rustcHelp, nxt); hm != nil && help == "" {
-					help = strings.TrimSpace(hm["msg"])
-					j++
-					continue
-				}
+			if hm := grpNamed(rustcHelp, nxt); hm != nil && help == "" {
+				help = strings.TrimSpace(hm["msg"])
+				j++
+				continue
+			}
+			if nm := grpNamed(rustcNote, nxt); nm != nil && rule == "" {
+				rule = nm["rule"]
+				j++
+				continue
+			}
+			if isContextLine(nxt) {
+				j++
+				continue
+			}
+			if grpNamed(rustcOpener, nxt) != nil && j+1 < ps.n && rustcLoc.MatchString(ps.lines[j+1]) {
 				break
 			}
-			f.help = help
-			findings = append(findings, f)
-			i = j
-			continue
+			if terseParse(strings.TrimRight(nxt, " \t\r\n\v\f")) != nil {
+				break
+			}
+			j++
 		}
-
-		// 3. eslint stylish.
-		if eslintFileRE.MatchString(stripped) && !strings.HasSuffix(stripped, ":") {
-			eslintFile = stripped
-			i++
-			continue
+		if rule == "" {
+			rule = "-W" + sev
 		}
-		if em := grpNamed(eslintRowRE, stripped); em != nil && eslintFile != "" {
-			ln, _ := strconv.Atoi(em["line"])
-			col, _ := strconv.Atoi(em["col"])
-			findings = append(findings, &finding{
-				kind: "eslint-stylish", sev: normSev(em["sev"]), file: eslintFile,
-				line: ln, col: col, rule: em["rule"], msg: strings.TrimSpace(em["msg"]),
-			})
-			i++
-			continue
-		}
-
-		i++
+		ps.findings = append(ps.findings, &finding{
+			kind: "verbose-rustc", sev: normSev(sev), file: loc["file"],
+			line: ln, col: col, rule: rule, msg: msg, help: help,
+		})
+		ps.i = j
+		return true
 	}
-	return findings
+	return false
+}
+
+// parseRuffVerbose handles ruff multi-line blocks starting at ps.i.
+// Returns true if a block was parsed (ps.i is updated), false otherwise.
+func (ps *verboseParserState) parseRuffVerbose() bool {
+	if ps.i >= ps.n {
+		return false
+	}
+	stripped := strings.TrimRight(ps.lines[ps.i], " \t\r\n\v\f")
+	if rm := grpNamed(ruffOpener, stripped); rm != nil && ps.i+1 < ps.n && rustcLoc.MatchString(ps.lines[ps.i+1]) {
+		rule := rm["rule"]
+		msg := strings.TrimSpace(rm["msg"])
+		loc := grpNamed(rustcLoc, ps.lines[ps.i+1])
+		ln, _ := strconv.Atoi(loc["line"])
+		col, _ := strconv.Atoi(loc["col"])
+		j := ps.i + 2
+		help := ""
+		for j < ps.n {
+			nxt := ps.lines[j]
+			if strings.TrimSpace(nxt) == "" {
+				j++
+				continue
+			}
+			if hm := grpNamed(rustcHelp, nxt); hm != nil && help == "" {
+				help = strings.TrimSpace(hm["msg"])
+				j++
+				continue
+			}
+			if isContextLine(nxt) {
+				j++
+				continue
+			}
+			if grpNamed(ruffOpener, nxt) != nil && j+1 < ps.n && rustcLoc.MatchString(ps.lines[j+1]) {
+				break
+			}
+			if grpNamed(rustcOpener, nxt) != nil && j+1 < ps.n && rustcLoc.MatchString(ps.lines[j+1]) {
+				break
+			}
+			if terseParse(strings.TrimRight(nxt, " \t\r\n\v\f")) != nil {
+				break
+			}
+			j++
+		}
+		ps.findings = append(ps.findings, &finding{
+			kind: "verbose-ruff", sev: "warning", file: loc["file"],
+			line: ln, col: col, rule: rule, msg: msg, help: help,
+		})
+		ps.i = j
+		return true
+	}
+	return false
+}
+
+// parseGccVerbose handles gcc-style terse openers with context lines.
+// Returns true if a block was parsed (ps.i is updated), false otherwise.
+func (ps *verboseParserState) parseGccVerbose() bool {
+	if ps.i >= ps.n {
+		return false
+	}
+	stripped := strings.TrimRight(ps.lines[ps.i], " \t\r\n\v\f")
+	if f := terseParse(stripped); f != nil {
+		j := ps.i + 1
+		help := ""
+		for j < ps.n {
+			nxt := ps.lines[j]
+			if gccSourceRE.MatchString(nxt) || gccCaretRE.MatchString(nxt) || strings.TrimSpace(nxt) == "" {
+				j++
+				continue
+			}
+			if hm := grpNamed(rustcHelp, nxt); hm != nil && help == "" {
+				help = strings.TrimSpace(hm["msg"])
+				j++
+				continue
+			}
+			break
+		}
+		f.help = help
+		ps.findings = append(ps.findings, f)
+		ps.i = j
+		return true
+	}
+	return false
+}
+
+// parseEslintStylish handles eslint stylish format: file header + indented rows.
+// Returns true if a row was parsed (ps.i is updated), false otherwise.
+func (ps *verboseParserState) parseEslintStylish() bool {
+	if ps.i >= ps.n {
+		return false
+	}
+	stripped := strings.TrimRight(ps.lines[ps.i], " \t\r\n\v\f")
+
+	// Try to set the file context if this is a file line.
+	if eslintFileRE.MatchString(stripped) && !strings.HasSuffix(stripped, ":") {
+		ps.eslintFile = stripped
+		ps.i++
+		return true
+	}
+
+	// Try to parse a data row if we have a file context.
+	if em := grpNamed(eslintRowRE, stripped); em != nil && ps.eslintFile != "" {
+		ln, _ := strconv.Atoi(em["line"])
+		col, _ := strconv.Atoi(em["col"])
+		ps.findings = append(ps.findings, &finding{
+			kind: "eslint-stylish", sev: normSev(em["sev"]), file: ps.eslintFile,
+			line: ln, col: col, rule: em["rule"], msg: strings.TrimSpace(em["msg"]),
+		})
+		ps.i++
+		return true
+	}
+
+	return false
+}
+
+func parseVerbose(raw string) []*finding {
+	lines := splitLinesNoTrailing(raw)
+	ps := &verboseParserState{
+		lines: lines,
+		n:     len(lines),
+	}
+	for ps.i < ps.n {
+		// Try handlers in order. The order here matches the original implementation,
+		// so precedence is preserved: rustc, then ruff, then gcc, then eslint.
+		if ps.parseRustcVerbose() {
+			continue
+		}
+		if ps.parseRuffVerbose() {
+			continue
+		}
+		if ps.parseGccVerbose() {
+			continue
+		}
+		if ps.parseEslintStylish() {
+			continue
+		}
+		ps.i++
+	}
+	return ps.findings
 }
 
 // (lintMaxPerRule is read per-invocation inside lintFilter — see below.)
