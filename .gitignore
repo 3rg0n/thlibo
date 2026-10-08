@@ -34,6 +34,11 @@ go.work.sum
 *.gpg
 *.asc
 *secret*
+# ...except signpost's generated pages, which are named after the concept
+# they describe: the `secret-scanning` CI job becomes
+# .signpost/pipelines/ci-secret-scanning.md, and ignoring it leaves the
+# committed bundle short a page that index.md links to.
+!/.signpost/**/*secret*.md
 id_rsa
 id_rsa.*
 id_ecdsa
