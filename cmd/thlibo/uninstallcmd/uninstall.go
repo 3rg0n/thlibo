@@ -98,31 +98,28 @@ func Run(argv []string) int {
 	if settingsPath == "" {
 		settingsPath = filepath.Join(home, ".claude", "settings.json")
 	}
-	bashHookPath := filepath.Join(hookDir, "thlibo-rewrite.sh")
-	ps1HookPath := filepath.Join(hookDir, "thlibo-rewrite.ps1")
-	readHookPath := filepath.Join(hookDir, "thlibo-read.sh")
-	readPS1HookPath := filepath.Join(hookDir, "thlibo-read.ps1")
-	writeHookPath := filepath.Join(hookDir, "thlibo-write.sh")
-	writePS1HookPath := filepath.Join(hookDir, "thlibo-write.ps1")
+	// The same names install writes — claudecode.HookPaths is the one
+	// place they are spelled.
+	hooks := claudecode.HookPaths(hookDir)
 	// ~/.claude/skills/caselog/ — installed by `thlibo install`.
 	skillDir := filepath.Join(filepath.Dir(settingsPath), "skills", "caselog")
 	// ~/.copilot/hooks/thlibo.json — installed by `thlibo install --copilot`.
 	copilotHooksJSON := copilotPath
 	if copilotHooksJSON == "" {
-		copilotHooksJSON = filepath.Join(home, ".copilot", "hooks", "thlibo.json")
+		copilotHooksJSON = copilot.DefaultHooksPath(home)
 	}
 	// ~/.codex/config.toml — holds the inline [[hooks.PostToolUse]] block.
 	// The sibling hooks.json is derived from it exactly as install derives
 	// it, so an override reaches both representations.
 	codexConfigTOML := codexPath
 	if codexConfigTOML == "" {
-		codexConfigTOML = filepath.Join(home, ".codex", "config.toml")
+		codexConfigTOML = codex.DefaultConfigPath(home)
 	}
 	codexHooksJSON := filepath.Join(filepath.Dir(codexConfigTOML), "hooks.json")
 	// ~/.cursor/hooks.json — holds the two preToolUse entries.
 	cursorHooksJSON := cursorPath
 	if cursorHooksJSON == "" {
-		cursorHooksJSON = filepath.Join(home, ".cursor", "hooks.json")
+		cursorHooksJSON = cursor.DefaultHooksPath(home)
 	}
 
 	fmt.Println("thlibo uninstall plan:")
@@ -155,16 +152,16 @@ func Run(argv []string) int {
 	// missing file is the desired state anyway. Also removes the
 	// ".new" conflict-preservation copies so uninstall leaves the
 	// hooks directory clean.
-	for _, p := range []string{
-		bashHookPath, ps1HookPath,
-		readHookPath, readPS1HookPath,
-		writeHookPath, writePS1HookPath,
-		bashHookPath + ".new", ps1HookPath + ".new",
-		readHookPath + ".new", readPS1HookPath + ".new",
-		writeHookPath + ".new", writePS1HookPath + ".new",
-	} {
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			fmt.Fprintln(os.Stderr, "uninstall: delete hook script:", err)
+	scripts := []string{
+		hooks.BashExecHook, hooks.PS1ExecHook,
+		hooks.BashReadHook, hooks.PS1ReadHook,
+		hooks.BashWriteHook, hooks.PS1WriteHook,
+	}
+	for _, suffix := range []string{"", ".new"} {
+		for _, p := range scripts {
+			if err := os.Remove(p + suffix); err != nil && !os.IsNotExist(err) {
+				fmt.Fprintln(os.Stderr, "uninstall: delete hook script:", err)
+			}
 		}
 	}
 	fmt.Println("  deleted hook scripts (Exec + Read + Write/Edit)")

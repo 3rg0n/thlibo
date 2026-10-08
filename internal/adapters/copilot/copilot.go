@@ -209,3 +209,9 @@ func RemoveHooks(hooksJSONPath, hookDir string) error {
 	}
 	return nil
 }
+
+// DefaultHooksPath is thlibo's own file in ~/.copilot/hooks/, where Copilot
+// loads every *.json; --copilot-hooks overrides it.
+func DefaultHooksPath(home string) string {
+	return filepath.Join(home, ".copilot", "hooks", "thlibo.json")
+}
