@@ -153,183 +153,26 @@ func extractTextWithResources(content []byte, fonts map[Name]Dict, reader *Reade
 		return -1
 	}
 
-	// Font-specific decoding.
-	toUnicodeMaps := make(map[string]map[uint16]string)
-	encodingDiffs := make(map[string]map[byte]string)
-	fontWidths := make(map[string]map[int]float64)
-	fontFirstChars := make(map[string]int)
-	fontMissingWidths := make(map[string]float64)
-	compositeFont := make(map[string]bool) // Type0 (CIDFont) → 2-byte codes
-
-	for name, fd := range fonts {
-		sname := string(name)
-		if umap := reader.ToUnicodeMap(fd); umap != nil {
-			toUnicodeMaps[sname] = umap
-		}
-		if diffs := reader.FontEncoding(fd); diffs != nil {
-			encodingDiffs[sname] = diffs
-		}
-
-		subtype, _ := fd.Name("Subtype")
-
-		if subtype == "Type0" {
-			// Composite (CID) font — 2-byte character codes.
-			compositeFont[sname] = true
-			if descArr, ok := fd.Array("DescendantFonts"); ok && len(descArr) > 0 {
-				cidFont, ok := reader.ResolveDict(descArr[0])
-				if ok {
-					// Default width.
-					dw := 1000.0
-					if v, ok := cidFont.Float("DW"); ok {
-						dw = v
-					}
-					fontMissingWidths[sname] = dw / 1000.0
-
-					// Sparse width array /W.
-					if wArr, ok := cidFont.Array("W"); ok {
-						wm := parseCIDWidths(wArr)
-						fontWidths[sname] = wm
-					}
-
-					// Font descriptor MissingWidth.
-					if descRef, ok := cidFont["FontDescriptor"]; ok {
-						if desc, ok := reader.ResolveDict(descRef); ok {
-							if mw, ok := desc.Float("MissingWidth"); ok {
-								fontMissingWidths[sname] = mw / 1000.0
-							}
-						}
-					}
-				}
-			}
-			continue
-		}
-
-		// Simple font — extract widths from Widths array.
-		if widths, ok := fd.Array("Widths"); ok {
-			wm := make(map[int]float64)
-			fc, _ := fd.Int("FirstChar")
-			fontFirstChars[sname] = fc
-			for i, w := range widths {
-				wm[fc+i] = asFloat(w)
-			}
-			fontWidths[sname] = wm
-		}
-		if mw, ok := fd.Float("MissingWidth"); ok {
-			fontMissingWidths[sname] = mw
-		}
-		// Check font descriptor for MissingWidth.
-		if descRef, ok := fd["FontDescriptor"]; ok {
-			if desc, ok := reader.ResolveDict(descRef); ok {
-				if mw, ok := desc.Float("MissingWidth"); ok {
-					fontMissingWidths[sname] = mw
-				}
-			}
-		}
-
-		// Standard 14 font fallback.
-		if _, ok := fontWidths[sname]; !ok {
-			if baseName, ok := fd.Name("BaseFont"); ok {
-				if stdW := stdFontWidths(string(baseName)); stdW != nil {
-					fontWidths[sname] = stdW
-				}
-			}
-		}
-	}
+	ft := loadFontTables(fonts, reader)
 
 	identity := [6]float64{1, 0, 0, 1, 0, 0}
 
 	// operand stack for content stream parsing.
 	var stack []any
 
-	// cidCharWidth returns width for a character code (CID or byte code).
-	cidCharWidth := func(code int) float64 {
-		if wm, ok := fontWidths[fontName]; ok {
-			if w, ok := wm[code]; ok {
-				if compositeFont[fontName] {
-					return w // already divided by 1000 during parsing
-				}
-				return w / 1000.0
-			}
-		}
-		if mw, ok := fontMissingWidths[fontName]; ok {
-			if compositeFont[fontName] {
-				return mw // already divided by 1000
-			}
-			return mw / 1000.0
-		}
-		return 0.6
-	}
-
-	isComposite := func() bool {
-		return compositeFont[fontName]
-	}
-
-	decodeString := func(s string) string {
-		raw := []byte(s)
-		isTwoByte := isComposite()
-
-		// Try ToUnicode map first.
-		if umap, ok := toUnicodeMaps[fontName]; ok && umap != nil {
-			var result strings.Builder
-			// For composite fonts, always use 2-byte.
-			// For simple fonts, detect based on map contents.
-			if !isTwoByte && len(raw) >= 2 {
-				code := uint16(raw[0])<<8 | uint16(raw[1])
-				if _, ok := umap[code]; ok {
-					isTwoByte = true
-				}
-			}
-			if isTwoByte && len(raw)%2 == 0 {
-				for i := 0; i+1 < len(raw); i += 2 {
-					code := uint16(raw[i])<<8 | uint16(raw[i+1])
-					if u, ok := umap[code]; ok {
-						result.WriteString(u)
-					} else {
-						result.WriteRune(rune(code))
-					}
-				}
-			} else {
-				for _, b := range raw {
-					if u, ok := umap[uint16(b)]; ok {
-						result.WriteString(u)
-					} else {
-						result.WriteByte(b)
-					}
-				}
-			}
-			return result.String()
-		}
-
-		// Try encoding differences.
-		if diffs, ok := encodingDiffs[fontName]; ok && diffs != nil {
-			var result strings.Builder
-			for _, b := range raw {
-				if name, ok := diffs[b]; ok {
-					result.WriteString(glyphToString(name))
-				} else {
-					result.WriteByte(b)
-				}
-			}
-			return result.String()
-		}
-
-		// WinAnsiEncoding fallback (covers most modern PDFs).
-		return winansiDecode(s)
-	}
-
 	advanceTextMatrix := func(s string) {
 		raw := []byte(s)
 		hScale := th / 100.0
 		var totalWidth float64
-		if isComposite() && len(raw)%2 == 0 {
+		if ft.composite[fontName] && len(raw)%2 == 0 {
 			for i := 0; i+1 < len(raw); i += 2 {
 				code := int(raw[i])<<8 | int(raw[i+1])
-				w := cidCharWidth(code)
+				w := ft.charWidth(fontName, code)
 				totalWidth += (w*fontSize + tc) * hScale
 			}
 		} else {
 			for _, b := range raw {
-				w := cidCharWidth(int(b))
+				w := ft.charWidth(fontName, int(b))
 				totalWidth += (w*fontSize + tc) * hScale
 				if b == ' ' {
 					totalWidth += tw * hScale
@@ -347,7 +190,7 @@ func extractTextWithResources(content []byte, fonts map[Name]Dict, reader *Reade
 	}
 
 	showString := func(s string) {
-		decoded := decodeString(s)
+		decoded := ft.decode(fontName, s)
 		if decoded == "" {
 			return
 		}
