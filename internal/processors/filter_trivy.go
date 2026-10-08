@@ -57,6 +57,21 @@ type trivyFinding struct {
 	title     string
 }
 
+// trivyTableParser holds state for parsing a single Trivy table.
+type trivyTableParser struct {
+	lines  []string
+	start  int
+	n      int
+	colIdx map[string]int
+	// colOrder is colIdx's keys in first-insertion order. The continuation
+	// merge must visit columns in that order: run.py iterates its
+	// insertion-ordered col_idx dict, and Go randomises map range order.
+	colOrder []string
+	i        int
+	cur      *trivyFinding
+	findings []trivyFinding
+}
+
 func trivyFilter(raw []byte) []byte {
 	cleaned := trivyAnsiRE.ReplaceAllString(string(raw), "")
 	lines := strings.Split(cleaned, "\n")
@@ -138,270 +153,226 @@ func trivyIsSeparator(line string) bool {
 	return hasHyphen && hasBox
 }
 
-func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
-	n := len(lines)
-	i := start
-
-	// Walk forward to find the header row to learn the column count.
-	var headerCells []string
-	for i < n {
-		if trivyIsTableRow(lines[i]) {
-			cells := trivySplitCells(lines[i])
+// findHeader scans forward from tp.i to locate and parse the header row,
+// populating tp.colIdx. Returns true if header found, false otherwise.
+// Updates tp.i to point after the header.
+func (tp *trivyTableParser) findHeader() bool {
+	for tp.i < tp.n {
+		if trivyIsTableRow(tp.lines[tp.i]) {
+			cells := trivySplitCells(tp.lines[tp.i])
 			joined := strings.Join(cells, " | ")
 			if trivyHeaderRE.MatchString(joined) {
-				for _, c := range cells {
-					headerCells = append(headerCells, strings.ToLower(c))
+				tp.colIdx = make(map[string]int)
+				tp.colOrder = nil
+				for idx, c := range cells {
+					name := strings.ToLower(c)
+					if strings.Contains(name, "library") {
+						tp.setCol("lib", idx)
+					} else if strings.Contains(name, "vulnerability") {
+						tp.setCol("vuln", idx)
+					} else if strings.Contains(name, "severity") {
+						tp.setCol("sev", idx)
+					} else if strings.Contains(name, "status") {
+						tp.setCol("status", idx)
+					} else if strings.Contains(name, "installed") {
+						tp.setCol("installed", idx)
+					} else if strings.Contains(name, "fixed") {
+						tp.setCol("fixed", idx)
+					} else if strings.Contains(name, "title") {
+						tp.setCol("title", idx)
+					}
 				}
-				i++
-				break
+				tp.i++
+				return true
 			}
 		}
-		if trivyIsSeparator(lines[i]) || trivyIsTableRow(lines[i]) {
-			i++
+		if trivyIsSeparator(tp.lines[tp.i]) || trivyIsTableRow(tp.lines[tp.i]) {
+			tp.i++
 			continue
 		}
-		// Not a table line at all — bail.
-		return []trivyFinding{}, start + 1
+		// Not a table line — bail
+		return false
 	}
-	if len(headerCells) == 0 {
-		return []trivyFinding{}, i
-	}
+	return false
+}
 
-	// Map column index → semantic name. colOrder records first-insertion
-	// order, because the continuation-row merge below must visit columns
-	// in that order: run.py iterates `col_idx.items()`, which is dict
-	// insertion order, and a Go map's range order is randomised — with
-	// it, a continuation row filling two columns produced different
-	// output on repeated runs of the same input.
-	colIdx := make(map[string]int)
-	var colOrder []string
-	setCol := func(key string, idx int) {
-		if _, ok := colIdx[key]; !ok {
-			colOrder = append(colOrder, key)
-		}
-		colIdx[key] = idx
-	}
-	for idx, name := range headerCells {
-		if strings.Contains(name, "library") {
-			setCol("lib", idx)
-		} else if strings.Contains(name, "vulnerability") {
-			setCol("vuln", idx)
-		} else if strings.Contains(name, "severity") {
-			setCol("sev", idx)
-		} else if strings.Contains(name, "status") {
-			setCol("status", idx)
-		} else if strings.Contains(name, "installed") {
-			setCol("installed", idx)
-		} else if strings.Contains(name, "fixed") {
-			setCol("fixed", idx)
-		} else if strings.Contains(name, "title") {
-			setCol("title", idx)
-		}
-	}
-
-	// We need at least lib/vuln/sev/title to do useful work.
+// hasRequiredColumns checks if colIdx has all required columns.
+func (tp *trivyTableParser) hasRequiredColumns() bool {
 	required := []string{"lib", "vuln", "sev", "title"}
 	for _, k := range required {
-		if _, ok := colIdx[k]; !ok {
-			return []trivyFinding{}, i
+		if _, ok := tp.colIdx[k]; !ok {
+			return false
 		}
 	}
+	return true
+}
 
-	var findings []trivyFinding
-	var cur *trivyFinding
+// setCol maps a semantic column name to its index, recording first-insertion
+// order in colOrder.
+func (tp *trivyTableParser) setCol(key string, idx int) {
+	if _, ok := tp.colIdx[key]; !ok {
+		tp.colOrder = append(tp.colOrder, key)
+	}
+	tp.colIdx[key] = idx
+}
 
-	flush := func() {
-		if cur != nil && cur.vuln != "" {
-			findings = append(findings, *cur)
+// flush appends the current finding if it's valid.
+func (tp *trivyTableParser) flush() {
+	if tp.cur != nil && tp.cur.vuln != "" {
+		tp.findings = append(tp.findings, *tp.cur)
+	}
+	tp.cur = nil
+}
+
+// updateCurrent merges cells into the current finding. If a key column
+// (lib/vuln/sev/status/installed/fixed) is non-empty on a continuation,
+// and it's already populated, flushes the current finding and starts a new one.
+// Titles are always merged (wrapped lines).
+func (tp *trivyTableParser) updateCurrent(cells []string) {
+	if tp.cur == nil {
+		// First row of a finding.
+		tp.cur = &trivyFinding{
+			lib:       trivyGetCell(cells, tp.colIdx["lib"]),
+			vuln:      trivyGetCell(cells, tp.colIdx["vuln"]),
+			sev:       trivyGetCell(cells, tp.colIdx["sev"]),
+			status:    trivyGetCell(cells, tp.colIdx["status"]),
+			installed: trivyGetCell(cells, tp.colIdx["installed"]),
+			fixed:     trivyGetCell(cells, tp.colIdx["fixed"]),
+			title:     trivyGetCell(cells, tp.colIdx["title"]),
 		}
-		cur = nil
+		return
 	}
 
-	for i < n {
-		line := lines[i]
-		if trivyIsSeparator(line) {
-			// A separator with `┘` (right-bottom corner) ends the table.
-			// `┴` alone is ambiguous: it can appear in a partial inner
-			// separator too. Use trailing `┘` as the close marker.
-			strippedEnd := strings.TrimRight(line, " ")
-			if strings.HasSuffix(strippedEnd, "┘") {
-				flush()
-				return findings, i + 1
-			}
-			// Separator BETWEEN rows. If the vuln-column of the
-			// following row is blank, it's a wrap continuation;
-			// otherwise it's a new finding.
-			if i+1 < n && trivyIsTableRow(lines[i+1]) {
-				nextCells := trivySplitCells(lines[i+1])
-				if len(nextCells) > colIdx["vuln"] && nextCells[colIdx["vuln"]] != "" {
-					flush()
+	// Continuation row: merge or replace fields.
+	for _, key := range tp.colOrder {
+		idx := tp.colIdx[key]
+		if idx >= len(cells) {
+			continue
+		}
+		val := cells[idx]
+		if val == "" {
+			continue
+		}
+		if key == "title" {
+			// Title wraps: append with a space.
+			tp.cur.title = strings.TrimSpace(tp.cur.title + " " + val)
+		} else {
+			// Other fields: replace if empty, or flush+start new if already set.
+			updated := false
+			switch key {
+			case "lib":
+				if tp.cur.lib == "" {
+					tp.cur.lib = val
+					updated = true
+				}
+			case "vuln":
+				if tp.cur.vuln == "" {
+					tp.cur.vuln = val
+					updated = true
+				}
+			case "sev":
+				if tp.cur.sev == "" {
+					tp.cur.sev = val
+					updated = true
+				}
+			case "status":
+				if tp.cur.status == "" {
+					tp.cur.status = val
+					updated = true
+				}
+			case "installed":
+				if tp.cur.installed == "" {
+					tp.cur.installed = val
+					updated = true
+				}
+			case "fixed":
+				if tp.cur.fixed == "" {
+					tp.cur.fixed = val
+					updated = true
 				}
 			}
-			i++
+			// If field was already set, start a new finding.
+			if !updated {
+				tp.flush()
+				tp.cur = &trivyFinding{
+					lib:       trivyGetCell(cells, tp.colIdx["lib"]),
+					vuln:      trivyGetCell(cells, tp.colIdx["vuln"]),
+					sev:       trivyGetCell(cells, tp.colIdx["sev"]),
+					status:    trivyGetCell(cells, tp.colIdx["status"]),
+					installed: trivyGetCell(cells, tp.colIdx["installed"]),
+					fixed:     trivyGetCell(cells, tp.colIdx["fixed"]),
+					title:     trivyGetCell(cells, tp.colIdx["title"]),
+				}
+				// Starting a fresh finding ends this row's merge, as
+				// run.py's `break` does; carrying on would append the
+				// row's title to the new finding a second time.
+				return
+			}
+		}
+	}
+}
+
+func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
+	tp := &trivyTableParser{
+		lines:  lines,
+		start:  start,
+		n:      len(lines),
+		i:      start,
+		colIdx: make(map[string]int),
+	}
+
+	// Find header row and populate column mappings.
+	if !tp.findHeader() {
+		return []trivyFinding{}, tp.start + 1
+	}
+	if !tp.hasRequiredColumns() {
+		return []trivyFinding{}, tp.i
+	}
+
+	// Parse table rows and separators.
+	for tp.i < tp.n {
+		line := tp.lines[tp.i]
+
+		if trivyIsSeparator(line) {
+			// Check for table-end marker.
+			strippedEnd := strings.TrimRight(line, " ")
+			if strings.HasSuffix(strippedEnd, "┘") {
+				tp.flush()
+				return tp.findings, tp.i + 1
+			}
+			// Between-row separator: check if next row starts a new finding.
+			if tp.i+1 < tp.n && trivyIsTableRow(tp.lines[tp.i+1]) {
+				nextCells := trivySplitCells(tp.lines[tp.i+1])
+				if len(nextCells) > tp.colIdx["vuln"] && nextCells[tp.colIdx["vuln"]] != "" {
+					tp.flush()
+				}
+			}
+			tp.i++
 			continue
 		}
 
 		if trivyIsTableRow(line) {
 			cells := trivySplitCells(line)
+			// Ensure we have enough cells to read all columns.
 			maxIdx := 0
-			for _, v := range colIdx {
+			for _, v := range tp.colIdx {
 				if v > maxIdx {
 					maxIdx = v
 				}
 			}
-			if len(cells) <= maxIdx {
-				i++
-				continue
+			if len(cells) > maxIdx {
+				tp.updateCurrent(cells)
 			}
-			if cur == nil {
-				cur = &trivyFinding{
-					lib:       cells[colIdx["lib"]],
-					vuln:      cells[colIdx["vuln"]],
-					sev:       cells[colIdx["sev"]],
-					status:    trivyGetCell(cells, colIdx["status"]),
-					installed: trivyGetCell(cells, colIdx["installed"]),
-					fixed:     trivyGetCell(cells, colIdx["fixed"]),
-					title:     cells[colIdx["title"]],
-				}
-			} else {
-				// Continuation: empty cells inherit the prior value;
-				// non-empty cells append to the title (the most common
-				// wrap target) or replace the column value.
-				//
-				// Labelled because starting a fresh finding ends this
-				// row's merge — run.py `break`s out of its column loop
-				// there. An unlabelled `break` inside the switch below
-				// only leaves the switch, so the loop went on to append
-				// the row's title to the new finding a second time.
-			merge:
-				for _, key := range colOrder {
-					idx := colIdx[key]
-					if idx >= len(cells) {
-						continue
-					}
-					val := cells[idx]
-					if val == "" {
-						continue
-					}
-					if key == "title" {
-						// Append wrapped title text with a single space.
-						cur.title = strings.TrimSpace(cur.title + " " + val)
-					} else {
-						// Other columns: a non-empty cell on a
-						// continuation row means a NEW value (e.g.
-						// severity changed). Replace.
-						switch key {
-						case "lib":
-							if cur.lib == "" {
-								cur.lib = val
-							} else {
-								// Pre-populated; start fresh.
-								flush()
-								cur = &trivyFinding{
-									lib:       val,
-									vuln:      trivyGetCell(cells, colIdx["vuln"]),
-									sev:       trivyGetCell(cells, colIdx["sev"]),
-									status:    trivyGetCell(cells, colIdx["status"]),
-									installed: trivyGetCell(cells, colIdx["installed"]),
-									fixed:     trivyGetCell(cells, colIdx["fixed"]),
-									title:     trivyGetCell(cells, colIdx["title"]),
-								}
-								break merge
-							}
-						case "vuln":
-							if cur.vuln == "" {
-								cur.vuln = val
-							} else {
-								flush()
-								cur = &trivyFinding{
-									lib:       trivyGetCell(cells, colIdx["lib"]),
-									vuln:      val,
-									sev:       trivyGetCell(cells, colIdx["sev"]),
-									status:    trivyGetCell(cells, colIdx["status"]),
-									installed: trivyGetCell(cells, colIdx["installed"]),
-									fixed:     trivyGetCell(cells, colIdx["fixed"]),
-									title:     trivyGetCell(cells, colIdx["title"]),
-								}
-								break merge
-							}
-						case "sev":
-							if cur.sev == "" {
-								cur.sev = val
-							} else {
-								flush()
-								cur = &trivyFinding{
-									lib:       trivyGetCell(cells, colIdx["lib"]),
-									vuln:      trivyGetCell(cells, colIdx["vuln"]),
-									sev:       val,
-									status:    trivyGetCell(cells, colIdx["status"]),
-									installed: trivyGetCell(cells, colIdx["installed"]),
-									fixed:     trivyGetCell(cells, colIdx["fixed"]),
-									title:     trivyGetCell(cells, colIdx["title"]),
-								}
-								break merge
-							}
-						case "status":
-							if cur.status == "" {
-								cur.status = val
-							} else {
-								flush()
-								cur = &trivyFinding{
-									lib:       trivyGetCell(cells, colIdx["lib"]),
-									vuln:      trivyGetCell(cells, colIdx["vuln"]),
-									sev:       trivyGetCell(cells, colIdx["sev"]),
-									status:    val,
-									installed: trivyGetCell(cells, colIdx["installed"]),
-									fixed:     trivyGetCell(cells, colIdx["fixed"]),
-									title:     trivyGetCell(cells, colIdx["title"]),
-								}
-								break merge
-							}
-						case "installed":
-							if cur.installed == "" {
-								cur.installed = val
-							} else {
-								flush()
-								cur = &trivyFinding{
-									lib:       trivyGetCell(cells, colIdx["lib"]),
-									vuln:      trivyGetCell(cells, colIdx["vuln"]),
-									sev:       trivyGetCell(cells, colIdx["sev"]),
-									status:    trivyGetCell(cells, colIdx["status"]),
-									installed: val,
-									fixed:     trivyGetCell(cells, colIdx["fixed"]),
-									title:     trivyGetCell(cells, colIdx["title"]),
-								}
-								break merge
-							}
-						case "fixed":
-							if cur.fixed == "" {
-								cur.fixed = val
-							} else {
-								flush()
-								cur = &trivyFinding{
-									lib:       trivyGetCell(cells, colIdx["lib"]),
-									vuln:      trivyGetCell(cells, colIdx["vuln"]),
-									sev:       trivyGetCell(cells, colIdx["sev"]),
-									status:    trivyGetCell(cells, colIdx["status"]),
-									installed: trivyGetCell(cells, colIdx["installed"]),
-									fixed:     val,
-									title:     trivyGetCell(cells, colIdx["title"]),
-								}
-								break merge
-							}
-						}
-					}
-				}
-			}
-			i++
+			tp.i++
 			continue
 		}
 
-		// Non-table line inside the table region — skip.
-		i++
+		// Non-table line — skip.
+		tp.i++
 	}
 
-	flush()
-	return findings, i
+	tp.flush()
+	return tp.findings, tp.i
 }
 
 func trivyGetCell(cells []string, idx int) string {
