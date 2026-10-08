@@ -167,23 +167,35 @@ func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
 		return []trivyFinding{}, i
 	}
 
-	// Map column index → semantic name.
+	// Map column index → semantic name. colOrder records first-insertion
+	// order, because the continuation-row merge below must visit columns
+	// in that order: run.py iterates `col_idx.items()`, which is dict
+	// insertion order, and a Go map's range order is randomised — with
+	// it, a continuation row filling two columns produced different
+	// output on repeated runs of the same input.
 	colIdx := make(map[string]int)
+	var colOrder []string
+	setCol := func(key string, idx int) {
+		if _, ok := colIdx[key]; !ok {
+			colOrder = append(colOrder, key)
+		}
+		colIdx[key] = idx
+	}
 	for idx, name := range headerCells {
 		if strings.Contains(name, "library") {
-			colIdx["lib"] = idx
+			setCol("lib", idx)
 		} else if strings.Contains(name, "vulnerability") {
-			colIdx["vuln"] = idx
+			setCol("vuln", idx)
 		} else if strings.Contains(name, "severity") {
-			colIdx["sev"] = idx
+			setCol("sev", idx)
 		} else if strings.Contains(name, "status") {
-			colIdx["status"] = idx
+			setCol("status", idx)
 		} else if strings.Contains(name, "installed") {
-			colIdx["installed"] = idx
+			setCol("installed", idx)
 		} else if strings.Contains(name, "fixed") {
-			colIdx["fixed"] = idx
+			setCol("fixed", idx)
 		} else if strings.Contains(name, "title") {
-			colIdx["title"] = idx
+			setCol("title", idx)
 		}
 	}
 
@@ -255,7 +267,14 @@ func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
 				// Continuation: empty cells inherit the prior value;
 				// non-empty cells append to the title (the most common
 				// wrap target) or replace the column value.
-				for key := range colIdx {
+				//
+				// Labelled because starting a fresh finding ends this
+				// row's merge — run.py `break`s out of its column loop
+				// there. An unlabelled `break` inside the switch below
+				// only leaves the switch, so the loop went on to append
+				// the row's title to the new finding a second time.
+			merge:
+				for _, key := range colOrder {
 					idx := colIdx[key]
 					if idx >= len(cells) {
 						continue
@@ -287,7 +306,7 @@ func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
 									fixed:     trivyGetCell(cells, colIdx["fixed"]),
 									title:     trivyGetCell(cells, colIdx["title"]),
 								}
-								break
+								break merge
 							}
 						case "vuln":
 							if cur.vuln == "" {
@@ -303,7 +322,7 @@ func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
 									fixed:     trivyGetCell(cells, colIdx["fixed"]),
 									title:     trivyGetCell(cells, colIdx["title"]),
 								}
-								break
+								break merge
 							}
 						case "sev":
 							if cur.sev == "" {
@@ -319,7 +338,7 @@ func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
 									fixed:     trivyGetCell(cells, colIdx["fixed"]),
 									title:     trivyGetCell(cells, colIdx["title"]),
 								}
-								break
+								break merge
 							}
 						case "status":
 							if cur.status == "" {
@@ -335,7 +354,7 @@ func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
 									fixed:     trivyGetCell(cells, colIdx["fixed"]),
 									title:     trivyGetCell(cells, colIdx["title"]),
 								}
-								break
+								break merge
 							}
 						case "installed":
 							if cur.installed == "" {
@@ -351,7 +370,7 @@ func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
 									fixed:     trivyGetCell(cells, colIdx["fixed"]),
 									title:     trivyGetCell(cells, colIdx["title"]),
 								}
-								break
+								break merge
 							}
 						case "fixed":
 							if cur.fixed == "" {
@@ -367,7 +386,7 @@ func trivyParseTable(lines []string, start int) ([]trivyFinding, int) {
 									fixed:     val,
 									title:     trivyGetCell(cells, colIdx["title"]),
 								}
-								break
+								break merge
 							}
 						}
 					}
