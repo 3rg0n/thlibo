@@ -1,11 +1,11 @@
 ---
 type: Module
 title: internal/adapters/codex
-description: "8 go files; 17 exported symbols; entrypoint #!."
+description: "8 go files; 18 exported symbols; entrypoint #!."
 tags: [entrypoint]
 attributes:
   - { name: entrypoints, value: "#!" }
-  - { name: exported, value: "17" }
+  - { name: exported, value: "18" }
   - { name: files, value: "8" }
   - { name: package, value: codex }
 edges:
@@ -14,7 +14,7 @@ edges:
 # internal/adapters/codex
 
 <!-- signpost:managed:summary -->
-8 go files; 17 exported symbols; entrypoint #!.
+8 go files; 18 exported symbols; entrypoint #!.
 <!-- /signpost:managed:summary -->
 
 ## Structure
@@ -30,7 +30,7 @@ edges:
 - `internal/adapters/codex/representation_test.go`
 - `internal/adapters/codex/windowshook_test.go`
 
-- **Exports** (17): `DetectRepresentation`, `EnableHooksFeatureFlag`, `HookFileName`, `HookScript`, `HookScriptFor`, `HookScriptPS1`, `InstallHook`, `MergeConfigTOMLHook`, `MergeHooksJSONHook`, `RemoveConfigTOMLHook`, `RemoveHooks`, `RemoveStaleHooksJSON`, `RepHooksJSON`, `RepInline`, `Representation`, `Representation.String`, `WriteHookScript`
+- **Exports** (18): `DefaultConfigPath`, `DetectRepresentation`, `EnableHooksFeatureFlag`, `HookFileName`, `HookScript`, `HookScriptFor`, `HookScriptPS1`, `InstallHook`, `MergeConfigTOMLHook`, `MergeHooksJSONHook`, `RemoveConfigTOMLHook`, `RemoveHooks`, `RemoveStaleHooksJSON`, `RepHooksJSON`, `RepInline`, `Representation`, `Representation.String`, `WriteHookScript`
 
 - **Imports**: [internal/adapters/hookpath](./hookpath.md) ×3
 <!-- /signpost:managed:structure -->
