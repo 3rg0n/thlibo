@@ -1,9 +1,9 @@
 ---
 type: Module
 title: internal/pdf
-description: 26 go files; 110 exported symbols.
+description: 26 go files; 111 exported symbols.
 attributes:
-  - { name: exported, value: "110" }
+  - { name: exported, value: "111" }
   - { name: files, value: "26" }
   - { name: package, value: pdf }
 edges:
@@ -12,7 +12,7 @@ edges:
 # internal/pdf
 
 <!-- signpost:managed:summary -->
-26 go files; 110 exported symbols.
+26 go files; 111 exported symbols.
 <!-- /signpost:managed:summary -->
 
 ## Structure
@@ -46,7 +46,7 @@ edges:
 - `internal/pdf/table_test.go`
 - `internal/pdf/text.go`
 
-- **Exports** (110): `Array`, `BuildLines`, `Cell`, `Column`, `DecodeImageStream`, `DecodeTextString`, `Dict`, `Dict.Array`, `Dict.Dict`, `Dict.Float`, `Dict.Int`, `Dict.Name`, `Dict.Ref`, `Dict.Stream`, `Dict.String`, `Document`, `Document.InfoString`, `Document.IsEncrypted`, `Document.IsTagged`, `Document.NumPages`, `Document.Outline`, `Document.Page`, `Document.StructuredMarkdown`, `Document.Text`, `ErrEncrypted`, `ErrUnsupportedFilter`, `ExtractPageImages`, `ExtractPageText`, `ExtractText`, `ExtractTextWithResources`, `FindTable`, `FindTableAcrossPages`, `FindTables`, `HelveticaTextWidth`, `ImageRef`, `ImageRef.Bounds`, `ImageRef.CoversPage`, `ImageRef.Decode`, `ImageRef.PixelSize`, `Lexer`, `Lexer.AtEnd`, `Lexer.NextToken`, `Lexer.Pos`, `Lexer.SetPos`, `Name`, `NewLexer`, `NewParser`, `Open`, `OpenBytes`, `OutlineItem`, `Page`, `Page.FindTable`, `Page.HasImages`, `Page.Images`, `Page.MediaBox`, `Page.Rotation`, `Page.ScanImage`, `Page.Tables`, `Page.Text`, `Page.TextLines`, and 50 more
+- **Exports** (111): `Array`, `BuildLines`, `Cell`, `Column`, `DecodeImageStream`, `DecodeTextString`, `Dict`, `Dict.Array`, `Dict.Dict`, `Dict.Float`, `Dict.Int`, `Dict.Name`, `Dict.Ref`, `Dict.Stream`, `Dict.String`, `Document`, `Document.InfoString`, `Document.IsEncrypted`, `Document.IsTagged`, `Document.NumPages`, `Document.Outline`, `Document.Page`, `Document.StructuredMarkdown`, `Document.Text`, `ErrEncrypted`, `ErrStreamTooLarge`, `ErrUnsupportedFilter`, `ExtractPageImages`, `ExtractPageText`, `ExtractText`, `ExtractTextWithResources`, `FindTable`, `FindTableAcrossPages`, `FindTables`, `HelveticaTextWidth`, `ImageRef`, `ImageRef.Bounds`, `ImageRef.CoversPage`, `ImageRef.Decode`, `ImageRef.PixelSize`, `Lexer`, `Lexer.AtEnd`, `Lexer.NextToken`, `Lexer.Pos`, `Lexer.SetPos`, `Name`, `NewLexer`, `NewParser`, `Open`, `OpenBytes`, `OutlineItem`, `Page`, `Page.FindTable`, `Page.HasImages`, `Page.Images`, `Page.MediaBox`, `Page.Rotation`, `Page.ScanImage`, `Page.Tables`, `Page.Text`, and 51 more
 
 - **Imports**: [golang.org/x/image](../references/go-golang-org-x-image.md) ×2
 <!-- /signpost:managed:structure -->

@@ -107,7 +107,7 @@ What the shape of this repository says. Each line is a result — where one read
 - [internal/middleware](./modules/middleware.md) — 13 go files; 9 exported symbols.
 - [processors/ndjson-filter](./modules/ndjson-filter.md) — 1 python file; 3 exported symbols; entrypoint __main__; package processors.ndjson-filter.run.
 - [processors/npm-filter](./modules/npm-filter.md) — 1 python file; 7 exported symbols; entrypoint __main__; package processors.npm-filter.run.
-- [internal/pdf](./modules/pdf.md) — 26 go files; 110 exported symbols.
+- [internal/pdf](./modules/pdf.md) — 26 go files; 111 exported symbols.
 - [processors/pdf-to-md](./modules/pdf-to-md.md) — 1 python file; 11 exported symbols; entrypoint __main__; package processors.pdf-to-md.run.
 - [internal/pdfocr](./modules/pdfocr.md) — 3 go files; 3 exported symbols.
 - [processors](./modules/processors-1j5jcrl.md) — 1 go file; 1 exported symbol; package builtins.
