@@ -20,10 +20,7 @@ var (
 )
 
 func cargoFilter(raw []byte) []byte {
-	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
-	if n := len(lines); n > 0 && lines[n-1] == "" {
-		lines = lines[:n-1]
-	}
+	lines := splitLines(raw)
 	var out []string
 	keepNextIfPointer := false
 	for _, line := range lines {

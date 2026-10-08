@@ -2,6 +2,7 @@ package processors
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -23,7 +24,6 @@ import (
 func init() { RegisterNative("stacktrace-filter", stacktraceFilter) }
 
 var (
-	ansiRE          = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 	pyStartRE       = regexp.MustCompile(`^Traceback \(most recent call last\):\s*$`)
 	pyFrameRE       = regexp.MustCompile(`^\s+File "([^"]+)", line (\d+)(?:, in (.+))?$`)
 	goPanicRE       = regexp.MustCompile(`^panic: (.+)$`)
@@ -51,7 +51,7 @@ type unit struct {
 }
 
 func stacktraceFilter(raw []byte) []byte {
-	text := stripAnsi(string(raw))
+	text := stripANSI(string(raw))
 	lines := strings.Split(text, "\n")
 	// splitlines() semantics: a trailing newline shouldn't yield a final
 	// empty element. Python's str.splitlines() drops the trailing "".
@@ -87,10 +87,6 @@ func stacktraceFilter(raw []byte) []byte {
 		result += "\n"
 	}
 	return []byte(result)
-}
-
-func stripAnsi(s string) string {
-	return ansiRE.ReplaceAllString(s, "")
 }
 
 func compressBlock(block []string) []string {
@@ -131,7 +127,7 @@ func compressBlock(block []string) []string {
 	outUnits = append(outUnits, head...)
 	if omitted > 0 {
 		outUnits = append(outUnits, unit{
-			lines:   []string{"  ... " + itoaStacktrace(omitted) + " frames omitted ..."},
+			lines:   []string{"  ... " + strconv.Itoa(omitted) + " frames omitted ..."},
 			isFrame: false,
 		})
 	}
@@ -193,7 +189,7 @@ func dedupeUnits(units []unit) []unit {
 		if runLen >= 3 {
 			base := units[i]
 			taggedLines := append([]string{}, base.lines[:len(base.lines)-1]...)
-			lastLine := base.lines[len(base.lines)-1] + "    × " + itoaStacktrace(runLen)
+			lastLine := base.lines[len(base.lines)-1] + "    × " + strconv.Itoa(runLen)
 			taggedLines = append(taggedLines, lastLine)
 			out = append(out, unit{
 				lines:   taggedLines,
@@ -278,19 +274,4 @@ func splitTraces(lines []string) [][]int {
 		ranges = append(ranges, []int{start, end})
 	}
 	return ranges
-}
-
-// itoaStacktrace is a tiny non-negative int formatter.
-func itoaStacktrace(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
 }

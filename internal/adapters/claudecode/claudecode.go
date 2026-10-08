@@ -30,6 +30,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
 
 //go:embed hook.sh
@@ -502,7 +504,7 @@ func removePreToolUseHooks(root map[string]any) bool {
 				continue
 			}
 			cmd, _ := hobj["command"].(string)
-			n := normalisePath(cmd)
+			n := hookpath.Normalise(cmd)
 			if isThliboHookCommand(n) {
 				changed = true
 				continue // drop
@@ -557,7 +559,7 @@ func isThliboHookCommand(normalisedCmd string) bool {
 // doesn't interpret backslashes as shell escapes. Git Bash / MSYS
 // handle `C:/path/to/file` correctly.
 func addPreToolUseHook(root map[string]any, matcher, hookPath string, markerSuffixes ...string) {
-	cmdString := buildHookCommand(matcher, hookPath)
+	cmdString := buildHookCommand(hookPath)
 
 	hooks := asObject(root, "hooks")
 	preArr := asArray(hooks, "PreToolUse")
@@ -599,7 +601,7 @@ func addPreToolUseHook(root map[string]any, matcher, hookPath string, markerSuff
 			continue
 		}
 		cmd, _ := obj["command"].(string)
-		if !hasAnyMarker(normalisePath(cmd), markerSuffixes) {
+		if !hasAnyMarker(hookpath.Normalise(cmd), markerSuffixes) {
 			kept = append(kept, h)
 			continue
 		}
@@ -647,9 +649,8 @@ func hasAnyMarker(normalisedCmd string, markers []string) bool {
 // The suffix check covers every matcher (Bash, PowerShell, Read,
 // Write, Edit) uniformly: .ps1 always gets the wrapper, anything
 // else (.sh, no extension) runs as-is.
-func buildHookCommand(matcher, hookPath string) string {
-	_ = matcher // retained for signature compatibility / future use
-	hookPath = normalisePath(hookPath)
+func buildHookCommand(hookPath string) string {
+	hookPath = hookpath.Normalise(hookPath)
 	if strings.HasSuffix(strings.ToLower(hookPath), ".ps1") {
 		return `powershell -NoProfile -ExecutionPolicy Bypass -File "` + hookPath + `"`
 	}
@@ -693,17 +694,4 @@ func (a *arr) items() []any {
 func (a *arr) append(x any) {
 	v, _ := a.owner[a.key].([]any)
 	a.owner[a.key] = append(v, x)
-}
-
-// normalisePath converts a Windows-style path to forward slashes.
-// On non-Windows, it's a no-op. We don't rewrite the drive letter;
-// Git Bash accepts both `C:/...` and `/c/...`, and Claude Code's
-// Bash tool resolves `C:/...` correctly.
-func normalisePath(p string) string {
-	// Simple, allocation-free for the common case where no change
-	// is needed.
-	if !strings.ContainsRune(p, '\\') {
-		return p
-	}
-	return strings.ReplaceAll(p, "\\", "/")
 }

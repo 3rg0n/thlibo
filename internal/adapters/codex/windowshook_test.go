@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
 
 // forceWindows pins runtimeIsWindows for one test and restores it after,
@@ -111,7 +113,7 @@ func TestMergeConfigTOMLHookPS1IsWrapped(t *testing.T) {
 	}
 	s := string(mustRead(t, cfg))
 	want := `command = 'powershell -NoProfile -ExecutionPolicy Bypass -File "` +
-		normalisePath(hook) + `"'`
+		hookpath.Normalise(hook) + `"'`
 	if !strings.Contains(s, want) {
 		t.Errorf("missing wrapped command %q:\n%s", want, s)
 	}
@@ -124,7 +126,7 @@ func TestMergeConfigTOMLHookPS1IsWrapped(t *testing.T) {
 func TestMergeConfigTOMLHookReplacesStaleShEntry(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "config.toml")
-	sh := normalisePath(filepath.Join(dir, "thlibo-rewrite-codex.sh"))
+	sh := hookpath.Normalise(filepath.Join(dir, "thlibo-rewrite-codex.sh"))
 	ps1 := filepath.Join(dir, "thlibo-rewrite-codex.ps1")
 
 	existing := "model = \"gpt-5.5\"\n\n[features]\nhooks = true\n\n" +
@@ -181,7 +183,7 @@ func TestMergeConfigTOMLHookPS1Idempotent(t *testing.T) {
 		body := "[[hooks.PostToolUse]]\nmatcher = \"^Bash$\"\n\n" +
 			"[[hooks.PostToolUse.hooks]]\ntype = \"command\"\n" +
 			`command = "powershell -NoProfile -ExecutionPolicy Bypass -File \"` +
-			normalisePath(ps1) + `\""` + "\n"
+			hookpath.Normalise(ps1) + `\""` + "\n"
 		if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -201,7 +203,7 @@ func TestMergeConfigTOMLHookPS1Idempotent(t *testing.T) {
 func TestMergeConfigTOMLHookKeepsCRLF(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "config.toml")
-	sh := normalisePath(filepath.Join(dir, "thlibo-rewrite-codex.sh"))
+	sh := hookpath.Normalise(filepath.Join(dir, "thlibo-rewrite-codex.sh"))
 	ps1 := filepath.Join(dir, "thlibo-rewrite-codex.ps1")
 
 	existing := strings.ReplaceAll("[[hooks.PostToolUse]]\nmatcher = \"^Bash$\"\n\n"+
@@ -243,7 +245,7 @@ func TestMergeConfigTOMLHookIgnoresTrustState(t *testing.T) {
 	cfg := filepath.Join(dir, "config.toml")
 	sh := filepath.Join(dir, "thlibo-rewrite-codex.sh")
 
-	existing := "[hooks.state.'" + normalisePath(cfg) + ":post_tool_use:0:0']\n" +
+	existing := "[hooks.state.'" + hookpath.Normalise(cfg) + ":post_tool_use:0:0']\n" +
 		"enabled = true\ntrusted_hash = \"sha256:dead\"\n" +
 		"# stale record naming " + hookMarkerSh + "\n"
 	if err := os.WriteFile(cfg, []byte(existing), 0o600); err != nil {
@@ -264,7 +266,7 @@ func TestMergeConfigTOMLHookIgnoresTrustState(t *testing.T) {
 func TestMergeHooksJSONHookReplacesStaleShEntry(t *testing.T) {
 	dir := t.TempDir()
 	hj := filepath.Join(dir, "hooks.json")
-	sh := normalisePath(filepath.Join(dir, "thlibo-rewrite-codex.sh"))
+	sh := hookpath.Normalise(filepath.Join(dir, "thlibo-rewrite-codex.sh"))
 	ps1 := filepath.Join(dir, "thlibo-rewrite-codex.ps1")
 
 	body := `{"hooks":{"PostToolUse":[{"matcher":"^Bash$","hooks":[

@@ -34,6 +34,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
 
 //go:embed hook.sh
@@ -88,7 +90,7 @@ const (
 
 // containsThliboMarker reports whether s names either hook script.
 func containsThliboMarker(s string) bool {
-	s = normalisePath(s)
+	s = hookpath.Normalise(s)
 	return strings.Contains(s, hookMarkerSh) || strings.Contains(s, hookMarkerPS1)
 }
 
@@ -101,7 +103,7 @@ func containsThliboMarker(s string) bool {
 // the command string into an argv — git-ai's own inline hook passes
 // arguments the same way.
 func buildHookCommand(hookPath string) string {
-	hookPath = normalisePath(hookPath)
+	hookPath = hookpath.Normalise(hookPath)
 	if strings.HasSuffix(strings.ToLower(hookPath), ".ps1") {
 		return `powershell -NoProfile -ExecutionPolicy Bypass -File "` + hookPath + `"`
 	}
@@ -404,9 +406,9 @@ func MergeConfigTOMLHook(configPath, hookPath string) error {
 		if !isTOMLCommandAssignment(t) || !containsThliboMarker(t) {
 			continue
 		}
-		// Unescape before normalising, not after: normalisePath would turn
+		// Unescape before normalising, not after: hookpath.Normalise would turn
 		// a `\"` escape into `/"` and the comparison would never match.
-		if strings.Contains(normalisePath(unescapeTOMLQuotes(t)), command) {
+		if strings.Contains(hookpath.Normalise(unescapeTOMLQuotes(t)), command) {
 			correct = true
 			continue
 		}
@@ -973,14 +975,4 @@ func hooksFlagEnabled(line string) bool {
 		after = after[:idx]
 	}
 	return strings.TrimSpace(after) == "true"
-}
-
-// normalisePath converts backslashes to forward slashes so bash -c
-// doesn't eat them on Windows. Same fix the claudecode adapter
-// applies to its hook path.
-func normalisePath(p string) string {
-	if !strings.ContainsRune(p, '\\') {
-		return p
-	}
-	return strings.ReplaceAll(p, "\\", "/")
 }

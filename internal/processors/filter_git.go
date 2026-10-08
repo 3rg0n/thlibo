@@ -2,6 +2,7 @@ package processors
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -23,12 +24,7 @@ var (
 )
 
 func gitFilter(raw []byte) []byte {
-	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
-	// splitlines() semantics: a trailing newline shouldn't yield a final
-	// empty element. Python's str.splitlines() drops the trailing "".
-	if n := len(lines); n > 0 && lines[n-1] == "" {
-		lines = lines[:n-1]
-	}
+	lines := splitLines(raw)
 
 	var out []string
 	inDiffHunk := false
@@ -38,7 +34,7 @@ func gitFilter(raw []byte) []byte {
 
 	flushDiff := func() {
 		if haveDiff {
-			out = append(out, "diff "+diffFile+" (+"+itoaGit(diffPlus)+" -"+itoaGit(diffMinus)+")")
+			out = append(out, "diff "+diffFile+" (+"+strconv.Itoa(diffPlus)+" -"+strconv.Itoa(diffMinus)+")")
 		}
 		haveDiff = false
 		diffFile = ""
@@ -115,19 +111,4 @@ func gitFilter(raw []byte) []byte {
 		return nil
 	}
 	return []byte(strings.Join(out, "\n") + "\n")
-}
-
-// itoaGit is a tiny non-negative int formatter (diff counts are >= 0).
-func itoaGit(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
 }
