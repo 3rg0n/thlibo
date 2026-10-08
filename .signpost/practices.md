@@ -56,7 +56,7 @@ Each line is something this repository states, or something it does not. A missi
 
 ### Instructions for agents
 
-- 66 stated rules for agents working in this repository.
+- 67 stated rules for agents working in this repository.
   - Stated in `AGENTS.md` and `CLAUDE.md`.
 - 17 architecture decision records state why things are the way they are.
   - Stated in `docs/adr/0001-compression-via-pretooluse-rewrite.md`, `docs/adr/0002-one-warm-model-single-daemon.md`, `docs/adr/0003-per-user-autostart-not-system-service.md`, `docs/adr/0004-no-windows-shim.md`, `docs/adr/0005-extract-inference-to-inferd.md`, `docs/adr/0006-fail-open-during-inferd-bootstrap.md`, and 11 other files.
