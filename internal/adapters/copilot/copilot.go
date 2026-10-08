@@ -46,7 +46,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/3rg0n/thlibo/internal/adapters/hookpath"
 )
