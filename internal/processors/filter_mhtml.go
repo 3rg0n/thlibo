@@ -8,6 +8,7 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -302,7 +303,7 @@ func (w *mdWriter) list(n *html.Node) {
 		indent := strings.Repeat("  ", w.listDep-1)
 		var marker string
 		if ordered {
-			marker = itoaMD(idx) + ". "
+			marker = strconv.Itoa(idx) + ". "
 		} else {
 			marker = "- "
 		}
@@ -458,16 +459,4 @@ func attr(n *html.Node, key string) string {
 		}
 	}
 	return ""
-}
-
-func itoaMD(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	return string(b)
 }
