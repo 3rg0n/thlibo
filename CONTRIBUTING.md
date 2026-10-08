@@ -10,14 +10,14 @@ situation, open an issue and we'll sort it.
 git clone https://github.com/3rg0n/thlibo.git
 cd thlibo
 go build ./...
-go test ./... -timeout 180s
+go test ./... -timeout 120s
 ```
 
 If you're on Windows, see the README for the `.exe` naming.
 
 ## Before you send a PR
 
-1. **`go test ./... -timeout 180s`** — the full suite. The daemon
+1. **`go test ./... -timeout 120s`** — the full suite. The daemon
    integration tests take ~70 seconds on a dev box; don't let that
    convince you to skip them.
 2. **`go vet ./...`** — must pass silently.
