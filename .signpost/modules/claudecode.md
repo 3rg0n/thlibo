@@ -8,6 +8,8 @@ attributes:
   - { name: exported, value: "25" }
   - { name: files, value: "12" }
   - { name: package, value: claudecode }
+edges:
+  - { kind: imports, to: ./hookpath.md, confidence: extracted, weight: 1, source: internal/adapters/claudecode/claudecode.go }
 ---
 # internal/adapters/claudecode
 
@@ -33,6 +35,8 @@ attributes:
 - `internal/adapters/claudecode/windowshook_test.go`
 
 - **Exports** (25): `CaselogSkill`, `HookEntry`, `HookReadScript`, `HookReadScriptPS1`, `HookScript`, `HookScriptPS1`, `InstallCaselogSkill`, `MergeHooks`, `MergeSettings`, `MergeSettingsAll`, `MergeSettingsFull`, `MergeSettingsWithRead`, `RemoveHooks`, `WriteHookReadScript`, `WriteHookReadScriptPS1`, `WriteHookScript`, `WriteHookScriptPS1`, `WriteHookWriteScript`, `WriteHookWriteScriptPS1`, `WriteResult`, `WriteResult.String`, `WriteResultConflict`, `WriteResultCreated`, `WriteResultUnchanged`, `WriteResultUpdated`
+
+- **Imports**: [internal/adapters/hookpath](./hookpath.md) ×1
 <!-- /signpost:managed:structure -->
 
 ## Notes
