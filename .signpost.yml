@@ -1,0 +1,8 @@
+# How this repository wants to be read by signpost (github.com/3rg0n/signpost).
+# Precedence: flag > environment > file > default.
+#
+# `repo` names the repository every page's `resource:` points at. It lives here
+# rather than in the workflow because it is a property of the repository, not of
+# whoever runs the build — a fork's CI would otherwise rebuild identical source
+# under its own name.
+repo: github.com/3rg0n/thlibo
