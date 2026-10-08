@@ -352,4 +352,3 @@ func findBashWindows() string {
 	}
 	return ""
 }
-

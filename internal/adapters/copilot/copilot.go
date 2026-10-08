@@ -209,4 +209,3 @@ func RemoveHooks(hooksJSONPath, hookDir string) error {
 	}
 	return nil
 }
-
