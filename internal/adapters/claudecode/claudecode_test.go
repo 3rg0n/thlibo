@@ -1017,7 +1017,7 @@ func TestBuildHookCommandWrapsEveryPS1Path(t *testing.T) {
 		{"Edit", "C:/Users/x/.thlibo/hooks/thlibo-write.ps1"},
 	}
 	for _, tc := range cases {
-		got := buildHookCommand(tc.matcher, tc.path)
+		got := buildHookCommand(tc.path)
 		if !strings.Contains(got, "powershell -NoProfile -ExecutionPolicy Bypass -File") {
 			t.Errorf("%s matcher with .ps1 path: missing PowerShell wrapper:\n  got = %q",
 				tc.matcher, got)
@@ -1042,7 +1042,7 @@ func TestBuildHookCommandPassesShPathsThrough(t *testing.T) {
 		{"Edit", "/home/u/.thlibo/hooks/thlibo-write.sh"},
 	}
 	for _, tc := range cases {
-		got := buildHookCommand(tc.matcher, tc.path)
+		got := buildHookCommand(tc.path)
 		if strings.Contains(got, "powershell") {
 			t.Errorf("%s matcher with .sh path: should NOT wrap, got %q", tc.matcher, got)
 		}

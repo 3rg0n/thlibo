@@ -504,7 +504,7 @@ func removePreToolUseHooks(root map[string]any) bool {
 				continue
 			}
 			cmd, _ := hobj["command"].(string)
-			n := normalisePath(cmd)
+			n := hookpath.Normalise(cmd)
 			if isThliboHookCommand(n) {
 				changed = true
 				continue // drop
@@ -559,7 +559,7 @@ func isThliboHookCommand(normalisedCmd string) bool {
 // doesn't interpret backslashes as shell escapes. Git Bash / MSYS
 // handle `C:/path/to/file` correctly.
 func addPreToolUseHook(root map[string]any, matcher, hookPath string, markerSuffixes ...string) {
-	cmdString := buildHookCommand(matcher, hookPath)
+	cmdString := buildHookCommand(hookPath)
 
 	hooks := asObject(root, "hooks")
 	preArr := asArray(hooks, "PreToolUse")
@@ -601,7 +601,7 @@ func addPreToolUseHook(root map[string]any, matcher, hookPath string, markerSuff
 			continue
 		}
 		cmd, _ := obj["command"].(string)
-		if !hasAnyMarker(normalisePath(cmd), markerSuffixes) {
+		if !hasAnyMarker(hookpath.Normalise(cmd), markerSuffixes) {
 			kept = append(kept, h)
 			continue
 		}
@@ -649,8 +649,7 @@ func hasAnyMarker(normalisedCmd string, markers []string) bool {
 // The suffix check covers every matcher (Bash, PowerShell, Read,
 // Write, Edit) uniformly: .ps1 always gets the wrapper, anything
 // else (.sh, no extension) runs as-is.
-func buildHookCommand(matcher, hookPath string) string {
-	_ = matcher // retained for signature compatibility / future use
+func buildHookCommand(hookPath string) string {
 	hookPath = hookpath.Normalise(hookPath)
 	if strings.HasSuffix(strings.ToLower(hookPath), ".ps1") {
 		return `powershell -NoProfile -ExecutionPolicy Bypass -File "` + hookPath + `"`
