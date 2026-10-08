@@ -1,10 +1,10 @@
 ---
 type: Module
 title: internal/pdf
-description: 26 go files; 111 exported symbols.
+description: 29 go files; 111 exported symbols.
 attributes:
   - { name: exported, value: "111" }
-  - { name: files, value: "26" }
+  - { name: files, value: "29" }
   - { name: package, value: pdf }
 edges:
   - { kind: imports, to: ../references/go-golang-org-x-image.md, confidence: extracted, weight: 2, source: internal/pdf/filters.go }
@@ -12,13 +12,13 @@ edges:
 # internal/pdf
 
 <!-- signpost:managed:summary -->
-26 go files; 111 exported symbols.
+29 go files; 111 exported symbols.
 <!-- /signpost:managed:summary -->
 
 ## Structure
 
 <!-- signpost:managed:structure -->
-26 files:
+29 files:
 - `internal/pdf/bounds_test.go`
 - `internal/pdf/decompress_test.go`
 - `internal/pdf/document.go`
@@ -45,6 +45,9 @@ edges:
 - `internal/pdf/table.go`
 - `internal/pdf/table_test.go`
 - `internal/pdf/text.go`
+- `internal/pdf/text_extract.go`
+- `internal/pdf/text_fonts.go`
+- `internal/pdf/text_ops.go`
 
 - **Exports** (111): `Array`, `BuildLines`, `Cell`, `Column`, `DecodeImageStream`, `DecodeTextString`, `Dict`, `Dict.Array`, `Dict.Dict`, `Dict.Float`, `Dict.Int`, `Dict.Name`, `Dict.Ref`, `Dict.Stream`, `Dict.String`, `Document`, `Document.InfoString`, `Document.IsEncrypted`, `Document.IsTagged`, `Document.NumPages`, `Document.Outline`, `Document.Page`, `Document.StructuredMarkdown`, `Document.Text`, `ErrEncrypted`, `ErrStreamTooLarge`, `ErrUnsupportedFilter`, `ExtractPageImages`, `ExtractPageText`, `ExtractText`, `ExtractTextWithResources`, `FindTable`, `FindTableAcrossPages`, `FindTables`, `HelveticaTextWidth`, `ImageRef`, `ImageRef.Bounds`, `ImageRef.CoversPage`, `ImageRef.Decode`, `ImageRef.PixelSize`, `Lexer`, `Lexer.AtEnd`, `Lexer.NextToken`, `Lexer.Pos`, `Lexer.SetPos`, `Name`, `NewLexer`, `NewParser`, `Open`, `OpenBytes`, `OutlineItem`, `Page`, `Page.FindTable`, `Page.HasImages`, `Page.Images`, `Page.MediaBox`, `Page.Rotation`, `Page.ScanImage`, `Page.Tables`, `Page.Text`, and 51 more
 
