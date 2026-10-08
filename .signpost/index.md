@@ -87,14 +87,14 @@ What the shape of this repository says. Each line is a result — where one read
 - [processors/cargo-filter](./modules/cargo-filter.md) — 1 python file; 11 exported symbols; entrypoint __main__; package processors.cargo-filter.run.
 - [cmd/thlibo/casecmd](./modules/casecmd.md) — 3 go files; 8 exported symbols.
 - [internal/casefile](./modules/casefile.md) — 2 go files; 9 exported symbols.
-- [internal/adapters/claudecode](./modules/claudecode.md) — 12 go files; 25 exported symbols; entrypoint #!.
-- [internal/adapters/codex](./modules/codex.md) — 8 go files; 17 exported symbols; entrypoint #!.
+- [internal/adapters/claudecode](./modules/claudecode.md) — 12 go files; 26 exported symbols; entrypoint #!.
+- [internal/adapters/codex](./modules/codex.md) — 8 go files; 18 exported symbols; entrypoint #!.
 - [cmd/thlibo/compresscmd](./modules/compresscmd.md) — 2 go files; 2 exported symbols.
 - [internal/config](./modules/config.md) — 2 go files; 5 exported symbols.
 - [cmd/thlibo/configcmd](./modules/configcmd.md) — 3 go files; 6 exported symbols.
-- [internal/adapters/copilot](./modules/copilot.md) — 7 go files; 12 exported symbols; entrypoint #!.
+- [internal/adapters/copilot](./modules/copilot.md) — 7 go files; 13 exported symbols; entrypoint #!.
 - [processors/cordon-filter](./modules/cordon-filter.md) — 1 python file; 12 exported symbols; entrypoint __main__; package processors.cordon-filter.run.
-- [internal/adapters/cursor](./modules/cursor.md) — 5 go files; 6 exported symbols; entrypoint #!.
+- [internal/adapters/cursor](./modules/cursor.md) — 5 go files; 7 exported symbols; entrypoint #!.
 - [cmd/thlibo/execcmd](./modules/execcmd.md) — 4 go files; 5 exported symbols.
 - [internal/execpolicy](./modules/execpolicy.md) — 2 go files; 8 exported symbols.
 - [processors/git-filter](./modules/git-filter.md) — 1 python file; 2 exported symbols; entrypoint __main__; package processors.git-filter.run.
