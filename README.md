@@ -142,7 +142,7 @@ curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.s
 Pin to a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.11.6 bash
+curl -fsSL https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.sh | THLIBO_VERSION=v0.11.7 bash
 ```
 
 ### One-liner (Windows PowerShell)
@@ -154,7 +154,7 @@ irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | ie
 Or pinned:
 
 ```powershell
-$env:THLIBO_VERSION='v0.11.6'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
+$env:THLIBO_VERSION='v0.11.7'; irm https://raw.githubusercontent.com/3rg0n/thlibo/main/scripts/install.ps1 | iex
 ```
 
 Both installers:
@@ -274,14 +274,13 @@ script is chosen by host: `thlibo-rewrite-codex.ps1` on Windows,
 place, so re-approve the hook in `/hooks` afterwards — its definition
 changed, and Codex keys trust to the exact definition.
 
-**On Windows, Codex does not run the hook yet, and that is upstream.**
-Codex does not deliver `PostToolUse` to a trusted hook for its own shell
-results there, so compression stays off even after `/hooks` approval —
-install success is not evidence that compression is active. Tracked at
-[openai/codex#38850](https://github.com/openai/codex/issues/38850)
-(thlibo [#126](https://github.com/3rg0n/thlibo/issues/126)); the
-installer warns about it. Nothing in thlibo can fix delivery. For
-Windows compression today, use the Claude Code, Cursor, or Copilot hooks.
+**On Windows, one Codex path skips the hook, and that is upstream.**
+Codex runs a trusted `PostToolUse` hook for its shell results, except for
+shell commands nested under Code Mode (`functions.exec`), which never reach
+it — so those results are not compressed, and fail-open makes that
+silent. Tracked at
+[openai/codex#38850](https://github.com/openai/codex/issues/38850); the
+installer notes it. Nothing in thlibo can fix delivery.
 
 With `--copilot`, thlibo writes `~/.copilot/hooks/thlibo.json` plus four
 hook scripts (a Bash + PowerShell pair for each event). Copilot reads

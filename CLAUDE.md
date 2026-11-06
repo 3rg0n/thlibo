@@ -6,7 +6,7 @@ agents that need architectural context in a single shot.
 
 ## Status
 
-v0.11.6 (current). Single binary shipped (`thlibo`); inference runs in
+v0.11.7 (current). Single binary shipped (`thlibo`); inference runs in
 a separate sidecar, **`inferd`** (its own repo, github.com/3rg0n/inferd),
 which `thlibo install` probe-or-installs. `thlibo install` is zero-touch
 on all three OSes (incl. Windows arm64): it copies inferd's `backends/`
@@ -342,10 +342,12 @@ registry would let the model select `shorthand` for tool output (ADR
   instead of appending, and it scopes the match to `command =` assignments
   — a whole-file substring match would read the inert
   `[hooks.state.'…thlibo-rewrite-codex.sh:…']` trust record as an installed
-  hook and make install a silent no-op. **Delivery on Windows is broken
-  upstream** (openai/codex#38850): Codex never fires a trusted PostToolUse
-  for its shell results there, so the installer warns rather than let a
-  clean install read as "compression active". Nothing here can fix it.
+  hook and make install a silent no-op. **One Windows delivery path is
+  broken upstream** (openai/codex#38850): shell commands nested under Code
+  Mode (`functions.exec`) never fire PostToolUse, so the installer notes
+  it. Don't widen that to "Codex never runs the hook on Windows" — it does
+  (the pre-#126 `.sh` hook proved it by opening a Git Bash window per
+  call), and v0.11.7 shipped the narrowed wording for that reason.
 - **`internal/adapters/cursor/`** — `preToolUse` hooks (Shell +
   Read) using `updated_input` to rewrite the command / `file_path`.
   Non-destructive `~/.cursor/hooks.json` merge; bash-wraps the command
