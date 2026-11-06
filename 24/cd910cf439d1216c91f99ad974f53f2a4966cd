@@ -1,0 +1,24 @@
+CHANGELOG.md
+  s_002f3b59b58698::t_7bf404476fa270 167-169
+  s_002f3b59b58698::t_27991bdcdb4164 165-166
+go.mod
+  s_002f3b59b58698::t_68c769d18323ed 16-17,38-39
+go.sum
+  s_002f3b59b58698::t_1e26479e9fb2e0 65-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "2.0.0",
+  "base_commit_sha": "24cd910cf439d1216c91f99ad974f53f2a4966cd",
+  "prompts": {},
+  "sessions": {
+    "s_002f3b59b58698": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "179b4707-5aea-4d3b-a7dd-ca2addc5df47",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "3rg0n <3rg0n@users.noreply.github.com>"
+    }
+  }
+}
