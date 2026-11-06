@@ -450,16 +450,17 @@ func installCodex(o *options, cfgPath string) int {
 	fmt.Println("    Run `/hooks` inside Codex, review the thlibo PostToolUse hook, and approve it.")
 	fmt.Println("    Until trusted, Codex installs the hook but won't execute it (compression stays off).")
 	// A clean install plus a `/hooks` approval reads as "compression is
-	// on", and on Windows that is currently false: Codex does not
-	// deliver PostToolUse to a trusted hook for its shell results, so
-	// the hook never runs and fail-open hides it (#126, upstream
-	// openai/codex#38850). Say so rather than let the success output
-	// imply otherwise.
+	// on", and on Windows that is only partly true. Codex does call a
+	// trusted PostToolUse hook there — the pre-#126 `.sh` hook proved it
+	// by opening a Git Bash window per call — but upstream
+	// openai/codex#38850 reports one path that skips it: shell commands
+	// nested under Code Mode (`functions.exec`). Those results reach the
+	// model uncompressed and fail-open hides it. Name the gap without
+	// overstating it.
 	if runtime.GOOS == "windows" {
-		fmt.Println("  WARNING: on Windows, Codex does not currently deliver PostToolUse to the")
-		fmt.Println("    hook for its shell results, so compression stays off even once trusted.")
-		fmt.Println("    Tracked upstream: github.com/openai/codex/issues/38850 (thlibo #126).")
-		fmt.Println("    The hook itself is installed and correct; nothing to do here but wait.")
+		fmt.Println("  NOTE: on Windows, Codex skips PostToolUse for shell commands it runs")
+		fmt.Println("    nested under Code Mode (`functions.exec`), so those results are not")
+		fmt.Println("    compressed. Tracked upstream: github.com/openai/codex/issues/38850.")
 	}
 	return 0
 }
