@@ -7,7 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.7] - 2026-11-06
+
+Mostly Codex on Windows. The Codex hook shipped in v0.11.6 was a Bash script,
+so every time Codex called it, Windows opened a Git Bash window that waited
+forever instead of running the hook. It now installs a native PowerShell hook
+and rewrites the stale entry in place. Also: `uninstall` now actually removes
+the Codex and Cursor hooks, PowerShell hooks no longer corrupt non-ASCII
+commands, paths and file content, and the PDF parser bounds decompressed
+stream size (THREAT_MODEL #32).
+
+### Security
+- **A small PDF stream could inflate to gigabytes and kill the hook (#145,
+  THREAT_MODEL #32).** FlateDecode and LZWDecode read their output with an
+  uncapped `io.ReadAll`. Deflate expands about 1000:1, so the 64 MiB input cap
+  bounded nothing here, and running out of memory is a fatal runtime error that
+  `RunNative`'s `recover()` cannot catch: the hook died with the tool output
+  unwritten, the same failure class as #29. Decoded output is now capped per
+  stream (320 MiB, derived from the image pixel cap) and per document (1 GiB,
+  because resolved objects are cached). ASCII85's up-front 4× allocation is
+  checked too. A refused stream degrades like any undecodable one: that page
+  yields no text, and nothing is truncated silently.
+
 ### Fixed
+- **`trivy-filter` produced different findings for the same input from one run
+  to the next (#147).** The table parser merged wrapped continuation rows by
+  ranging over a Go map, whose iteration order is randomised, and a `break`
+  inside a `switch` left only the switch, so a row's title was appended to the
+  next finding a second time. On 400 generated Trivy tables the filter had
+  disagreed with the retired Python on 180 and varied between runs; all 400
+  now match.
 - **`uninstall` left the Codex and Cursor hooks registered, so thlibo kept
   intercepting tool calls after it reported complete (#137).** `uninstall`
   imported the Claude Code and Copilot adapters only. It never touched
@@ -123,12 +152,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same defect and could corrupt a config on its own.
 
 ### Changed
-- **`install --codex` warns on Windows that Codex will not run the hook.**
-  Codex does not deliver `PostToolUse` to a trusted hook for its own shell
-  results on Windows, so compression stays off there even after `/hooks`
-  approval. That is upstream ([openai/codex#38850]) and nothing in thlibo can
-  fix delivery. Without the warning, a clean install plus a trust approval
-  reads as "compression is active", which on that host is false.
+- **`install --codex` notes on Windows the one Codex path that skips the
+  hook.** Codex skips `PostToolUse` for shell commands nested under Code Mode
+  (`functions.exec`), so those results reach the model uncompressed. That is
+  upstream ([openai/codex#38850]) and nothing in thlibo can fix delivery.
+  Other shell results do reach the hook; the Git Bash window above is direct
+  evidence that Codex calls it.
+- **Dependencies.** The OpenTelemetry modules move together to v1.47.0 /
+  v0.23.0 (#140). They are version-coupled, and Dependabot's per-module bumps
+  left the tree on mixed versions that did not build. `otel/log` is now
+  stable, and its API takes `attribute.KeyValue`. CI actions bumped (#139).
+  `golang.org/x/net` 0.59.0 → 0.62.0 (with `x/sys` 0.49.0, `x/term` 0.47.0,
+  `x/text` 0.43.0) clears seven advisories govulncheck reports as reachable:
+  GO-2026-6603, -6610, -6611, -6612, -6617, -6860 and -6866. `x/net` reaches
+  thlibo through `internal/processors`' direct import of `x/net/html`, which
+  parses tool output, so treat these as reachable from untrusted input.
+- **Internal refactors with no behaviour change (#146, #148, #149, #150):**
+  duplicated helpers removed across adapters and filters, the lint and trivy
+  table parsers split up, `install`'s per-client wiring made table-driven, and
+  PDF text extraction split into an operator interpreter.
 
 [openai/codex#38850]: https://github.com/openai/codex/issues/38850
 
