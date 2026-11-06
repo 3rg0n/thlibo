@@ -162,6 +162,11 @@ stream size (THREAT_MODEL #32).
   v0.23.0 (#140). They are version-coupled, and Dependabot's per-module bumps
   left the tree on mixed versions that did not build. `otel/log` is now
   stable, and its API takes `attribute.KeyValue`. CI actions bumped (#139).
+  `golang.org/x/net` 0.59.0 → 0.62.0 (with `x/sys` 0.49.0, `x/term` 0.47.0,
+  `x/text` 0.43.0) clears seven advisories govulncheck reports as reachable:
+  GO-2026-6603, -6610, -6611, -6612, -6617, -6860 and -6866. `x/net` reaches
+  thlibo through `internal/processors`' direct import of `x/net/html`, which
+  parses tool output, so treat these as reachable from untrusted input.
 - **Internal refactors with no behaviour change (#146, #148, #149, #150):**
   duplicated helpers removed across adapters and filters, the lint and trivy
   table parsers split up, `install`'s per-client wiring made table-driven, and
